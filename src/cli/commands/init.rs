@@ -34,7 +34,10 @@ pub fn run_init(io: &mut IoStreams, prompter: &dyn Prompter) -> anyhow::Result<(
     }
 
     // 1. Atlassian domain
-    let domain = prompt_non_empty(prompter, "Atlassian domain (e.g. acme.atlassian.net):")?;
+    let domain = normalize_domain(&prompt_non_empty(
+        prompter,
+        "Atlassian domain (e.g. acme or acme.atlassian.net):",
+    )?);
 
     // 2. Email
     let email = prompt_non_empty(prompter, "Email:")?;
@@ -48,10 +51,10 @@ pub fn run_init(io: &mut IoStreams, prompter: &dyn Prompter) -> anyhow::Result<(
     let confluence_domain = if same_domain == 0 {
         domain.clone()
     } else {
-        prompt_non_empty(
+        normalize_domain(&prompt_non_empty(
             prompter,
             "Confluence domain (e.g. acme.atlassian.net/wiki or wiki.acme.com):",
-        )?
+        )?)
     };
 
     // Build the config.
@@ -104,6 +107,36 @@ fn prompt_non_empty(prompter: &dyn Prompter, msg: &str) -> anyhow::Result<String
         anyhow::bail!("value cannot be empty");
     }
     Ok(value.trim().to_string())
+}
+
+/// Normalizes an Atlassian domain string for storage.
+///
+/// Accepts several input formats and produces a canonical domain:
+/// - Bare subdomain (`acme`) becomes `acme.atlassian.net`
+/// - Full URL (`https://acme.atlassian.net/`) is stripped to `acme.atlassian.net`
+/// - Self-hosted domains (`wiki.acme.com`) pass through unchanged
+/// - Paths after the host (`acme.atlassian.net/wiki`) are preserved
+fn normalize_domain(input: &str) -> String {
+    let mut s = input.trim().to_string();
+
+    // Strip scheme prefix.
+    if let Some(rest) = s.strip_prefix("https://") {
+        s = rest.to_string();
+    } else if let Some(rest) = s.strip_prefix("http://") {
+        s = rest.to_string();
+    }
+
+    // Strip trailing slash (but not internal path separators).
+    if s.ends_with('/') {
+        s.truncate(s.len() - 1);
+    }
+
+    // If there is no dot, treat it as a bare Atlassian Cloud subdomain.
+    if !s.contains('.') {
+        s.push_str(".atlassian.net");
+    }
+
+    s
 }
 
 #[cfg(test)]
@@ -206,11 +239,80 @@ mod tests {
         assert!(content.contains("old"));
     }
 
+    #[test]
+    fn normalize_domain_bare_subdomain() {
+        assert_eq!(normalize_domain("innowald"), "innowald.atlassian.net");
+    }
+
+    #[test]
+    fn normalize_domain_already_full() {
+        assert_eq!(
+            normalize_domain("innowald.atlassian.net"),
+            "innowald.atlassian.net"
+        );
+    }
+
+    #[test]
+    fn normalize_domain_https_with_trailing_slash() {
+        assert_eq!(
+            normalize_domain("https://innowald.atlassian.net/"),
+            "innowald.atlassian.net"
+        );
+    }
+
+    #[test]
+    fn normalize_domain_https_without_trailing_slash() {
+        assert_eq!(
+            normalize_domain("https://innowald.atlassian.net"),
+            "innowald.atlassian.net"
+        );
+    }
+
+    #[test]
+    fn normalize_domain_http_with_trailing_slash() {
+        assert_eq!(
+            normalize_domain("http://innowald.atlassian.net/"),
+            "innowald.atlassian.net"
+        );
+    }
+
+    #[test]
+    fn normalize_domain_self_hosted_passthrough() {
+        assert_eq!(normalize_domain("wiki.acme.com"), "wiki.acme.com");
+    }
+
+    #[test]
+    fn normalize_domain_self_hosted_with_scheme_and_path() {
+        assert_eq!(
+            normalize_domain("https://wiki.acme.com/wiki"),
+            "wiki.acme.com/wiki"
+        );
+    }
+
+    #[test]
+    fn normalize_domain_cloud_with_path() {
+        assert_eq!(
+            normalize_domain("acme.atlassian.net/wiki"),
+            "acme.atlassian.net/wiki"
+        );
+    }
+
+    #[test]
+    fn normalize_domain_trims_whitespace() {
+        assert_eq!(
+            normalize_domain("  innowald.atlassian.net  "),
+            "innowald.atlassian.net"
+        );
+    }
+
     /// Helper that runs the prompt sequence and builds a Config — extracted so
     /// tests can exercise the logic without depending on
     /// `ConfigLoader::default_config_path()`.
     fn build_config_from_prompts(prompter: &dyn Prompter) -> anyhow::Result<Config> {
-        let domain = prompt_non_empty(prompter, "Atlassian domain (e.g. acme.atlassian.net):")?;
+        let domain = normalize_domain(&prompt_non_empty(
+            prompter,
+            "Atlassian domain (e.g. acme or acme.atlassian.net):",
+        )?);
         let email = prompt_non_empty(prompter, "Email:")?;
         let same_domain = prompter.select(
             "Do Confluence and Jira use the same domain?",
@@ -219,10 +321,10 @@ mod tests {
         let confluence_domain = if same_domain == 0 {
             domain.clone()
         } else {
-            prompt_non_empty(
+            normalize_domain(&prompt_non_empty(
                 prompter,
                 "Confluence domain (e.g. acme.atlassian.net/wiki or wiki.acme.com):",
-            )?
+            )?)
         };
 
         let jira_instance = AtlassianInstance {

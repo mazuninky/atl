@@ -67,6 +67,12 @@
           "type": "regex",
           "value": "--(jq|template)",
           "description": "Uses --jq or --template for structured output extraction"
+        },
+        {
+          "name": "uses_all_pagination",
+          "type": "contains",
+          "value": "--all",
+          "description": "Handles pagination by requesting all pages"
         }
       ],
       "files": []
@@ -135,7 +141,7 @@
         {
           "name": "projects_id_title_columns",
           "type": "regex",
-          "value": "(--jq.*id.*title|--jq.*title.*id|--template.*(id|title)|--fields.*(id|title))",
+          "value": "(--jq.*(id.*title|title.*id)|--template.*(id.*title|title.*id)|--fields\\s+['\"]?(id,title|title,id)['\"]?)",
           "description": "Constrains output to ID and Title columns via --jq, --template, or --fields"
         }
       ],

@@ -1,0 +1,267 @@
+{
+  "skill_name": "atl",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "У меня есть файл release-notes.md с заметками к релизу. Нужно создать страницу в Confluence в пространстве ENG под родительской страницей 445566, заголовок \"Release 2026.15 Notes\"",
+      "expected_output": "Should use `atl c create --space ENG --title \"Release 2026.15 Notes\" --body @release-notes.md --input-format markdown --parent 445566`. Must use --input-format markdown (not --body-format). Must use @file syntax for the body.",
+      "assertions": [
+        {
+          "name": "uses_atl_confluence_create",
+          "type": "contains",
+          "value": "atl c create",
+          "description": "Uses the correct confluence create command with short alias"
+        },
+        {
+          "name": "uses_input_format_markdown",
+          "type": "contains",
+          "value": "--input-format markdown",
+          "description": "Correctly uses --input-format (not --body-format) for markdown input"
+        },
+        {
+          "name": "uses_at_file_syntax",
+          "type": "contains",
+          "value": "@release-notes.md",
+          "description": "Uses @file syntax for body input"
+        },
+        {
+          "name": "sets_parent_page",
+          "type": "contains",
+          "value": "--parent 445566",
+          "description": "Sets the parent page ID"
+        }
+      ],
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Напиши мне bash-скрипт, который находит все баги в проекте PLATFORM со статусом Open или In Progress, и для каждого выводит ключ и summary в формате KEY: Summary. Нужно чтобы работало в CI, токен будет в переменной JIRA_TOKEN",
+      "expected_output": "Should use ATL_API_TOKEN env var, -F json for machine-readable output, --jq for extraction, and proper JQL. Should handle pagination with --all. The script should set ATL_API_TOKEN=$JIRA_TOKEN.",
+      "assertions": [
+        {
+          "name": "sets_api_token_env",
+          "type": "contains",
+          "value": "ATL_API_TOKEN",
+          "description": "Uses ATL_API_TOKEN environment variable for CI authentication"
+        },
+        {
+          "name": "uses_json_format",
+          "type": "contains",
+          "value": "-F json",
+          "description": "Uses JSON output format for machine parsing"
+        },
+        {
+          "name": "uses_jql_status_filter",
+          "type": "regex",
+          "value": "status\\s*(=|in)\\s*.*Open",
+          "description": "Filters by status in JQL or --status flag"
+        },
+        {
+          "name": "uses_jq_or_template",
+          "type": "regex",
+          "value": "--(jq|template)",
+          "description": "Uses --jq or --template for structured output extraction"
+        }
+      ],
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "Мне нужно перевести тикет BACKEND-456 в статус Done. Как это сделать через atl?",
+      "expected_output": "Should explain the two-step process: first get transition IDs with `atl j transitions BACKEND-456`, then use `atl j move BACKEND-456 --transition <ID>`. Must NOT suggest using a status name in --transition.",
+      "assertions": [
+        {
+          "name": "shows_transitions_first",
+          "type": "contains",
+          "value": "atl j transitions",
+          "description": "First step: list available transitions to find the ID"
+        },
+        {
+          "name": "uses_move_command",
+          "type": "contains",
+          "value": "atl j move",
+          "description": "Uses the move command for transitioning"
+        },
+        {
+          "name": "uses_transition_flag",
+          "type": "contains",
+          "value": "--transition",
+          "description": "Uses --transition flag with the move command"
+        },
+        {
+          "name": "no_string_transition_value",
+          "type": "not_contains",
+          "value": "--transition Done",
+          "description": "Does NOT use a string name as transition value (must be numeric ID)"
+        },
+        {
+          "name": "no_string_transition_quoted",
+          "type": "not_contains",
+          "value": "--transition \"Done\"",
+          "description": "Does NOT use a quoted string name as transition value"
+        }
+      ],
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "Нужно получить все страницы из пространства DOCS в Confluence и экспортировать их в CSV с колонками ID и Title. Хочу потом открыть это в Excel.",
+      "expected_output": "Should use CQL search to find pages in the space, with -F csv output format. Something like: `atl -F csv c search \"space = DOCS AND type = page\" --all`",
+      "assertions": [
+        {
+          "name": "uses_csv_format",
+          "type": "contains",
+          "value": "-F csv",
+          "description": "Uses CSV output format for Excel compatibility"
+        },
+        {
+          "name": "uses_confluence_search_or_pagelist",
+          "type": "regex",
+          "value": "atl (c|conf|confluence) (search|page-list)",
+          "description": "Uses either CQL search or page-list to get pages"
+        },
+        {
+          "name": "targets_docs_space",
+          "type": "regex",
+          "value": "(space\\s*=\\s*DOCS|--space.?DOCS|--space-id)",
+          "description": "Filters by the DOCS space"
+        }
+      ],
+      "files": []
+    },
+    {
+      "id": 5,
+      "prompt": "Нужно через atl api сделать POST запрос к Jira для создания нового фильтра с именем 'My Sprint Bugs' и JQL 'project = WEB AND type = Bug AND sprint in openSprints()'",
+      "expected_output": "Should use `atl api --service jira -X POST rest/api/2/filter` with --field or --raw-field for the body. Must include the correct endpoint and method.",
+      "assertions": [
+        {
+          "name": "uses_atl_api",
+          "type": "contains",
+          "value": "atl api",
+          "description": "Uses the generic REST passthrough command"
+        },
+        {
+          "name": "targets_jira_service",
+          "type": "contains",
+          "value": "--service jira",
+          "description": "Targets Jira service"
+        },
+        {
+          "name": "uses_post_method",
+          "type": "regex",
+          "value": "-X\\s*POST",
+          "description": "Uses POST HTTP method"
+        },
+        {
+          "name": "correct_endpoint",
+          "type": "contains",
+          "value": "rest/api/2/filter",
+          "description": "Points to the correct Jira filter API endpoint"
+        },
+        {
+          "name": "includes_filter_name",
+          "type": "regex",
+          "value": "(--field|--raw-field).*name.*My Sprint Bugs",
+          "description": "Includes the filter name in the request body"
+        }
+      ],
+      "files": []
+    },
+    {
+      "id": 6,
+      "prompt": "Мне нужно обновить содержимое страницы 778899 в Confluence. Контент в файле updated-content.html в storage формате. Но я не знаю текущую версию страницы.",
+      "expected_output": "Should show a two-step approach: first get page info to find the current version with `atl c info 778899`, then use `atl c update 778899 --title ... --body @updated-content.html --version N`. Should explain that --version is required. Since the file is already in storage format, should NOT use --input-format markdown.",
+      "assertions": [
+        {
+          "name": "gets_version_first",
+          "type": "regex",
+          "value": "atl (c|conf|confluence) info 778899",
+          "description": "First step: get page info to find current version number"
+        },
+        {
+          "name": "uses_update_command",
+          "type": "regex",
+          "value": "atl (c|conf|confluence) update 778899",
+          "description": "Uses confluence update command with the page ID"
+        },
+        {
+          "name": "uses_at_file_for_body",
+          "type": "contains",
+          "value": "@updated-content.html",
+          "description": "Uses @file syntax for the body"
+        },
+        {
+          "name": "includes_version_flag",
+          "type": "contains",
+          "value": "--version",
+          "description": "Includes the required --version flag"
+        },
+        {
+          "name": "no_markdown_input_format",
+          "type": "not_contains",
+          "value": "--input-format markdown",
+          "description": "Does NOT use --input-format markdown since the file is already in storage format"
+        }
+      ],
+      "files": []
+    },
+    {
+      "id": 7,
+      "prompt": "Создай алиас 'mytickets' который будет искать все мои тикеты в Jira которые в работе. Потом покажи как его использовать.",
+      "expected_output": "Should use `atl alias set mytickets 'jira search \"assignee = currentUser() AND status = \\\"In Progress\\\"\"'` and then show usage as `atl mytickets`.",
+      "assertions": [
+        {
+          "name": "uses_alias_set",
+          "type": "contains",
+          "value": "atl alias set",
+          "description": "Uses the alias set command"
+        },
+        {
+          "name": "alias_name_mytickets",
+          "type": "contains",
+          "value": "mytickets",
+          "description": "Creates alias with the requested name"
+        },
+        {
+          "name": "includes_jira_search",
+          "type": "regex",
+          "value": "jira search.*currentUser",
+          "description": "Alias expansion includes jira search with currentUser()"
+        },
+        {
+          "name": "shows_usage",
+          "type": "contains",
+          "value": "atl mytickets",
+          "description": "Shows how to invoke the alias"
+        }
+      ],
+      "files": []
+    },
+    {
+      "id": 8,
+      "prompt": "Напиши команду чтобы получить JSON со всеми комментариями к тикету INFRA-789 и отфильтровать только текст комментариев через jq",
+      "expected_output": "Should use `atl -F json j comments INFRA-789 --jq '.comments[].body'` or similar jq expression to extract comment bodies.",
+      "assertions": [
+        {
+          "name": "uses_json_format",
+          "type": "contains",
+          "value": "-F json",
+          "description": "Uses JSON output format"
+        },
+        {
+          "name": "uses_comments_command",
+          "type": "regex",
+          "value": "atl.*j(ira)?\\s+comments\\s+INFRA-789",
+          "description": "Uses the jira comments command with the correct issue key"
+        },
+        {
+          "name": "uses_jq_flag",
+          "type": "contains",
+          "value": "--jq",
+          "description": "Uses the --jq flag for filtering"
+        }
+      ],
+      "files": []
+    }
+  ]
+}

@@ -1,0 +1,345 @@
+mod loader;
+
+pub use loader::ConfigLoader;
+
+use serde::{Deserialize, Serialize};
+
+pub const CONFIG_FILE_NAME: &str = "atl.toml";
+pub const CONFIG_DIR_NAME: &str = "atl";
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Config {
+    pub default_profile: String,
+    #[serde(default)]
+    pub profiles: std::collections::HashMap<String, Profile>,
+    #[serde(default, skip_serializing_if = "std::collections::HashMap::is_empty")]
+    pub aliases: std::collections::HashMap<String, String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Profile {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub confluence: Option<AtlassianInstance>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub jira: Option<AtlassianInstance>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub default_project: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub default_space: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AtlassianInstance {
+    pub domain: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub email: Option<String>,
+    /// Deprecated: prefer storing the token in the OS keyring via
+    /// `atl auth login`. The `api_token` field in `atl.toml` is still
+    /// accepted for back-compat and for CI configs that baked the token
+    /// into the config file, but it triggers a one-shot deprecation
+    /// warning through `tracing::warn!` the first time it is read.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub api_token: Option<String>,
+    #[serde(default)]
+    pub auth_type: AuthType,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub api_path: Option<String>,
+    #[serde(default)]
+    pub read_only: bool,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum AuthType {
+    #[default]
+    Basic,
+    Bearer,
+}
+
+impl Config {
+    pub fn resolve_profile(&self, name: Option<&str>) -> Option<&Profile> {
+        let key = name.unwrap_or(&self.default_profile);
+        self.profiles.get(key)
+    }
+}
+
+impl AtlassianInstance {
+    /// Legacy token accessor preserved for back-compat with callers that do
+    /// not yet carry a profile name.
+    ///
+    /// Resolution order: `ATL_API_TOKEN` env → `api_token` TOML field →
+    /// `None`. This method does **not** consult the OS keyring — call
+    /// [`AtlassianInstance::resolved_token`] for the full resolution chain.
+    ///
+    /// Command handlers should call [`crate::auth::resolve_instance`] on a
+    /// fresh clone of this instance before handing it to
+    /// [`crate::client::build_http_client`], so the keyring fallback is
+    /// included.
+    pub fn effective_api_token(&self) -> Option<String> {
+        if let Ok(env_token) = std::env::var("ATL_API_TOKEN")
+            && !env_token.trim().is_empty()
+        {
+            return Some(env_token);
+        }
+        self.api_token.clone()
+    }
+
+    /// Resolves the API token using the full `env → TOML → keyring` chain.
+    ///
+    /// # Parameters
+    ///
+    /// * `profile` — profile name, used to build the keyring service key
+    ///   (`"atl:<profile>:<kind>"`).
+    /// * `kind` — `"confluence"` or `"jira"`; selects the keyring entry that
+    ///   belongs to this instance inside the profile.
+    /// * `store` — secret store used to look up the keyring entry. Tests
+    ///   pass an [`crate::auth::InMemoryStore`]; production code passes
+    ///   [`crate::auth::SystemKeyring`].
+    ///
+    /// Returns `None` when no token is available from any source.
+    pub fn resolved_token(
+        &self,
+        profile: &str,
+        kind: &str,
+        store: &dyn crate::auth::SecretStore,
+    ) -> Option<String> {
+        // 1. Env var always wins — matches existing `effective_api_token`
+        //    behaviour and keeps CI workflows stable.
+        if let Ok(env_token) = std::env::var("ATL_API_TOKEN")
+            && !env_token.trim().is_empty()
+        {
+            return Some(env_token);
+        }
+
+        // 2. Legacy TOML field. Warn (once per call) so users are nudged
+        //    toward `atl auth login` without crashing existing setups.
+        if let Some(toml_token) = self.api_token.as_ref() {
+            tracing::warn!(
+                "api_token in atl.toml is deprecated; run `atl auth login --profile {profile}` to migrate to the OS keyring"
+            );
+            return Some(toml_token.clone());
+        }
+
+        // 3. Keyring lookup. A missing keyring backend returns `Ok(None)`
+        //    from the store (see `SystemKeyring::get`), so we fall through
+        //    to `None` without surfacing an error.
+        let account = self.email.as_deref().unwrap_or("default");
+        let svc = crate::auth::service_name(profile, kind);
+        match store.get(&svc, account) {
+            Ok(secret) => secret,
+            Err(err) => {
+                tracing::debug!("keyring lookup failed for {svc}: {err}");
+                None
+            }
+        }
+    }
+}
+
+pub fn default_config() -> &'static str {
+    include_str!("default_config.toml")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_config_parses() {
+        let content = default_config();
+        let config: Config = toml::from_str(content).unwrap();
+        assert_eq!(config.default_profile, "default");
+        assert!(config.profiles.contains_key("default"));
+    }
+
+    #[test]
+    fn resolve_profile_default() {
+        let mut profiles = std::collections::HashMap::new();
+        profiles.insert("default".to_string(), Profile::default());
+        let config = Config {
+            default_profile: "default".to_string(),
+            profiles,
+            ..Default::default()
+        };
+        assert!(config.resolve_profile(None).is_some());
+    }
+
+    #[test]
+    fn resolve_profile_explicit() {
+        let mut profiles = std::collections::HashMap::new();
+        profiles.insert("staging".to_string(), Profile::default());
+        let config = Config {
+            default_profile: "default".to_string(),
+            profiles,
+            ..Default::default()
+        };
+        assert!(config.resolve_profile(Some("staging")).is_some());
+        assert!(config.resolve_profile(Some("missing")).is_none());
+    }
+
+    #[test]
+    fn effective_api_token_from_config() {
+        let inst = AtlassianInstance {
+            domain: "example.com".into(),
+            email: Some("me@example.com".into()),
+            api_token: Some("cfg-token".into()),
+            auth_type: AuthType::default(),
+            api_path: None,
+            read_only: false,
+        };
+        assert_eq!(inst.effective_api_token().as_deref(), Some("cfg-token"));
+    }
+
+    #[test]
+    fn effective_api_token_none_without_env() {
+        // Clear the env var to ensure fallback behavior
+        unsafe {
+            std::env::remove_var("ATL_API_TOKEN");
+        }
+        let inst = AtlassianInstance {
+            domain: "example.com".into(),
+            email: Some("me@example.com".into()),
+            api_token: None,
+            auth_type: AuthType::default(),
+            api_path: None,
+            read_only: false,
+        };
+        assert!(inst.effective_api_token().is_none());
+    }
+
+    // -------------------------------------------------------------------
+    // resolved_token resolution chain
+    //
+    // These tests mutate `ATL_API_TOKEN`, so they acquire a shared lock
+    // first to stop them from racing each other on the global env.
+    // -------------------------------------------------------------------
+
+    use crate::auth::SecretStore as _;
+    use crate::test_util::env_lock;
+
+    fn make_instance(token: Option<&str>, email: Option<&str>) -> AtlassianInstance {
+        AtlassianInstance {
+            domain: "example.atlassian.net".into(),
+            email: email.map(String::from),
+            api_token: token.map(String::from),
+            auth_type: AuthType::Basic,
+            api_path: None,
+            read_only: false,
+        }
+    }
+
+    #[test]
+    fn resolved_token_env_wins_over_toml_and_keyring() {
+        let _g = env_lock();
+        // SAFETY: serialized by env_lock().
+        unsafe { std::env::set_var("ATL_API_TOKEN", "env-token") };
+
+        let store = crate::auth::InMemoryStore::new();
+        store
+            .set("atl:default:jira", "alice@acme.com", "kr-token")
+            .unwrap();
+        let inst = make_instance(Some("toml-token"), Some("alice@acme.com"));
+
+        assert_eq!(
+            inst.resolved_token("default", "jira", &store).as_deref(),
+            Some("env-token")
+        );
+
+        unsafe { std::env::remove_var("ATL_API_TOKEN") };
+    }
+
+    #[test]
+    fn resolved_token_toml_over_keyring() {
+        let _g = env_lock();
+        unsafe { std::env::remove_var("ATL_API_TOKEN") };
+
+        let store = crate::auth::InMemoryStore::new();
+        store
+            .set("atl:default:jira", "alice@acme.com", "kr-token")
+            .unwrap();
+        let inst = make_instance(Some("toml-token"), Some("alice@acme.com"));
+
+        assert_eq!(
+            inst.resolved_token("default", "jira", &store).as_deref(),
+            Some("toml-token")
+        );
+    }
+
+    #[test]
+    fn resolved_token_keyring_when_no_env_or_toml() {
+        let _g = env_lock();
+        unsafe { std::env::remove_var("ATL_API_TOKEN") };
+
+        let store = crate::auth::InMemoryStore::new();
+        store
+            .set("atl:default:jira", "alice@acme.com", "kr-token")
+            .unwrap();
+        let inst = make_instance(None, Some("alice@acme.com"));
+
+        assert_eq!(
+            inst.resolved_token("default", "jira", &store).as_deref(),
+            Some("kr-token")
+        );
+    }
+
+    #[test]
+    fn resolved_token_none_when_nothing_set() {
+        let _g = env_lock();
+        unsafe { std::env::remove_var("ATL_API_TOKEN") };
+
+        let store = crate::auth::InMemoryStore::new();
+        let inst = make_instance(None, Some("alice@acme.com"));
+
+        assert!(inst.resolved_token("default", "jira", &store).is_none());
+    }
+
+    #[test]
+    fn resolved_token_uses_default_account_when_email_missing() {
+        let _g = env_lock();
+        unsafe { std::env::remove_var("ATL_API_TOKEN") };
+
+        let store = crate::auth::InMemoryStore::new();
+        store
+            .set("atl:default:jira", "default", "bearer-token")
+            .unwrap();
+        let inst = make_instance(None, None);
+
+        assert_eq!(
+            inst.resolved_token("default", "jira", &store).as_deref(),
+            Some("bearer-token")
+        );
+    }
+
+    #[test]
+    fn resolved_token_scoped_by_profile_and_kind() {
+        let _g = env_lock();
+        unsafe { std::env::remove_var("ATL_API_TOKEN") };
+
+        let store = crate::auth::InMemoryStore::new();
+        store
+            .set("atl:default:jira", "default", "jira-tok")
+            .unwrap();
+        store
+            .set("atl:default:confluence", "default", "conf-tok")
+            .unwrap();
+        store
+            .set("atl:staging:jira", "default", "staging-tok")
+            .unwrap();
+        let inst = make_instance(None, None);
+
+        assert_eq!(
+            inst.resolved_token("default", "jira", &store).as_deref(),
+            Some("jira-tok")
+        );
+        assert_eq!(
+            inst.resolved_token("default", "confluence", &store)
+                .as_deref(),
+            Some("conf-tok")
+        );
+        assert_eq!(
+            inst.resolved_token("staging", "jira", &store).as_deref(),
+            Some("staging-tok")
+        );
+    }
+}

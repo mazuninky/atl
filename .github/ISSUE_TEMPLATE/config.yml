@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Question or usage help
+    url: https://github.com/mazuninky/atl/discussions
+    about: Please ask usage questions in Discussions, not Issues.
+  - name: Security vulnerability
+    url: https://github.com/mazuninky/atl/security/advisories/new
+    about: Report vulnerabilities privately via GitHub Security Advisories. Do not open a public issue.

@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "deny": [
+      "Bash(git*commit*--no-verify*)",
+      "Bash(git*commit*-n*)",
+      "Bash(git*push*--no-verify*)",
+      "Bash(git*push*--force*)",
+      "Bash(git*push*-f*)",
+      "Bash(*LEFTHOOK_EXCLUDE=*)",
+      "Bash(*LEFTHOOK=0*)",
+      "Edit(.agents/**)",
+      "Write(.agents/**)"
+    ]
+  }
+}

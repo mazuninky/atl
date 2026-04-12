@@ -11,6 +11,9 @@ use super::{
 
 pub struct JiraClient {
     http: HttpClient,
+    /// A client without retry middleware, used for multipart/streaming
+    /// requests that cannot be cloned for retries.
+    no_retry_http: HttpClient,
     base_url: String,
     read_only: bool,
 }
@@ -23,9 +26,20 @@ impl JiraClient {
         retries: u32,
     ) -> Result<Self, Error> {
         let http = build_http_client(instance, profile, "jira", store, retries)?;
+        // Build a separate client without retry middleware for multipart
+        // requests. Multipart bodies are streaming and cannot be cloned,
+        // which the retry middleware requires.
+        let no_retry_http = if retries == 0 {
+            // When retries is already 0 the main client has no retry layer,
+            // so we can reuse it via a cheap clone (both are Arc-backed).
+            http.clone()
+        } else {
+            build_http_client(instance, profile, "jira", store, 0)?
+        };
         let base_url = build_base_url(instance, "/rest/api/2");
         Ok(Self {
             http,
+            no_retry_http,
             base_url,
             read_only: instance.read_only,
         })
@@ -829,8 +843,10 @@ impl JiraClient {
             .map_err(Error::Http)?;
         let form = reqwest::multipart::Form::new().part("file", part);
         debug!("POST {url} (multipart)");
+        // Use the no-retry client: multipart bodies are streaming and cannot
+        // be cloned, which the retry middleware requires for retries.
         let resp = self
-            .http
+            .no_retry_http
             .post(&url)
             .header("X-Atlassian-Token", "no-check")
             .multipart(form)

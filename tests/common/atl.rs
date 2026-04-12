@@ -51,6 +51,10 @@ impl AtlRunner {
         if !caller_overrides_profile {
             cmd.arg("--profile").arg("test");
         }
+        // Supply the token via env var (highest priority in the auth
+        // resolution chain) instead of the deprecated `api_token` TOML
+        // field, which triggers a tracing::warn that pollutes stdout.
+        cmd.env("ATL_API_TOKEN", "test-token");
         let mut child = cmd
             .args(args)
             .stdin(Stdio::null())

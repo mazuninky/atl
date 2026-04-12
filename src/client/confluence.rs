@@ -14,6 +14,9 @@ use super::{
 
 pub struct ConfluenceClient {
     http: HttpClient,
+    /// A client without retry middleware, used for multipart/streaming
+    /// requests that cannot be cloned for retries.
+    no_retry_http: HttpClient,
     base_url: String,
     base_url_v2: String,
     read_only: bool,
@@ -27,6 +30,14 @@ impl ConfluenceClient {
         retries: u32,
     ) -> Result<Self, Error> {
         let http = build_http_client(instance, profile, "confluence", store, retries)?;
+        // Build a separate client without retry middleware for multipart
+        // requests. Multipart bodies are streaming and cannot be cloned,
+        // which the retry middleware requires.
+        let no_retry_http = if retries == 0 {
+            http.clone()
+        } else {
+            build_http_client(instance, profile, "confluence", store, 0)?
+        };
         let base_url = build_base_url(instance, "/wiki/rest/api");
         // Derive v2 URL: if api_path is set, transform it; otherwise use default
         let base_url_v2 = if let Some(ref custom_path) = instance.api_path {
@@ -43,6 +54,7 @@ impl ConfluenceClient {
         };
         Ok(Self {
             http,
+            no_retry_http,
             base_url,
             base_url_v2,
             read_only: instance.read_only,
@@ -57,6 +69,11 @@ impl ConfluenceClient {
         retries: u32,
     ) -> Result<Self, Error> {
         let http = build_http_client(instance, profile, "confluence", store, retries)?;
+        let no_retry_http = if retries == 0 {
+            http.clone()
+        } else {
+            build_http_client(instance, profile, "confluence", store, 0)?
+        };
         let (base_url, base_url_v2) = if let Some(ref custom_path) = instance.api_path {
             // api_path overrides the v1 base; derive v2 from it
             let v1 = build_base_url(instance, custom_path);
@@ -78,6 +95,7 @@ impl ConfluenceClient {
         };
         Ok(Self {
             http,
+            no_retry_http,
             base_url,
             base_url_v2,
             read_only: instance.read_only,
@@ -446,8 +464,10 @@ impl ConfluenceClient {
             .text("minorEdit", "false")
             .part("file", part);
         debug!("POST {url} (upload attachment)");
+        // Use the no-retry client: multipart bodies are streaming and cannot
+        // be cloned, which the retry middleware requires for retries.
         let resp = self
-            .http
+            .no_retry_http
             .post(&url)
             .header("X-Atlassian-Token", HeaderValue::from_static("nocheck"))
             .multipart(form)

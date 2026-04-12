@@ -42,6 +42,6 @@ download "confluence.v3.json" \
     "https://developer.atlassian.com/cloud/confluence/swagger.v3.json"
 
 download "confluence-v2.v3.json" \
-    "https://dac-static.atlassian.com/cloud/confluence/rest/v2/swagger.v3.json"
+    "https://dac-static.atlassian.com/cloud/confluence/openapi-v2.v3.json"
 
 echo "All specs downloaded."

@@ -190,9 +190,9 @@ fn api_paginate_jira_search() {
 #[test]
 #[ignore]
 fn api_confluence_get_pages() {
-    // Absolute endpoint form against Confluence, using the v1 API path that
-    // the test fixture is configured with.
-    runner().run_ok(&["api", "--service", "confluence", "/wiki/rest/api/space"]);
+    // Absolute endpoint form against Confluence, using the v2 API path that
+    // matches the Prism mock spec (confluence-v2.patched.json).
+    runner().run_ok(&["api", "--service", "confluence", "/wiki/api/v2/spaces"]);
 }
 
 #[test]

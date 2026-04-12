@@ -74,6 +74,13 @@ impl Prompter for InquirePrompter {
         }
         let owned: Vec<String> = options.iter().map(|s| (*s).to_string()).collect();
         let choice = inquire::Select::new(msg, owned.clone())
+            .with_scorer(&|input, _, string_value, _| {
+                if string_value.to_lowercase().contains(&input.to_lowercase()) {
+                    Some(0)
+                } else {
+                    None
+                }
+            })
             .prompt()
             .map_err(map_inquire_err)?;
         owned

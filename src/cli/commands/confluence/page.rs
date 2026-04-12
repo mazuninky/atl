@@ -329,4 +329,91 @@ mod tests {
         assert_eq!(sanitize_filename("foo/bar.txt"), "bar.txt");
         assert_eq!(sanitize_filename("foo\\bar.txt"), "bar.txt");
     }
+
+    // ---- render_tree ----
+
+    #[test]
+    fn render_tree_single_root() {
+        let node = serde_json::json!({"title": "Root", "id": "1"});
+        let mut buf = Vec::new();
+        render_tree(&node, 0, true, &mut buf).unwrap();
+        let output = String::from_utf8(buf).unwrap();
+        assert_eq!(
+            output, "Root (1)\n",
+            "single root should render title and id on one line"
+        );
+    }
+
+    #[test]
+    fn render_tree_with_children() {
+        let node = serde_json::json!({
+            "title": "Parent", "id": "1",
+            "_children": [
+                {"title": "Child A", "id": "2"},
+                {"title": "Child B", "id": "3"}
+            ]
+        });
+        let mut buf = Vec::new();
+        render_tree(&node, 0, true, &mut buf).unwrap();
+        let output = String::from_utf8(buf).unwrap();
+        let lines: Vec<&str> = output.lines().collect();
+        assert_eq!(lines.len(), 3, "expected 3 lines (parent + 2 children)");
+        assert_eq!(lines[0], "Parent (1)");
+        assert!(
+            lines[1].contains('\u{251c}'),
+            "first child should use branch connector, got: {:?}",
+            lines[1]
+        );
+        assert!(
+            lines[1].contains("Child A (2)"),
+            "first child line should contain title and id, got: {:?}",
+            lines[1]
+        );
+        assert!(
+            lines[2].contains('\u{2514}'),
+            "last child should use corner connector, got: {:?}",
+            lines[2]
+        );
+        assert!(
+            lines[2].contains("Child B (3)"),
+            "last child line should contain title and id, got: {:?}",
+            lines[2]
+        );
+    }
+
+    #[test]
+    fn render_tree_nested() {
+        let node = serde_json::json!({
+            "title": "Root", "id": "1",
+            "_children": [{
+                "title": "Level1", "id": "2",
+                "_children": [{
+                    "title": "Level2", "id": "3"
+                }]
+            }]
+        });
+        let mut buf = Vec::new();
+        render_tree(&node, 0, true, &mut buf).unwrap();
+        let output = String::from_utf8(buf).unwrap();
+        let lines: Vec<&str> = output.lines().collect();
+        assert_eq!(lines.len(), 3, "expected 3 lines (root + level1 + level2)");
+        assert_eq!(lines[0], "Root (1)");
+        assert!(
+            lines[1].contains("Level1 (2)"),
+            "level-1 node should appear, got: {:?}",
+            lines[1]
+        );
+        assert!(
+            lines[2].contains("Level2 (3)"),
+            "level-2 node should appear, got: {:?}",
+            lines[2]
+        );
+        // Level 2 should be indented further than level 1.
+        let indent_l1 = lines[1].find('L').unwrap_or(0);
+        let indent_l2 = lines[2].find('L').unwrap_or(0);
+        assert!(
+            indent_l2 > indent_l1,
+            "level-2 indent ({indent_l2}) should exceed level-1 indent ({indent_l1})"
+        );
+    }
 }

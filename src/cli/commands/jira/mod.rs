@@ -585,4 +585,108 @@ mod tests {
         let args = default_search_args();
         assert!(build_jql(&args).is_err());
     }
+
+    // ---- civil_from_days ----
+
+    #[test]
+    fn civil_from_days_unix_epoch() {
+        assert_eq!(
+            civil_from_days(0),
+            (1970, 1, 1),
+            "day 0 should be the Unix epoch"
+        );
+    }
+
+    #[test]
+    fn civil_from_days_known_date() {
+        // 2023-03-15 is 19431 days after the Unix epoch.
+        assert_eq!(civil_from_days(19431), (2023, 3, 15), "expected 2023-03-15");
+    }
+
+    #[test]
+    fn civil_from_days_leap_year() {
+        // 2024-02-29 is 19782 days after the Unix epoch.
+        assert_eq!(
+            civil_from_days(19782),
+            (2024, 2, 29),
+            "expected leap day 2024-02-29"
+        );
+    }
+
+    #[test]
+    fn civil_from_days_negative() {
+        assert_eq!(
+            civil_from_days(-1),
+            (1969, 12, 31),
+            "day -1 should be 1969-12-31"
+        );
+    }
+
+    // ---- escape_jql ----
+
+    #[test]
+    fn escape_jql_no_special_chars() {
+        assert_eq!(escape_jql("hello"), "hello");
+    }
+
+    #[test]
+    fn escape_jql_escapes_backslash_and_quote() {
+        assert_eq!(
+            escape_jql(r#"back\slash and "quote""#),
+            r#"back\\slash and \"quote\""#,
+            "both backslash and double-quote must be escaped"
+        );
+    }
+
+    #[test]
+    fn escape_jql_empty_string() {
+        assert_eq!(escape_jql(""), "");
+    }
+
+    // ---- insert_extra_fields ----
+
+    #[test]
+    fn insert_fix_version_comma_split() {
+        let mut map = serde_json::Map::new();
+        insert_extra_fields(&mut map, &Some("v1, v2".to_string()), &None, &[]).unwrap();
+        let versions = map.get("fixVersions").expect("fixVersions key missing");
+        assert_eq!(
+            *versions,
+            json!([{"name": "v1"}, {"name": "v2"}]),
+            "comma-separated versions should split and trim into name objects"
+        );
+    }
+
+    #[test]
+    fn insert_component_comma_split() {
+        let mut map = serde_json::Map::new();
+        insert_extra_fields(&mut map, &None, &Some("frontend, backend".to_string()), &[]).unwrap();
+        let components = map.get("components").expect("components key missing");
+        assert_eq!(
+            *components,
+            json!([{"name": "frontend"}, {"name": "backend"}]),
+            "comma-separated components should split and trim into name objects"
+        );
+    }
+
+    #[test]
+    fn insert_custom_field_json_and_string() {
+        let mut map = serde_json::Map::new();
+        let custom = vec![
+            r#"cf_json={"obj":true}"#.to_string(),
+            "cf_plain=plain".to_string(),
+        ];
+        insert_extra_fields(&mut map, &None, &None, &custom).unwrap();
+
+        assert_eq!(
+            map.get("cf_json").expect("cf_json missing"),
+            &json!({"obj": true}),
+            "JSON value should be parsed as a JSON object"
+        );
+        assert_eq!(
+            map.get("cf_plain").expect("cf_plain missing"),
+            &json!("plain"),
+            "non-JSON value should become a JSON string"
+        );
+    }
 }

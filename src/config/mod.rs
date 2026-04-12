@@ -92,12 +92,11 @@ impl AtlassianInstance {
             return Some(env_token);
         }
 
-        // 2. Legacy TOML field. Warn (once per call) so users are nudged
-        //    toward `atl auth login` without crashing existing setups.
+        // 2. Legacy TOML field — still accepted for back-compat.
+        //    The deprecation warning is emitted once at config load time
+        //    (see `ConfigLoader::load`) rather than here, to avoid
+        //    false-positive warnings during `atl auth login` verification.
         if let Some(toml_token) = self.api_token.as_ref() {
-            tracing::warn!(
-                "api_token in atl.toml is deprecated; run `atl auth login --profile {profile}` to migrate to the OS keyring"
-            );
             return Some(toml_token.clone());
         }
 

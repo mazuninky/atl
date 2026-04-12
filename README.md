@@ -4,6 +4,7 @@
 [![Release](https://github.com/mazuninky/atl/actions/workflows/release.yml/badge.svg)](https://github.com/mazuninky/atl/actions/workflows/release.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![MSRV](https://img.shields.io/badge/MSRV-1.94-blue)](Cargo.toml)
+![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/mazuninky/atl?utm_source=oss&utm_medium=github&utm_campaign=mazuninky%2Fatl&labelColor=171717&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews)
 
 Unified command-line interface for Atlassian **Confluence** and **Jira**. Written in Rust, non-interactive by design, with structured output and multi-profile config.
 
@@ -146,7 +147,7 @@ An `atl` skill for [Claude Code](https://claude.ai/code) is available, giving Cl
 Install from [skills.sh](https://skills.sh):
 
 ```sh
-claude skill install mazuninky/atl
+npx skills add mazuninky/atl
 ```
 
 The skill covers Confluence and Jira commands, `atl api` passthrough, output pipelines (`-F json`, `--jq`, `--template`), CI/scripting patterns, aliases, authentication, and common pitfalls.

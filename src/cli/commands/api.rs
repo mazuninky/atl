@@ -15,6 +15,7 @@ use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 use serde_json::{Map, Value};
 use tracing::debug;
 
+use crate::auth::{SecretStore, SystemKeyring};
 use crate::cli::args::{ApiArgs, ApiService};
 use crate::client::raw_request;
 use crate::config::{AtlassianInstance, ConfigLoader};
@@ -32,11 +33,18 @@ pub async fn run(
     transforms: &Transforms<'_>,
 ) -> Result<()> {
     let config = ConfigLoader::load(config_path)?;
+    let resolved_profile_name = profile_name
+        .or(config.as_ref().map(|c| c.default_profile.as_str()))
+        .unwrap_or("default");
     let profile = config
         .as_ref()
-        .and_then(|c| c.resolve_profile(profile_name))
+        .and_then(|c| c.resolve_profile(Some(resolved_profile_name)))
         .ok_or_else(|| anyhow!("no profile found; run `atl init` first"))?;
 
+    let kind = match args.service {
+        ApiService::Confluence => "confluence",
+        ApiService::Jira => "jira",
+    };
     let instance = match args.service {
         ApiService::Confluence => profile
             .confluence
@@ -47,6 +55,7 @@ pub async fn run(
             .as_ref()
             .ok_or_else(|| anyhow!("no Jira instance configured in profile"))?,
     };
+    let store = SystemKeyring;
 
     let method = parse_method(&args.method)?;
     let headers = build_headers(&args.headers)?;
@@ -71,6 +80,9 @@ pub async fn run(
     let value = if args.paginate {
         paginate(
             instance,
+            resolved_profile_name,
+            kind,
+            &store,
             &method,
             &endpoint,
             &headers,
@@ -80,7 +92,19 @@ pub async fn run(
         )
         .await?
     } else {
-        raw_request(instance, method, &endpoint, headers, &query, body, retries).await?
+        raw_request(
+            instance,
+            resolved_profile_name,
+            kind,
+            &store,
+            method,
+            &endpoint,
+            headers,
+            &query,
+            body,
+            retries,
+        )
+        .await?
     };
 
     // `atl api` defaults to JSON output regardless of the global -F setting,
@@ -277,8 +301,12 @@ fn read_body_source(spec: &str, io: &mut IoStreams) -> Result<String> {
 // Pagination
 // -------------------------------------------------------------------------
 
+#[allow(clippy::too_many_arguments)]
 async fn paginate(
     instance: &AtlassianInstance,
+    profile: &str,
+    kind: &str,
+    store: &dyn SecretStore,
     method: &Method,
     endpoint: &str,
     headers: &HeaderMap,
@@ -289,6 +317,9 @@ async fn paginate(
     // First page — shape drives the rest of the walk.
     let first = raw_request(
         instance,
+        profile,
+        kind,
+        store,
         method.clone(),
         endpoint,
         headers.clone(),
@@ -301,18 +332,23 @@ async fn paginate(
     match detect_pagination_style(&first) {
         PaginationStyle::JiraSearch => {
             paginate_jira_search(
-                instance, method, endpoint, headers, query, body, first, retries,
+                instance, profile, kind, store, method, endpoint, headers, query, body, first,
+                retries,
             )
             .await
         }
         PaginationStyle::JiraAgile => {
             paginate_jira_agile(
-                instance, method, endpoint, headers, query, body, first, retries,
+                instance, profile, kind, store, method, endpoint, headers, query, body, first,
+                retries,
             )
             .await
         }
         PaginationStyle::ConfluenceLinksNext => {
-            paginate_confluence_links(instance, method, headers, body, first, retries).await
+            paginate_confluence_links(
+                instance, profile, kind, store, method, headers, body, first, retries,
+            )
+            .await
         }
         PaginationStyle::None => Err(anyhow!(
             "pagination style not detected for this endpoint; use manual pagination"
@@ -323,6 +359,9 @@ async fn paginate(
 #[allow(clippy::too_many_arguments)]
 async fn paginate_jira_search(
     instance: &AtlassianInstance,
+    profile: &str,
+    kind: &str,
+    store: &dyn SecretStore,
     method: &Method,
     endpoint: &str,
     headers: &HeaderMap,
@@ -356,6 +395,9 @@ async fn paginate_jira_search(
 
         let page = raw_request(
             instance,
+            profile,
+            kind,
+            store,
             method.clone(),
             endpoint,
             headers.clone(),
@@ -385,6 +427,9 @@ async fn paginate_jira_search(
 #[allow(clippy::too_many_arguments)]
 async fn paginate_jira_agile(
     instance: &AtlassianInstance,
+    profile: &str,
+    kind: &str,
+    store: &dyn SecretStore,
     method: &Method,
     endpoint: &str,
     headers: &HeaderMap,
@@ -414,6 +459,9 @@ async fn paginate_jira_agile(
 
         let page = raw_request(
             instance,
+            profile,
+            kind,
+            store,
             method.clone(),
             endpoint,
             headers.clone(),
@@ -442,8 +490,12 @@ async fn paginate_jira_agile(
     Ok(merged)
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn paginate_confluence_links(
     instance: &AtlassianInstance,
+    profile: &str,
+    kind: &str,
+    store: &dyn SecretStore,
     method: &Method,
     headers: &HeaderMap,
     body: Option<&Value>,
@@ -474,6 +526,9 @@ async fn paginate_confluence_links(
 
         let page = raw_request(
             instance,
+            profile,
+            kind,
+            store,
             method.clone(),
             &next_endpoint,
             headers.clone(),

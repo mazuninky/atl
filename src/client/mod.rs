@@ -9,6 +9,7 @@ use reqwest_middleware::{ClientBuilder as MwClientBuilder, ClientWithMiddleware}
 use reqwest_retry::{RetryTransientMiddleware, policies::ExponentialBackoff};
 use tracing::debug;
 
+use crate::auth::SecretStore;
 use crate::config::{AtlassianInstance, AuthType};
 use crate::error::Error;
 
@@ -31,18 +32,27 @@ pub(crate) type HttpClient = ClientWithMiddleware;
 /// regardless of HTTP method. That means a POST returning 503 will be
 /// retried, which could in theory double-submit a write. Callers who are
 /// concerned about double-submission should run with `--retries 0`.
+///
+/// Token resolution uses the full `env → TOML → keyring` chain via
+/// [`AtlassianInstance::resolved_token`], so callers do not need to
+/// pre-resolve the token before constructing a client.
 pub(crate) fn build_http_client(
     instance: &AtlassianInstance,
+    profile: &str,
+    kind: &str,
+    store: &dyn SecretStore,
     retries: u32,
 ) -> Result<HttpClient, Error> {
     let mut headers = HeaderMap::new();
     headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
 
-    let token = instance.effective_api_token().ok_or_else(|| {
-        Error::Auth(
-            "no API token configured; set api_token in config or ATL_API_TOKEN env var".into(),
-        )
-    })?;
+    let token = instance
+        .resolved_token(profile, kind, store)
+        .ok_or_else(|| {
+            Error::Auth(
+                "no API token configured; run `atl auth login` or set ATL_API_TOKEN env var".into(),
+            )
+        })?;
 
     let auth_value = match instance.auth_type {
         AuthType::Basic => {
@@ -180,8 +190,12 @@ pub(crate) async fn detect_confluence_api_path(
 /// where `scheme` is inferred from `instance.domain` (defaults to `https://`).
 ///
 /// Used by the generic `atl api` passthrough command.
+#[allow(clippy::too_many_arguments)]
 pub async fn raw_request(
     instance: &AtlassianInstance,
+    profile: &str,
+    kind: &str,
+    store: &dyn SecretStore,
     method: reqwest::Method,
     endpoint: &str,
     headers: HeaderMap,
@@ -200,7 +214,7 @@ pub async fn raw_request(
         ));
     }
 
-    let http = build_http_client(instance, retries)?;
+    let http = build_http_client(instance, profile, kind, store, retries)?;
 
     let domain = instance.domain.trim_end_matches('/');
     let scheme = if domain.starts_with("http://") || domain.starts_with("https://") {
@@ -245,6 +259,7 @@ pub(super) async fn handle_error_status(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::auth::InMemoryStore;
     use crate::config::AtlassianInstance;
     use crate::test_util::env_lock;
 
@@ -312,7 +327,8 @@ mod tests {
         // retries == 0 must still return a functioning middleware client,
         // just without the retry layer attached.
         let inst = make_authed_instance();
-        let client = build_http_client(&inst, 0);
+        let store = InMemoryStore::new();
+        let client = build_http_client(&inst, "default", "jira", &store, 0);
         assert!(
             client.is_ok(),
             "build_http_client(_, 0) should succeed: {:?}",
@@ -326,7 +342,8 @@ mod tests {
         // inspect the middleware chain directly (it's opaque), so we just
         // verify the client was constructed.
         let inst = make_authed_instance();
-        let client = build_http_client(&inst, 5);
+        let store = InMemoryStore::new();
+        let client = build_http_client(&inst, "default", "jira", &store, 5);
         assert!(
             client.is_ok(),
             "build_http_client(_, 5) should succeed: {:?}",
@@ -340,15 +357,229 @@ mod tests {
         // cannot attach Authorization — retries setting must not change that.
         let _g = env_lock();
         let inst = make_instance("example.atlassian.net", None);
+        let store = InMemoryStore::new();
         // Avoid env var contamination from the developer shell.
         // SAFETY: serialized via env_lock() so no concurrent thread in
         // this crate can read or write ATL_API_TOKEN while we are here.
         unsafe { std::env::remove_var("ATL_API_TOKEN") };
-        let err = build_http_client(&inst, 0).unwrap_err();
+        let err = build_http_client(&inst, "default", "jira", &store, 0).unwrap_err();
         assert!(
             matches!(err, Error::Auth(_)),
             "expected Error::Auth, got {err:?}"
         );
+    }
+
+    #[test]
+    fn build_http_client_resolves_keyring_token() {
+        // Verify the full resolution chain: when no env var or TOML token
+        // is set, the builder should find the token in the keyring.
+        let _g = env_lock();
+        unsafe { std::env::remove_var("ATL_API_TOKEN") };
+
+        let inst = AtlassianInstance {
+            domain: "https://example.atlassian.net".to_string(),
+            email: Some("test@example.com".into()),
+            api_token: None,
+            auth_type: AuthType::Basic,
+            api_path: None,
+            read_only: false,
+        };
+        let store = InMemoryStore::new();
+        store
+            .set("atl:default:jira", "test@example.com", "keyring-token")
+            .unwrap();
+
+        let client = build_http_client(&inst, "default", "jira", &store, 0);
+        assert!(
+            client.is_ok(),
+            "build_http_client should resolve keyring token: {:?}",
+            client.err()
+        );
+    }
+
+    // -------------------------------------------------------------------
+    // Wiring tests: keyring token resolution through client constructors
+    //
+    // These verify the full path from client constructor → build_http_client
+    // → resolved_token → keyring. The unit test above
+    // (build_http_client_resolves_keyring_token) proves the builder itself
+    // calls resolved_token, but these catch a different class of bug:
+    // a client constructor passing the wrong `kind`, wrong `profile`,
+    // or forgetting to forward the `store` parameter.
+    // -------------------------------------------------------------------
+
+    /// Helper: instance with email but NO TOML token, forcing the resolution
+    /// chain to fall through to the keyring.
+    fn make_keyring_only_instance() -> AtlassianInstance {
+        AtlassianInstance {
+            domain: "https://example.atlassian.net".to_string(),
+            email: Some("alice@acme.com".into()),
+            api_token: None,
+            auth_type: AuthType::Basic,
+            api_path: None,
+            read_only: false,
+        }
+    }
+
+    #[test]
+    fn jira_client_new_resolves_keyring_token() {
+        // JiraClient::new must forward the store to build_http_client with
+        // kind="jira", so a keyring entry under "atl:<profile>:jira" is found.
+        let _g = env_lock();
+        unsafe { std::env::remove_var("ATL_API_TOKEN") };
+
+        let inst = make_keyring_only_instance();
+        let store = InMemoryStore::new();
+        store
+            .set("atl:default:jira", "alice@acme.com", "jira-keyring-token")
+            .unwrap();
+
+        let client = JiraClient::new(&inst, "default", &store, 0);
+        assert!(
+            client.is_ok(),
+            "JiraClient::new should resolve keyring token, got: {:?}",
+            client.err()
+        );
+    }
+
+    #[test]
+    fn jira_client_new_fails_without_any_token() {
+        // Negative case: no env, no TOML, no keyring entry → Error::Auth.
+        let _g = env_lock();
+        unsafe { std::env::remove_var("ATL_API_TOKEN") };
+
+        let inst = make_keyring_only_instance();
+        let store = InMemoryStore::new();
+
+        match JiraClient::new(&inst, "default", &store, 0) {
+            Err(Error::Auth(_)) => {} // expected
+            Err(other) => panic!("expected Error::Auth when no token exists, got: {other:?}"),
+            Ok(_) => panic!("expected Error::Auth when no token exists, got Ok"),
+        }
+    }
+
+    #[test]
+    fn jira_client_new_uses_correct_profile_scope() {
+        // A keyring entry for profile "staging" must NOT be found when
+        // constructing with profile "default" — proves the profile parameter
+        // is forwarded, not hard-coded.
+        let _g = env_lock();
+        unsafe { std::env::remove_var("ATL_API_TOKEN") };
+
+        let inst = make_keyring_only_instance();
+        let store = InMemoryStore::new();
+        store
+            .set("atl:staging:jira", "alice@acme.com", "wrong-profile-token")
+            .unwrap();
+
+        match JiraClient::new(&inst, "default", &store, 0) {
+            Err(Error::Auth(_)) => {} // expected
+            Err(other) => panic!(
+                "expected Error::Auth when keyring entry is under wrong profile, got: {other:?}"
+            ),
+            Ok(_) => {
+                panic!("expected Error::Auth when keyring entry is under wrong profile, got Ok")
+            }
+        }
+    }
+
+    #[test]
+    fn confluence_client_new_resolves_keyring_token() {
+        // ConfluenceClient::new must forward the store with kind="confluence".
+        let _g = env_lock();
+        unsafe { std::env::remove_var("ATL_API_TOKEN") };
+
+        let inst = make_keyring_only_instance();
+        let store = InMemoryStore::new();
+        store
+            .set(
+                "atl:default:confluence",
+                "alice@acme.com",
+                "confluence-keyring-token",
+            )
+            .unwrap();
+
+        let client = ConfluenceClient::new(&inst, "default", &store, 0);
+        assert!(
+            client.is_ok(),
+            "ConfluenceClient::new should resolve keyring token, got: {:?}",
+            client.err()
+        );
+    }
+
+    #[test]
+    fn confluence_client_new_fails_without_any_token() {
+        // Negative case: no env, no TOML, no keyring → Error::Auth.
+        let _g = env_lock();
+        unsafe { std::env::remove_var("ATL_API_TOKEN") };
+
+        let inst = make_keyring_only_instance();
+        let store = InMemoryStore::new();
+
+        match ConfluenceClient::new(&inst, "default", &store, 0) {
+            Err(Error::Auth(_)) => {} // expected
+            Err(other) => panic!("expected Error::Auth when no token exists, got: {other:?}"),
+            Ok(_) => panic!("expected Error::Auth when no token exists, got Ok"),
+        }
+    }
+
+    #[test]
+    fn confluence_client_kind_is_not_jira() {
+        // A keyring entry for kind="jira" must NOT satisfy ConfluenceClient::new.
+        // Catches the bug where a client constructor hard-codes the wrong kind.
+        let _g = env_lock();
+        unsafe { std::env::remove_var("ATL_API_TOKEN") };
+
+        let inst = make_keyring_only_instance();
+        let store = InMemoryStore::new();
+        store
+            .set("atl:default:jira", "alice@acme.com", "jira-only-token")
+            .unwrap();
+
+        match ConfluenceClient::new(&inst, "default", &store, 0) {
+            Err(Error::Auth(_)) => {} // expected
+            Err(other) => panic!(
+                "ConfluenceClient must use kind=\"confluence\", not \"jira\"; got: {other:?}"
+            ),
+            Ok(_) => panic!("ConfluenceClient must use kind=\"confluence\", not \"jira\"; got Ok"),
+        }
+    }
+
+    #[tokio::test]
+    async fn raw_request_fails_without_any_token() {
+        // Negative case: raw_request with no token anywhere → Error::Auth
+        // at the client-construction stage (never reaches the network).
+        {
+            let _g = env_lock();
+            // SAFETY: serialized via env_lock().
+            unsafe { std::env::remove_var("ATL_API_TOKEN") };
+        } // lock released before any await
+
+        let inst = make_keyring_only_instance();
+        let store = InMemoryStore::new();
+
+        let result = raw_request(
+            &inst,
+            "default",
+            "jira",
+            &store,
+            reqwest::Method::GET,
+            "/rest/api/2/myself",
+            HeaderMap::new(),
+            &[],
+            None,
+            0,
+        )
+        .await;
+
+        match result {
+            Err(Error::Auth(msg)) if msg.contains("no API token configured") => {} // expected
+            Err(Error::Auth(msg)) => panic!(
+                "expected 'no API token configured' Auth error, got different Auth error: {msg}"
+            ),
+            Err(other) => panic!("expected Error::Auth, got: {other:?}"),
+            Ok(_) => panic!("expected Error::Auth when no token exists, got Ok"),
+        }
     }
 
     #[tokio::test]
@@ -365,9 +596,13 @@ mod tests {
             api_path: None,
             read_only: true,
         };
+        let store = InMemoryStore::new();
 
         let err = raw_request(
             &inst,
+            "default",
+            "jira",
+            &store,
             reqwest::Method::POST,
             "/rest/api/2/issue",
             HeaderMap::new(),

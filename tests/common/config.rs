@@ -86,7 +86,6 @@ impl TestConfigBuilder {
 [profiles.test.jira]
 domain = "{domain}"
 email = "test@example.com"
-api_token = "test-token"
 auth_type = "basic"
 read_only = {read_only}
 "#,
@@ -110,7 +109,6 @@ read_only = {read_only}
 [profiles.test.confluence]
 domain = "{domain}"
 email = "test@example.com"
-api_token = "test-token"
 auth_type = "basic"
 {api_path_line}read_only = {read_only}
 "#,

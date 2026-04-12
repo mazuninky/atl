@@ -409,3 +409,41 @@ pub(super) async fn dispatch_webhook(
         }
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn parse_valid_position() {
+        let result = parse_gadget_position("0:1").unwrap();
+        assert_eq!(result, json!({"row": 0, "column": 1}));
+    }
+
+    #[test]
+    fn parse_large_numbers() {
+        let result = parse_gadget_position("100:200").unwrap();
+        assert_eq!(result, json!({"row": 100, "column": 200}));
+    }
+
+    #[test]
+    fn parse_missing_colon_errors() {
+        let err = parse_gadget_position("123").unwrap_err();
+        let domain = err.downcast_ref::<Error>();
+        assert!(
+            matches!(domain, Some(Error::InvalidInput(_))),
+            "expected Error::InvalidInput, got: {err:?}"
+        );
+    }
+
+    #[test]
+    fn parse_non_numeric_errors() {
+        let err = parse_gadget_position("a:b").unwrap_err();
+        let domain = err.downcast_ref::<Error>();
+        assert!(
+            matches!(domain, Some(Error::InvalidInput(_))),
+            "expected Error::InvalidInput, got: {err:?}"
+        );
+    }
+}

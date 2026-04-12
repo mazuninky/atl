@@ -36,17 +36,29 @@ If you just want to build and test, see [`.github/CONTRIBUTING.md`](../.github/C
 │   ├── error.rs                # domain Error enum, exit codes, Result alias
 │   ├── io/                     # stdout/stderr streams + optional pager
 │   ├── cli/
-│   │   ├── args/               # clap derive structs (one file per service)
+│   │   ├── args/               # clap derive structs (split by service)
 │   │   │   ├── mod.rs          # top-level Cli, Command enum, global flags
 │   │   │   ├── api.rs          # `atl api` passthrough args
-│   │   │   ├── confluence.rs   # ConfluenceSubcommand + arg structs
-│   │   │   ├── jira.rs         # JiraSubcommand + arg structs
+│   │   │   ├── confluence/     # Confluence arg structs
+│   │   │   │   ├── mod.rs      # ConfluenceSubcommand enum
+│   │   │   │   ├── page.rs, space.rs, attachment.rs, blog.rs, ...
+│   │   │   │   └── admin.rs
+│   │   │   ├── jira/           # Jira arg structs
+│   │   │   │   ├── mod.rs      # JiraSubcommand enum
+│   │   │   │   ├── issue.rs, board.rs, sprint.rs, project.rs, ...
+│   │   │   │   └── admin.rs
 │   │   │   └── updater.rs      # `atl self check/update` args
-│   │   └── commands/           # command handlers (one file per service)
+│   │   └── commands/           # command handlers (split by service)
 │   │       ├── mod.rs          # read_body_arg helper (@file / - / literal)
 │   │       ├── api.rs          # generic REST passthrough
-│   │       ├── confluence.rs   # Confluence command dispatcher
-│   │       ├── jira.rs         # Jira command dispatcher
+│   │       ├── confluence/     # Confluence command handlers
+│   │       │   ├── mod.rs      # dispatcher
+│   │       │   ├── page.rs, space.rs, attachment.rs, blog.rs, ...
+│   │       │   └── admin.rs
+│   │       ├── jira/           # Jira command handlers
+│   │       │   ├── mod.rs      # dispatcher
+│   │       │   ├── project.rs, board.rs, sprint.rs, filter.rs, ...
+│   │       │   └── admin.rs
 │   │       ├── config.rs       # profile management (list/show/delete/...)
 │   │       ├── init.rs         # interactive `atl init` wizard
 │   │       ├── markdown.rs     # Markdown → Confluence storage format (comrak)
@@ -85,11 +97,11 @@ Rule of thumb: raise a domain `Error::*` variant when you want a specific exit c
 
 ### CLI args: derive, one file per service
 
-Every subcommand is a `#[derive(Subcommand)]` variant with its own `Args` struct. Args live under `src/cli/args/`, split by service (`confluence.rs`, `jira.rs`, etc.). Global flags (`-v`, `-q`, `-F`, `-p`, `--config`, `--no-color`, `--no-pager`) are defined on the top-level `Cli` struct in `src/cli/args/mod.rs` with `global = true`.
+Every subcommand is a `#[derive(Subcommand)]` variant with its own `Args` struct. Args live under `src/cli/args/`, split by service into subdirectories (`confluence/`, `jira/`, etc.) with `mod.rs` as the top-level enum and sub-files for each domain area. Global flags (`-v`, `-q`, `-F`, `-p`, `--config`, `--no-color`, `--no-pager`) are defined on the top-level `Cli` struct in `src/cli/args/mod.rs` with `global = true`.
 
 ### Command handlers: one file per service, dispatcher pattern
 
-Each service has a `run(...)` entry point in `src/cli/commands/<service>.rs` that loads config, builds the client, and calls an internal `dispatch` that `match`es the enum. Adding a new subcommand means adding a variant to the enum, adding an arm to `dispatch`, and writing the actual logic as a private `async fn`.
+Each service has a `run(...)` entry point in `src/cli/commands/<service>/mod.rs` that loads config, builds the client, and dispatches via the `match` on the subcommand enum. Sub-files in the same directory handle individual domain areas (e.g., `jira/project.rs`, `jira/filter.rs`). Adding a new subcommand means adding a variant to the enum, adding an arm to the dispatcher, and writing the actual logic in the appropriate sub-file.
 
 ### HTTP clients: construct from `AtlassianInstance`
 
@@ -117,14 +129,14 @@ No prompts, no spinners, no colour unless stdout is a TTY and `NO_COLOR` is unse
 
 Concrete walkthrough for adding, say, `atl jira filter list`:
 
-1. **Define the args.** In `src/cli/args/jira.rs`, add a variant to `JiraSubcommand`:
+1. **Define the args.** In `src/cli/args/jira/mod.rs`, add a variant to `JiraSubcommand`:
 
    ```rust
    /// List saved filters
    Filter(JiraFilterCommand),
    ```
 
-   Then declare the subcommand tree next to the other `*Command` structs in the same file:
+   Then create a new file `src/cli/args/jira/filter.rs` with the arg structs, and add `pub mod filter;` in `src/cli/args/jira/mod.rs`:
 
    ```rust
    #[derive(Debug, Args)]
@@ -153,7 +165,7 @@ Concrete walkthrough for adding, say, `atl jira filter list`:
 
 2. **Add the client call.** In `src/client/jira.rs`, write an `async fn list_filters(...) -> Result<Value>` that builds the request URL, forwards to the shared request helper, and returns the parsed JSON.
 
-3. **Wire up the dispatcher.** In `src/cli/commands/jira.rs`, extend the `match` in `dispatch` with a new arm:
+3. **Wire up the dispatcher.** In `src/cli/commands/jira/mod.rs`, extend the `match` in the dispatcher with a new arm:
 
    ```rust
    JiraSubcommand::Filter(cmd) => match &cmd.command {

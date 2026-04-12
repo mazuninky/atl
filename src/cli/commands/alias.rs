@@ -40,6 +40,7 @@ pub(crate) const BUILTINS: &[&str] = &[
     "auth",
     "browse",
     "generate-docs",
+    "help",
 ];
 
 /// Global flags that take a value (either as `--flag value` or `--flag=value`).

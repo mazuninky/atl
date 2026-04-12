@@ -185,4 +185,4 @@ The release workflow runs the same command against the release binary and packag
 2. This file — architecture and conventions
 3. `docs/project-layout.md` — file tour + how to add a Jira subcommand
 4. `src/main.rs` — small enough to read in one sitting
-5. One end-to-end command implementation, e.g. `src/cli/commands/jira/issue.rs` + `src/client/jira.rs::view_issue` + `src/cli/args/jira/issue.rs`
+5. One end-to-end command implementation, e.g. `src/cli/commands/jira/issue.rs` + `src/client/jira.rs::get_issue` + `src/cli/args/jira/issue.rs`

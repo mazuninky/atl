@@ -167,6 +167,10 @@ When you add a new top-level subcommand, also add it to `BUILTINS` in `src/cli/c
 
 The release workflow runs the same command against the release binary and packages `dist/_docs/{man,completions}/` into the tarball/zip.
 
+## Branch policy
+
+All changes to `master` **must** go through a pull request — direct pushes are blocked by repository rules. The only exception is the release commit created by `scripts/bump-version.sh`, which is pushed directly to `master` together with the version tag.
+
 ## Conventions worth preserving
 
 - **Non-interactive everywhere except `init` and `auth login`.** No spinners, no progress bars, no colour unless `is_stdout_tty()`. Output must be identical under `| cat` and in CI.

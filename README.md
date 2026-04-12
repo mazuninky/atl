@@ -146,7 +146,7 @@ An `atl` skill for [Claude Code](https://claude.ai/code) is available, giving Cl
 Install from [skills.sh](https://skills.sh):
 
 ```sh
-claude skill install mazuninky/atl
+npx skills add mazuninky/atl
 ```
 
 The skill covers Confluence and Jira commands, `atl api` passthrough, output pipelines (`-F json`, `--jq`, `--template`), CI/scripting patterns, aliases, authentication, and common pitfalls.

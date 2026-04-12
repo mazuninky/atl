@@ -1,6 +1,7 @@
 use serde_json::Value;
 use tracing::debug;
 
+use crate::auth::SecretStore;
 use crate::config::AtlassianInstance;
 use crate::error::Error;
 
@@ -15,8 +16,13 @@ pub struct JiraClient {
 }
 
 impl JiraClient {
-    pub fn new(instance: &AtlassianInstance, retries: u32) -> Result<Self, Error> {
-        let http = build_http_client(instance, retries)?;
+    pub fn new(
+        instance: &AtlassianInstance,
+        profile: &str,
+        store: &dyn SecretStore,
+        retries: u32,
+    ) -> Result<Self, Error> {
+        let http = build_http_client(instance, profile, "jira", store, retries)?;
         let base_url = build_base_url(instance, "/rest/api/2");
         Ok(Self {
             http,

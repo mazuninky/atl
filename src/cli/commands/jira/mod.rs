@@ -10,6 +10,7 @@ mod workflow;
 use camino::Utf8Path;
 use serde_json::{Value, json};
 
+use crate::auth::SystemKeyring;
 use crate::cli::args::*;
 use crate::client::JiraClient;
 use crate::config::ConfigLoader;
@@ -166,6 +167,9 @@ pub async fn run(
     }
 
     let config = ConfigLoader::load(config_path)?;
+    let resolved_profile_name = profile_name
+        .or(config.as_ref().map(|c| c.default_profile.as_str()))
+        .unwrap_or("default");
     let profile = config
         .as_ref()
         .and_then(|c| c.resolve_profile(profile_name))
@@ -175,7 +179,8 @@ pub async fn run(
     let instance = profile.jira.as_ref().ok_or_else(|| {
         crate::error::Error::Config("no Jira instance configured in profile".into())
     })?;
-    let client = JiraClient::new(instance, retries)?;
+    let store = SystemKeyring;
+    let client = JiraClient::new(instance, resolved_profile_name, &store, retries)?;
 
     dispatch(cmd, &client, format, io, transforms).await
 }

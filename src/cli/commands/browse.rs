@@ -13,6 +13,7 @@ use std::io::Write;
 use anyhow::{Result, anyhow};
 use camino::Utf8Path;
 
+use crate::auth::{SecretStore, SystemKeyring};
 use crate::cli::args::{BrowseArgs, BrowseService};
 use crate::client::raw_request;
 use crate::config::{AtlassianInstance, ConfigLoader};
@@ -29,10 +30,14 @@ pub async fn run(
     let service = resolve_service(args.service, &args.target);
 
     let config = ConfigLoader::load(config_path)?;
+    let resolved_profile_name = profile_name
+        .or(config.as_ref().map(|c| c.default_profile.as_str()))
+        .unwrap_or("default");
     let profile = config
         .as_ref()
         .and_then(|c| c.resolve_profile(profile_name))
         .ok_or_else(|| anyhow!("no profile found; run `atl init` first"))?;
+    let store = SystemKeyring;
 
     let url = match service {
         BrowseService::Jira => {
@@ -47,7 +52,14 @@ pub async fn run(
                 .confluence
                 .as_ref()
                 .ok_or_else(|| anyhow!("no Confluence instance configured in profile"))?;
-            confluence_url(instance, &args.target, retries).await?
+            confluence_url(
+                instance,
+                resolved_profile_name,
+                &store,
+                &args.target,
+                retries,
+            )
+            .await?
         }
         // `resolve_service` never returns `Auto`.
         BrowseService::Auto => unreachable!("Auto resolved above"),
@@ -137,6 +149,8 @@ fn jira_url(instance: &AtlassianInstance, key: &str) -> String {
 /// `base`, in which case we fall back to the profile's domain.
 async fn confluence_url(
     instance: &AtlassianInstance,
+    profile: &str,
+    store: &dyn SecretStore,
     page_id: &str,
     retries: u32,
 ) -> Result<String> {
@@ -147,6 +161,9 @@ async fn confluence_url(
     let endpoint = format!("/wiki/api/v2/pages/{page_id}");
     let page = raw_request(
         instance,
+        profile,
+        "confluence",
+        store,
         reqwest::Method::GET,
         &endpoint,
         reqwest::header::HeaderMap::new(),

@@ -12,6 +12,7 @@ use std::io::Write;
 use camino::Utf8Path;
 use serde_json::Value;
 
+use crate::auth::SystemKeyring;
 use crate::cli::args::*;
 use crate::client::ConfluenceClient;
 use crate::config::ConfigLoader;
@@ -45,6 +46,9 @@ pub async fn run(
     }
 
     let config = ConfigLoader::load(config_path)?;
+    let resolved_profile_name = profile_name
+        .or(config.as_ref().map(|c| c.default_profile.as_str()))
+        .unwrap_or("default");
     let profile = config
         .as_ref()
         .and_then(|c| c.resolve_profile(profile_name))
@@ -53,7 +57,9 @@ pub async fn run(
         .confluence
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("no Confluence instance configured in profile"))?;
-    let client = ConfluenceClient::connect(instance, retries).await?;
+    let store = SystemKeyring;
+    let client =
+        ConfluenceClient::connect(instance, resolved_profile_name, &store, retries).await?;
 
     dispatch(cmd, &client, format, io, transforms).await
 }

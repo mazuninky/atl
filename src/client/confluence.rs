@@ -3,6 +3,7 @@ use reqwest::header::HeaderValue;
 use serde_json::Value;
 use tracing::{debug, info, warn};
 
+use crate::auth::SecretStore;
 use crate::config::AtlassianInstance;
 use crate::error::Error;
 
@@ -19,8 +20,13 @@ pub struct ConfluenceClient {
 }
 
 impl ConfluenceClient {
-    pub fn new(instance: &AtlassianInstance, retries: u32) -> Result<Self, Error> {
-        let http = build_http_client(instance, retries)?;
+    pub fn new(
+        instance: &AtlassianInstance,
+        profile: &str,
+        store: &dyn SecretStore,
+        retries: u32,
+    ) -> Result<Self, Error> {
+        let http = build_http_client(instance, profile, "confluence", store, retries)?;
         let base_url = build_base_url(instance, "/wiki/rest/api");
         // Derive v2 URL: if api_path is set, transform it; otherwise use default
         let base_url_v2 = if let Some(ref custom_path) = instance.api_path {
@@ -44,8 +50,13 @@ impl ConfluenceClient {
     }
 
     /// Create client with auto-detection of API path when not configured.
-    pub async fn connect(instance: &AtlassianInstance, retries: u32) -> Result<Self, Error> {
-        let http = build_http_client(instance, retries)?;
+    pub async fn connect(
+        instance: &AtlassianInstance,
+        profile: &str,
+        store: &dyn SecretStore,
+        retries: u32,
+    ) -> Result<Self, Error> {
+        let http = build_http_client(instance, profile, "confluence", store, retries)?;
         let (base_url, base_url_v2) = if let Some(ref custom_path) = instance.api_path {
             // api_path overrides the v1 base; derive v2 from it
             let v1 = build_base_url(instance, custom_path);

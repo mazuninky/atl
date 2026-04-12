@@ -10,6 +10,21 @@
 use assert_cmd::Command;
 use predicates::prelude::*;
 
+/// Returns a platform-appropriate path to a null/empty file that clap can
+/// accept as `--config` without error.
+fn null_config_path() -> &'static str {
+    if cfg!(windows) { "NUL" } else { "/dev/null" }
+}
+
+/// Returns a platform-appropriate path that is guaranteed not to exist, for
+/// testing error handling on missing config files.
+fn nonexistent_config_path() -> String {
+    let dir = std::env::temp_dir();
+    dir.join("atl-test-nonexistent-config-4f9a1c.toml")
+        .to_string_lossy()
+        .into_owned()
+}
+
 /// Build an isolated `atl` command that won't touch real config or network.
 fn atl() -> Command {
     let mut cmd = Command::cargo_bin("atl").unwrap();
@@ -29,7 +44,7 @@ fn atl() -> Command {
 #[test]
 fn top_level_help_exits_zero() {
     atl()
-        .args(["--config", "/dev/null", "--help"])
+        .args(["--config", null_config_path(), "--help"])
         .assert()
         .success()
         .stdout(predicate::str::contains("Usage"));
@@ -38,7 +53,7 @@ fn top_level_help_exits_zero() {
 #[test]
 fn top_level_version_exits_zero() {
     atl()
-        .args(["--config", "/dev/null", "--version"])
+        .args(["--config", null_config_path(), "--version"])
         .assert()
         .success()
         .stdout(predicate::str::contains("atl"));
@@ -47,7 +62,7 @@ fn top_level_version_exits_zero() {
 #[test]
 fn jira_help_exits_zero() {
     atl()
-        .args(["--config", "/dev/null", "jira", "--help"])
+        .args(["--config", null_config_path(), "jira", "--help"])
         .assert()
         .success()
         .stdout(predicate::str::contains("Usage"));
@@ -56,7 +71,7 @@ fn jira_help_exits_zero() {
 #[test]
 fn confluence_help_exits_zero() {
     atl()
-        .args(["--config", "/dev/null", "confluence", "--help"])
+        .args(["--config", null_config_path(), "confluence", "--help"])
         .assert()
         .success()
         .stdout(predicate::str::contains("Usage"));
@@ -65,7 +80,7 @@ fn confluence_help_exits_zero() {
 #[test]
 fn auth_help_exits_zero() {
     atl()
-        .args(["--config", "/dev/null", "auth", "--help"])
+        .args(["--config", null_config_path(), "auth", "--help"])
         .assert()
         .success()
         .stdout(predicate::str::contains("Usage"));
@@ -74,7 +89,7 @@ fn auth_help_exits_zero() {
 #[test]
 fn api_help_exits_zero() {
     atl()
-        .args(["--config", "/dev/null", "api", "--help"])
+        .args(["--config", null_config_path(), "api", "--help"])
         .assert()
         .success()
         .stdout(predicate::str::contains("Usage"));
@@ -83,7 +98,7 @@ fn api_help_exits_zero() {
 #[test]
 fn alias_help_exits_zero() {
     atl()
-        .args(["--config", "/dev/null", "alias", "--help"])
+        .args(["--config", null_config_path(), "alias", "--help"])
         .assert()
         .success()
         .stdout(predicate::str::contains("Usage"));
@@ -95,10 +110,11 @@ fn alias_help_exits_zero() {
 
 #[test]
 fn missing_config_exits_with_error() {
+    let bad_path = nonexistent_config_path();
     atl()
         .args([
             "--config",
-            "/nonexistent/path.toml",
+            &bad_path,
             "jira",
             "search",
             "--jql",
@@ -111,7 +127,7 @@ fn missing_config_exits_with_error() {
 #[test]
 fn unknown_subcommand_exits_nonzero() {
     atl()
-        .args(["--config", "/dev/null", "nonexistent"])
+        .args(["--config", null_config_path(), "nonexistent"])
         .assert()
         .failure()
         .stderr(predicate::str::contains("unrecognized subcommand"));
@@ -124,7 +140,7 @@ fn unknown_subcommand_exits_nonzero() {
 #[test]
 fn no_color_flag_suppresses_ansi() {
     atl()
-        .args(["--config", "/dev/null", "--no-color", "--help"])
+        .args(["--config", null_config_path(), "--no-color", "--help"])
         .assert()
         .success()
         .stdout(predicate::str::contains("\x1b[").not());

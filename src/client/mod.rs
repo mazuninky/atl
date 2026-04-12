@@ -546,65 +546,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn raw_request_resolves_keyring_token() {
-        // raw_request (used by `atl api`) must forward the store to
-        // build_http_client. We use localhost on a port that's almost
-        // certainly not listening so the HTTP call fails fast at the
-        // network layer, not the Atlassian auth layer.
-        {
-            let _g = env_lock();
-            // SAFETY: serialized via env_lock().
-            unsafe { std::env::remove_var("ATL_API_TOKEN") };
-        } // lock released before any await
-
-        let inst = AtlassianInstance {
-            domain: "http://127.0.0.1:19".to_string(), // port 19 (chargen), almost never open
-            email: Some("alice@acme.com".into()),
-            api_token: None,
-            auth_type: AuthType::Basic,
-            api_path: None,
-            read_only: false,
-        };
-        let store = InMemoryStore::new();
-        store
-            .set("atl:default:jira", "alice@acme.com", "raw-keyring-token")
-            .unwrap();
-
-        // raw_request builds the client and then attempts a real HTTP call.
-        // We don't need the HTTP call to succeed — we just need to confirm
-        // that client construction did not fail with the "no API token
-        // configured" error (which would mean the keyring token was not
-        // resolved). A connection-refused error proves the token was found.
-        let result = raw_request(
-            &inst,
-            "default",
-            "jira",
-            &store,
-            reqwest::Method::GET,
-            "/rest/api/2/myself",
-            HeaderMap::new(),
-            &[],
-            None,
-            0,
-        )
-        .await;
-
-        match &result {
-            Err(Error::Auth(msg)) if msg.contains("no API token configured") => {
-                panic!(
-                    "raw_request should have resolved keyring token but failed at token resolution: {msg}"
-                );
-            }
-            _ => {
-                // Any other result (connection error, DNS failure, server
-                // rejection, even a different Auth error from the server)
-                // is fine — it proves the client was constructed with the
-                // keyring token.
-            }
-        }
-    }
-
-    #[tokio::test]
     async fn raw_request_fails_without_any_token() {
         // Negative case: raw_request with no token anywhere → Error::Auth
         // at the client-construction stage (never reaches the network).

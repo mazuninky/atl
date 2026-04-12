@@ -38,7 +38,7 @@ pub async fn run(
         .unwrap_or("default");
     let profile = config
         .as_ref()
-        .and_then(|c| c.resolve_profile(profile_name))
+        .and_then(|c| c.resolve_profile(Some(resolved_profile_name)))
         .ok_or_else(|| anyhow!("no profile found; run `atl init` first"))?;
 
     let kind = match args.service {

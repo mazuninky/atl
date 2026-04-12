@@ -63,7 +63,29 @@ while [ $# -gt 0 ]; do
             shift 2
             ;;
         -h|--help)
-            sed -n '/^#/!q;s/^# \{0,1\}//p' "$0" 2>/dev/null || true
+            cat <<HELPEOF
+Installer for the atl CLI tool.
+https://github.com/mazuninky/atl
+
+Usage:
+  curl -sSfL https://raw.githubusercontent.com/mazuninky/atl/master/scripts/install.sh | sh
+
+Options:
+  --version VERSION    Install a specific version (without the "v" prefix).
+                       Defaults to the latest release.
+  --install-dir DIR    Directory to install the binary into.
+                       Defaults to /usr/local/bin if writable, otherwise ~/.local/bin.
+
+Examples:
+  # Install the latest release
+  curl -sSfL .../install.sh | sh
+
+  # Install a specific version
+  curl -sSfL .../install.sh | sh -s -- --version 2026.15.1
+
+  # Install to a custom directory
+  curl -sSfL .../install.sh | sh -s -- --install-dir ~/bin
+HELPEOF
             exit 0
             ;;
         *)
@@ -171,8 +193,7 @@ verify_checksum() {
     elif command -v shasum > /dev/null 2>&1; then
         actual="$(shasum -a 256 "$archive_path" | cut -d ' ' -f 1)"
     else
-        log "Warning: neither sha256sum nor shasum found; skipping checksum verification."
-        return 0
+        err "neither sha256sum nor shasum found; cannot verify archive integrity"
     fi
 
     if [ "$expected" != "$actual" ]; then

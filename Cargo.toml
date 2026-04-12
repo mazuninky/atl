@@ -1,0 +1,80 @@
+[package]
+name = "atl"
+version = "2026.15.1"
+edition = "2024"
+rust-version = "1.94"
+description = "Unified CLI for Atlassian Confluence and Jira"
+license = "MIT"
+
+[dependencies]
+# CLI
+clap = { version = "4", features = ["derive", "env"] }
+clap_complete = "4"
+clap_mangen = "0.2"
+camino = "1"
+
+# Errors
+thiserror = "2"
+anyhow = "1"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# HTTP
+reqwest = { version = "0.13", features = ["json", "rustls", "multipart", "query"], default-features = false }
+reqwest-middleware = { version = "0.5", features = ["json", "multipart", "query"] }
+reqwest-retry = "0.9"
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+
+# Browser launcher (P7 `atl browse`)
+webbrowser = "1"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "1"
+toon-format = { version = "0.4", default-features = false }
+
+# Auth
+base64 = "0.22"
+keyring = { version = "3", default-features = false, features = ["apple-native", "windows-native", "linux-native-sync-persistent"] }
+inquire = { version = "0.7", default-features = false, features = ["crossterm"] }
+
+# Config
+dirs = "6"
+
+# Timestamps (update notifier)
+chrono = { version = "0.4", default-features = false, features = ["serde", "clock"] }
+
+# Filtering
+glob = "0.3"
+
+# Shell-like word splitting (pager command, aliases in P5)
+shlex = "1"
+
+# Markdown
+comrak = { version = "0.52", default-features = false }
+
+# Output
+comfy-table = "7"
+csv = "1"
+
+# jq / template post-processing (P3)
+jaq-core = "2"
+jaq-std = "2"
+jaq-json = { version = "1", features = ["serde_json"] }
+minijinja = { version = "2", default-features = false, features = ["builtins", "serde"] }
+
+# Self-update
+self_update = { version = "0.44", default-features = false, features = ["reqwest", "rustls", "compression-flate2", "archive-tar", "archive-zip"] }
+
+[dev-dependencies]
+assert_cmd = "2"
+predicates = "3"
+tempfile = "3"
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true

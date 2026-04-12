@@ -1,0 +1,4 @@
+/target
+tests/contract/specs/
+*.patched.json
+.claude/agent-memory/

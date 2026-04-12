@@ -1,0 +1,160 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v[0-9][0-9][0-9][0-9].[0-9][0-9].[0-9]*'
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  verify-version:
+    name: verify-version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.extract.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Validate tag and Cargo.toml version
+        id: extract
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          VERSION="${TAG#v}"
+
+          if ! printf '%s' "$VERSION" | grep -Eq '^[0-9]{4}\.(0[1-9]|[1-4][0-9]|5[0-3])\.[1-9][0-9]*$'; then
+            echo "::error::Tag '$TAG' does not match vYYYY.WW.BUILD format" >&2
+            exit 1
+          fi
+
+          CARGO_VERSION=$(cargo pkgid | awk -F'[#@]' '{print $NF}')
+          if [ "$CARGO_VERSION" != "$VERSION" ]; then
+            echo "::error::Cargo.toml version ($CARGO_VERSION) does not match tag ($VERSION). Run scripts/bump-version.sh before tagging." >&2
+            exit 1
+          fi
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Release version: $VERSION"
+
+  build:
+    name: build (${{ matrix.target }})
+    needs: verify-version
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            bin: atl
+            archive: tar.gz
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            bin: atl
+            archive: tar.gz
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            bin: atl.exe
+            archive: zip
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install stable toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache cargo registry and target (release)
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: release-${{ matrix.target }}
+
+      - name: cargo build --release
+        run: cargo build --release --locked --target ${{ matrix.target }}
+
+      - name: Generate man pages and completions
+        shell: bash
+        run: |
+          set -euo pipefail
+          "target/${{ matrix.target }}/release/${{ matrix.bin }}" generate-docs --output-dir dist/_docs
+
+      - name: Package (tar.gz)
+        if: matrix.archive == 'tar.gz'
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ needs.verify-version.outputs.version }}"
+          NAME="atl-${VERSION}-${{ matrix.target }}"
+          mkdir -p "dist/${NAME}"
+          cp "target/${{ matrix.target }}/release/${{ matrix.bin }}" "dist/${NAME}/"
+          cp LICENSE "dist/${NAME}/"
+          mkdir -p "dist/${NAME}/man" "dist/${NAME}/completions"
+          cp -R dist/_docs/man/. "dist/${NAME}/man/"
+          cp -R dist/_docs/completions/. "dist/${NAME}/completions/"
+          tar -C dist -czf "dist/${NAME}.tar.gz" "${NAME}"
+          (cd dist && shasum -a 256 "${NAME}.tar.gz" > "${NAME}.tar.gz.sha256")
+
+      - name: Package (zip)
+        if: matrix.archive == 'zip'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = '${{ needs.verify-version.outputs.version }}'
+          $name = "atl-$version-${{ matrix.target }}"
+          New-Item -ItemType Directory -Force -Path "dist/$name" | Out-Null
+          Copy-Item "target/${{ matrix.target }}/release/${{ matrix.bin }}" "dist/$name/"
+          Copy-Item "LICENSE" "dist/$name/"
+          New-Item -ItemType Directory -Force -Path "dist/$name/man" | Out-Null
+          New-Item -ItemType Directory -Force -Path "dist/$name/completions" | Out-Null
+          Copy-Item "dist/_docs/man/*" "dist/$name/man/" -Recurse -Force
+          Copy-Item "dist/_docs/completions/*" "dist/$name/completions/" -Recurse -Force
+          Compress-Archive -Path "dist/$name" -DestinationPath "dist/$name.zip" -Force
+          $hash = (Get-FileHash -Algorithm SHA256 "dist/$name.zip").Hash.ToLower()
+          "$hash  $name.zip" | Out-File -FilePath "dist/$name.zip.sha256" -Encoding ascii -NoNewline
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: atl-${{ matrix.target }}
+          path: |
+            dist/atl-${{ needs.verify-version.outputs.version }}-${{ matrix.target }}.${{ matrix.archive }}
+            dist/atl-${{ needs.verify-version.outputs.version }}-${{ matrix.target }}.${{ matrix.archive }}.sha256
+          retention-days: 14
+          if-no-files-found: error
+
+  release:
+    name: release
+    needs: [verify-version, build]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: atl-*
+          merge-multiple: true
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ needs.verify-version.outputs.version }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: |
+            dist/atl-*
+          fail_on_unmatched_files: true

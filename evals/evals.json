@@ -274,6 +274,58 @@
         }
       ],
       "files": []
+    },
+    {
+      "id": 9,
+      "prompt": "Посмотри какие задачи назначены на меня в проекте BACKEND в Jira",
+      "expected_output": "Should use -F toon (not console or json) since the output is for Claude to read, not for scripting. Should use atl j search with assignee=currentUser().",
+      "assertions": [
+        {
+          "name": "uses_toon_format",
+          "type": "contains",
+          "value": "-F toon",
+          "description": "Uses toon format for token-efficient LLM-readable output"
+        },
+        {
+          "name": "uses_jira_search",
+          "type": "regex",
+          "value": "atl.*j(ira)?\\s+search",
+          "description": "Uses jira search command"
+        },
+        {
+          "name": "filters_by_assignee",
+          "type": "regex",
+          "value": "(currentUser|assignee)",
+          "description": "Filters by current user assignee"
+        },
+        {
+          "name": "filters_by_project",
+          "type": "contains",
+          "value": "BACKEND",
+          "description": "Targets the BACKEND project"
+        }
+      ],
+      "files": []
+    },
+    {
+      "id": 10,
+      "prompt": "Мне нужно посмотреть информацию по странице 554433 в Confluence, потом расскажи что там",
+      "expected_output": "Should use -F toon for reading page content since Claude needs to read and summarize it. Not -F json (wasteful on tokens), not console (designed for terminal).",
+      "assertions": [
+        {
+          "name": "uses_toon_format",
+          "type": "contains",
+          "value": "-F toon",
+          "description": "Uses toon format for token-efficient output that Claude will read"
+        },
+        {
+          "name": "uses_confluence_read",
+          "type": "regex",
+          "value": "atl.*(c|conf|confluence)\\s+(read|info)\\s+554433",
+          "description": "Uses confluence read or info with correct page ID"
+        }
+      ],
+      "files": []
     }
   ]
 }

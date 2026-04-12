@@ -366,10 +366,11 @@ fn resolve_token_input(
     // generated from their server's user profile instead.
     match args.auth_type {
         AuthKind::Basic => {
-            writeln!(
-                io.stdout(),
-                "Generate an API token at https://id.atlassian.com/manage-profile/security/api-tokens"
-            )?;
+            let url = "https://id.atlassian.com/manage-profile/security/api-tokens";
+            writeln!(io.stdout(), "Generate an API token at {url}")?;
+            // Best-effort: open the URL in the default browser so the user
+            // doesn't have to copy-paste. Silently ignored on headless systems.
+            let _ = webbrowser::open(url);
         }
         AuthKind::Bearer => {
             writeln!(

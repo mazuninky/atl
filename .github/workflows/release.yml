@@ -75,6 +75,12 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
+      - name: Install Linux system dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libdbus-1-dev pkg-config
+
       - name: Cache cargo registry and target (release)
         uses: Swatinem/rust-cache@v2
         with:

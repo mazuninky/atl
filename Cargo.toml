@@ -39,7 +39,7 @@ toon-format = { version = "0.4", default-features = false }
 # Auth
 base64 = "0.22"
 keyring = { version = "3", default-features = false, features = ["apple-native", "windows-native", "linux-native-sync-persistent"] }
-inquire = { version = "0.7", default-features = false, features = ["crossterm"] }
+inquire = { version = "0.9", default-features = false, features = ["crossterm"] }
 
 # Config
 dirs = "6"

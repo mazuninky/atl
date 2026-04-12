@@ -254,6 +254,15 @@ main() {
             log "You may want to add this line to your shell profile (~/.bashrc, ~/.zshrc, etc.)."
             ;;
     esac
+
+    # Verify the installed binary works.
+    if "${INSTALL_DIR}/${BINARY_NAME}" --version > /dev/null 2>&1; then
+        log ""
+        log "Verified: $("${INSTALL_DIR}/${BINARY_NAME}" --version)"
+    else
+        log ""
+        log "Warning: installed binary failed to run. Check that it is compatible with your system."
+    fi
 }
 
 main

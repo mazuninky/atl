@@ -54,7 +54,7 @@ while [ $# -gt 0 ]; do
     case "$1" in
         --version)
             [ $# -ge 2 ] || err "--version requires a value"
-            VERSION="$2"
+            VERSION="${2#v}"
             shift 2
             ;;
         --install-dir)
@@ -277,12 +277,11 @@ main() {
     esac
 
     # Verify the installed binary works.
-    if "${INSTALL_DIR}/${BINARY_NAME}" --version > /dev/null 2>&1; then
+    if VERSION_OUT="$("${INSTALL_DIR}/${BINARY_NAME}" --version 2>&1)"; then
         log ""
-        log "Verified: $("${INSTALL_DIR}/${BINARY_NAME}" --version)"
+        log "Verified: ${VERSION_OUT}"
     else
-        log ""
-        log "Warning: installed binary failed to run. Check that it is compatible with your system."
+        err "installed binary failed to run: ${VERSION_OUT:-unknown error}"
     fi
 }
 

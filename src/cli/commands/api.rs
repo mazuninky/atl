@@ -1,0 +1,911 @@
+//! `atl api` — generic REST passthrough against Confluence or Jira.
+//!
+//! The user supplies an endpoint and (optionally) a method, headers, query
+//! parameters, and a JSON body (composed from `--field` / `--raw-field`
+//! pairs or read verbatim from `--input`). The response is always printed
+//! as JSON unless the user explicitly asked for a non-console format with
+//! `-F`.
+
+use std::io::Write;
+
+use anyhow::{Context, Result, anyhow, bail};
+use camino::Utf8Path;
+use reqwest::Method;
+use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
+use serde_json::{Map, Value};
+use tracing::debug;
+
+use crate::cli::args::{ApiArgs, ApiService};
+use crate::client::raw_request;
+use crate::config::{AtlassianInstance, ConfigLoader};
+use crate::io::IoStreams;
+use crate::output::{OutputFormat, Transforms, write_output};
+
+/// Entry point for `atl api`.
+pub async fn run(
+    args: &ApiArgs,
+    config_path: Option<&Utf8Path>,
+    profile_name: Option<&str>,
+    retries: u32,
+    format: &OutputFormat,
+    io: &mut IoStreams,
+    transforms: &Transforms<'_>,
+) -> Result<()> {
+    let config = ConfigLoader::load(config_path)?;
+    let profile = config
+        .as_ref()
+        .and_then(|c| c.resolve_profile(profile_name))
+        .ok_or_else(|| anyhow!("no profile found; run `atl init` first"))?;
+
+    let instance = match args.service {
+        ApiService::Confluence => profile
+            .confluence
+            .as_ref()
+            .ok_or_else(|| anyhow!("no Confluence instance configured in profile"))?,
+        ApiService::Jira => profile
+            .jira
+            .as_ref()
+            .ok_or_else(|| anyhow!("no Jira instance configured in profile"))?,
+    };
+
+    let method = parse_method(&args.method)?;
+    let headers = build_headers(&args.headers)?;
+    let query = parse_queries(&args.queries)?;
+    let body = build_body(&args.fields, &args.raw_fields, args.input.as_deref(), io)?;
+    let endpoint = normalize_endpoint(&args.endpoint);
+
+    // Writes to the profile must be blocked when the instance is marked
+    // read-only, even when going through the raw passthrough. Mirror the
+    // behaviour of the typed clients.
+    if instance.read_only && !is_safe_method(&method) {
+        return Err(anyhow::Error::from(crate::error::Error::Config(
+            "profile is read-only; write operations are blocked".into(),
+        )));
+    }
+
+    if args.preview {
+        print_preview(io, instance, &method, &endpoint, &headers, &query, &body)?;
+        return Ok(());
+    }
+
+    let value = if args.paginate {
+        paginate(
+            instance,
+            &method,
+            &endpoint,
+            &headers,
+            &query,
+            body.as_ref(),
+            retries,
+        )
+        .await?
+    } else {
+        raw_request(instance, method, &endpoint, headers, &query, body, retries).await?
+    };
+
+    // `atl api` defaults to JSON output regardless of the global -F setting,
+    // because it is a raw passthrough; the only time we honour the user's
+    // format is when they asked for something other than console.
+    let effective = if matches!(format, OutputFormat::Console) {
+        OutputFormat::Json
+    } else {
+        *format
+    };
+    write_output(value, &effective, io, transforms)?;
+
+    Ok(())
+}
+
+// -------------------------------------------------------------------------
+// Parsing helpers
+// -------------------------------------------------------------------------
+
+/// Detected pagination style for a response body.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PaginationStyle {
+    /// Jira v2 search: `{startAt, maxResults, total, issues: [...]}`.
+    JiraSearch,
+    /// Jira Agile: `{values: [...], startAt, isLast}`.
+    JiraAgile,
+    /// Confluence: `{results: [...], _links: {next: "..."}}`.
+    ConfluenceLinksNext,
+    /// Not a recognised paginated shape.
+    None,
+}
+
+/// Inspects a JSON response and returns the pagination style it matches.
+///
+/// Used by `--paginate` to decide how to walk subsequent pages. Returns
+/// [`PaginationStyle::None`] when the shape is not recognised.
+pub(crate) fn detect_pagination_style(value: &Value) -> PaginationStyle {
+    let Some(obj) = value.as_object() else {
+        return PaginationStyle::None;
+    };
+
+    if obj.get("issues").is_some_and(Value::is_array)
+        && obj.get("startAt").is_some_and(Value::is_number)
+        && obj.get("total").is_some_and(Value::is_number)
+    {
+        return PaginationStyle::JiraSearch;
+    }
+
+    if obj.get("values").is_some_and(Value::is_array)
+        && obj.get("isLast").is_some_and(Value::is_boolean)
+    {
+        return PaginationStyle::JiraAgile;
+    }
+
+    if obj.get("results").is_some_and(Value::is_array)
+        && obj
+            .get("_links")
+            .and_then(Value::as_object)
+            .is_some_and(|l| l.contains_key("next"))
+    {
+        return PaginationStyle::ConfluenceLinksNext;
+    }
+
+    PaginationStyle::None
+}
+
+/// Parses an HTTP method string into a [`reqwest::Method`], upper-casing it
+/// for convenience so callers can write `--method get`.
+pub(crate) fn parse_method(method: &str) -> Result<Method> {
+    let upper = method.to_ascii_uppercase();
+    Method::from_bytes(upper.as_bytes()).with_context(|| format!("invalid HTTP method: {method}"))
+}
+
+/// Returns true when `method` does not modify server state.
+fn is_safe_method(method: &Method) -> bool {
+    matches!(*method, Method::GET | Method::HEAD | Method::OPTIONS)
+}
+
+/// Ensures the endpoint starts with a leading `/`.
+pub(crate) fn normalize_endpoint(endpoint: &str) -> String {
+    if endpoint.starts_with('/') {
+        endpoint.to_string()
+    } else {
+        format!("/{endpoint}")
+    }
+}
+
+fn build_headers(raw: &[String]) -> Result<HeaderMap> {
+    let mut map = HeaderMap::new();
+    for entry in raw {
+        let (key, value) = entry
+            .split_once(':')
+            .ok_or_else(|| anyhow!("header must be in KEY:VALUE form: {entry}"))?;
+        let name = HeaderName::from_bytes(key.trim().as_bytes())
+            .with_context(|| format!("invalid header name: {key}"))?;
+        let value = HeaderValue::from_str(value.trim())
+            .with_context(|| format!("invalid header value for {key}"))?;
+        map.append(name, value);
+    }
+    Ok(map)
+}
+
+fn parse_queries(raw: &[String]) -> Result<Vec<(String, String)>> {
+    let mut out = Vec::with_capacity(raw.len());
+    for entry in raw {
+        let (key, value) = entry
+            .split_once('=')
+            .ok_or_else(|| anyhow!("query param must be in KEY=VALUE form: {entry}"))?;
+        out.push((key.to_string(), value.to_string()));
+    }
+    Ok(out)
+}
+
+/// Builds the request body from `--field` / `--raw-field` / `--input`.
+///
+/// Returns `None` when no body source was provided. When `--input` is set,
+/// the file / stdin contents are parsed as JSON so the resulting value fits
+/// the same `Option<Value>` slot that reqwest's `json(&body)` expects. If the
+/// input is not valid JSON we pass it through as a string — this matches the
+/// behaviour of `gh api --input` which accepts arbitrary bodies.
+fn build_body(
+    fields: &[String],
+    raw_fields: &[String],
+    input: Option<&str>,
+    io: &mut IoStreams,
+) -> Result<Option<Value>> {
+    if let Some(src) = input {
+        let content = read_body_source(src, io)?;
+        // Try JSON first; fall back to a string if that fails.
+        return Ok(Some(
+            serde_json::from_str::<Value>(&content).unwrap_or(Value::String(content)),
+        ));
+    }
+
+    if fields.is_empty() && raw_fields.is_empty() {
+        return Ok(None);
+    }
+
+    let mut object = Map::new();
+    for entry in fields {
+        let (key, value) = parse_field(entry, io)?;
+        object.insert(key, Value::String(value));
+    }
+    for entry in raw_fields {
+        let (key, value) = parse_raw_field(entry)?;
+        object.insert(key, value);
+    }
+    Ok(Some(Value::Object(object)))
+}
+
+/// Parses a `-f key=value` pair into a `(key, value)` tuple.
+///
+/// `value` accepts three forms:
+/// - `@path` — the contents of the file at `path`
+/// - `-`     — the contents of stdin (read via `io`)
+/// - otherwise — a literal string
+pub(crate) fn parse_field(entry: &str, io: &mut IoStreams) -> Result<(String, String)> {
+    let (key, value) = entry
+        .split_once('=')
+        .ok_or_else(|| anyhow!("field must be in KEY=VALUE form: {entry}"))?;
+    let resolved = read_body_source(value, io)?;
+    Ok((key.to_string(), resolved))
+}
+
+/// Parses a `--raw-field key=<json>` pair into a `(key, Value)` tuple.
+///
+/// The value must be valid JSON; an error is returned otherwise.
+pub(crate) fn parse_raw_field(entry: &str) -> Result<(String, Value)> {
+    let (key, value) = entry
+        .split_once('=')
+        .ok_or_else(|| anyhow!("raw-field must be in KEY=VALUE form: {entry}"))?;
+    let parsed: Value = serde_json::from_str(value)
+        .with_context(|| format!("raw-field value for `{key}` is not valid JSON: {value}"))?;
+    Ok((key.to_string(), parsed))
+}
+
+/// Resolves a body source spec: literal, `@file`, or `-` for stdin.
+fn read_body_source(spec: &str, io: &mut IoStreams) -> Result<String> {
+    if spec == "-" {
+        let mut buf = String::new();
+        io.stdin().read_to_string(&mut buf)?;
+        Ok(buf)
+    } else if let Some(path) = spec.strip_prefix('@') {
+        if path.is_empty() {
+            bail!("file path after '@' cannot be empty");
+        }
+        std::fs::read_to_string(path).with_context(|| format!("failed to read {path}"))
+    } else {
+        Ok(spec.to_string())
+    }
+}
+
+// -------------------------------------------------------------------------
+// Pagination
+// -------------------------------------------------------------------------
+
+async fn paginate(
+    instance: &AtlassianInstance,
+    method: &Method,
+    endpoint: &str,
+    headers: &HeaderMap,
+    query: &[(String, String)],
+    body: Option<&Value>,
+    retries: u32,
+) -> Result<Value> {
+    // First page — shape drives the rest of the walk.
+    let first = raw_request(
+        instance,
+        method.clone(),
+        endpoint,
+        headers.clone(),
+        query,
+        body.cloned(),
+        retries,
+    )
+    .await?;
+
+    match detect_pagination_style(&first) {
+        PaginationStyle::JiraSearch => {
+            paginate_jira_search(
+                instance, method, endpoint, headers, query, body, first, retries,
+            )
+            .await
+        }
+        PaginationStyle::JiraAgile => {
+            paginate_jira_agile(
+                instance, method, endpoint, headers, query, body, first, retries,
+            )
+            .await
+        }
+        PaginationStyle::ConfluenceLinksNext => {
+            paginate_confluence_links(instance, method, headers, body, first, retries).await
+        }
+        PaginationStyle::None => Err(anyhow!(
+            "pagination style not detected for this endpoint; use manual pagination"
+        )),
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn paginate_jira_search(
+    instance: &AtlassianInstance,
+    method: &Method,
+    endpoint: &str,
+    headers: &HeaderMap,
+    query: &[(String, String)],
+    body: Option<&Value>,
+    first: Value,
+    retries: u32,
+) -> Result<Value> {
+    let mut merged = first;
+    let mut accumulated: Vec<Value> = merged
+        .get("issues")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+
+    loop {
+        let total = merged
+            .get("total")
+            .and_then(Value::as_u64)
+            .unwrap_or(accumulated.len() as u64);
+        if accumulated.len() as u64 >= total {
+            break;
+        }
+
+        let mut next_query: Vec<(String, String)> = query
+            .iter()
+            .filter(|(k, _)| k != "startAt")
+            .cloned()
+            .collect();
+        next_query.push(("startAt".into(), accumulated.len().to_string()));
+
+        let page = raw_request(
+            instance,
+            method.clone(),
+            endpoint,
+            headers.clone(),
+            &next_query,
+            body.cloned(),
+            retries,
+        )
+        .await?;
+
+        let issues = page
+            .get("issues")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        if issues.is_empty() {
+            break;
+        }
+        accumulated.extend(issues);
+    }
+
+    if let Some(obj) = merged.as_object_mut() {
+        obj.insert("issues".into(), Value::Array(accumulated));
+    }
+    Ok(merged)
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn paginate_jira_agile(
+    instance: &AtlassianInstance,
+    method: &Method,
+    endpoint: &str,
+    headers: &HeaderMap,
+    query: &[(String, String)],
+    body: Option<&Value>,
+    first: Value,
+    retries: u32,
+) -> Result<Value> {
+    let mut merged = first;
+    let mut accumulated: Vec<Value> = merged
+        .get("values")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let mut is_last = merged
+        .get("isLast")
+        .and_then(Value::as_bool)
+        .unwrap_or(true);
+
+    while !is_last {
+        let mut next_query: Vec<(String, String)> = query
+            .iter()
+            .filter(|(k, _)| k != "startAt")
+            .cloned()
+            .collect();
+        next_query.push(("startAt".into(), accumulated.len().to_string()));
+
+        let page = raw_request(
+            instance,
+            method.clone(),
+            endpoint,
+            headers.clone(),
+            &next_query,
+            body.cloned(),
+            retries,
+        )
+        .await?;
+
+        let values = page
+            .get("values")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        is_last = page.get("isLast").and_then(Value::as_bool).unwrap_or(true);
+        if values.is_empty() {
+            break;
+        }
+        accumulated.extend(values);
+    }
+
+    if let Some(obj) = merged.as_object_mut() {
+        obj.insert("values".into(), Value::Array(accumulated));
+        obj.insert("isLast".into(), Value::Bool(true));
+    }
+    Ok(merged)
+}
+
+async fn paginate_confluence_links(
+    instance: &AtlassianInstance,
+    method: &Method,
+    headers: &HeaderMap,
+    body: Option<&Value>,
+    first: Value,
+    retries: u32,
+) -> Result<Value> {
+    let mut merged = first;
+    let mut accumulated: Vec<Value> = merged
+        .get("results")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+
+    loop {
+        let Some(next) = merged
+            .get("_links")
+            .and_then(Value::as_object)
+            .and_then(|l| l.get("next"))
+            .and_then(Value::as_str)
+        else {
+            break;
+        };
+        let (next_endpoint, next_query) = split_next_url(next, &instance.domain);
+        debug!(
+            "Confluence _links.next → endpoint={next_endpoint} query_pairs={}",
+            next_query.len()
+        );
+
+        let page = raw_request(
+            instance,
+            method.clone(),
+            &next_endpoint,
+            headers.clone(),
+            &next_query,
+            body.cloned(),
+            retries,
+        )
+        .await?;
+
+        let results = page
+            .get("results")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default();
+        if results.is_empty() {
+            // Replace merged so the next-link iteration moves forward even
+            // when the last page carries no results.
+            merged = page;
+            break;
+        }
+        accumulated.extend(results);
+        merged = page;
+    }
+
+    if let Some(obj) = merged.as_object_mut() {
+        obj.insert("results".into(), Value::Array(accumulated));
+        // Strip the trailing `_links.next` so downstream consumers don't
+        // mistake the merged blob for a mid-walk page.
+        if let Some(links) = obj.get_mut("_links").and_then(Value::as_object_mut) {
+            links.remove("next");
+        }
+    }
+    Ok(merged)
+}
+
+/// Splits a Confluence `_links.next` URL into an `(endpoint, query)` pair
+/// suitable for another `raw_request` call. The next URL may be absolute or
+/// relative; the `domain` is used only to strip the host portion of an
+/// absolute URL.
+fn split_next_url(next: &str, domain: &str) -> (String, Vec<(String, String)>) {
+    // Strip an absolute prefix if present so we retain just the path+query.
+    let stripped = if next.starts_with("http://") || next.starts_with("https://") {
+        // Strip scheme://host so what remains is /path?query.
+        next.split_once("://")
+            .map(|(_, rest)| rest)
+            .and_then(|rest| rest.split_once('/').map(|(_, tail)| tail))
+            .map(|path| format!("/{path}"))
+            .unwrap_or_else(|| next.to_string())
+    } else {
+        // For something like `example.atlassian.net/wiki/...` or a true path
+        // start like `/wiki/...`, attempt to strip the domain prefix as a
+        // convenience even when the scheme is absent.
+        let d = domain.trim_end_matches('/');
+        let d_bare = d
+            .trim_start_matches("https://")
+            .trim_start_matches("http://");
+        if let Some(rest) = next.strip_prefix(d_bare) {
+            rest.to_string()
+        } else {
+            next.to_string()
+        }
+    };
+
+    let (path, query_part) = match stripped.split_once('?') {
+        Some((p, q)) => (p.to_string(), q.to_string()),
+        None => (stripped, String::new()),
+    };
+    let endpoint = if path.starts_with('/') {
+        path
+    } else {
+        format!("/{path}")
+    };
+    let query: Vec<(String, String)> = if query_part.is_empty() {
+        Vec::new()
+    } else {
+        query_part
+            .split('&')
+            .filter(|p| !p.is_empty())
+            .map(|pair| match pair.split_once('=') {
+                Some((k, v)) => (
+                    urldecode(k).unwrap_or_else(|| k.to_string()),
+                    urldecode(v).unwrap_or_else(|| v.to_string()),
+                ),
+                None => (pair.to_string(), String::new()),
+            })
+            .collect()
+    };
+    (endpoint, query)
+}
+
+/// Tiny percent-decoder so `split_next_url` doesn't need a dependency on
+/// `url` / `percent-encoding`. Only handles UTF-8 and the common case; returns
+/// `None` if decoding runs off the end of a `%` escape.
+fn urldecode(input: &str) -> Option<String> {
+    let bytes = input.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'%' => {
+                if i + 2 >= bytes.len() {
+                    return None;
+                }
+                let hi = hex_nibble(bytes[i + 1])?;
+                let lo = hex_nibble(bytes[i + 2])?;
+                out.push((hi << 4) | lo);
+                i += 3;
+            }
+            b'+' => {
+                out.push(b' ');
+                i += 1;
+            }
+            c => {
+                out.push(c);
+                i += 1;
+            }
+        }
+    }
+    String::from_utf8(out).ok()
+}
+
+fn hex_nibble(b: u8) -> Option<u8> {
+    match b {
+        b'0'..=b'9' => Some(b - b'0'),
+        b'a'..=b'f' => Some(b - b'a' + 10),
+        b'A'..=b'F' => Some(b - b'A' + 10),
+        _ => None,
+    }
+}
+
+// -------------------------------------------------------------------------
+// Preview rendering
+// -------------------------------------------------------------------------
+
+fn print_preview(
+    io: &mut IoStreams,
+    instance: &AtlassianInstance,
+    method: &Method,
+    endpoint: &str,
+    headers: &HeaderMap,
+    query: &[(String, String)],
+    body: &Option<Value>,
+) -> Result<()> {
+    let domain = instance.domain.trim_end_matches('/');
+    let scheme = if domain.starts_with("http://") || domain.starts_with("https://") {
+        ""
+    } else {
+        "https://"
+    };
+    let url = format!("{scheme}{domain}{endpoint}");
+
+    let mut err = io.stderr();
+    writeln!(err, "HTTP Request Preview")?;
+    writeln!(err, "  Method:   {method}")?;
+    writeln!(err, "  URL:      {url}")?;
+
+    // Always show Authorization redacted + Content-Type so the preview is a
+    // faithful approximation of what reqwest will ultimately send.
+    writeln!(err, "  Headers:")?;
+    writeln!(err, "    Accept: application/json")?;
+    let auth_kind = match instance.auth_type {
+        crate::config::AuthType::Basic => "Basic",
+        crate::config::AuthType::Bearer => "Bearer",
+    };
+    writeln!(err, "    Authorization: {auth_kind} <redacted>")?;
+    for (name, value) in headers {
+        let name_str = name.as_str();
+        if name_str.eq_ignore_ascii_case("authorization") {
+            let raw = value.to_str().unwrap_or("");
+            let kind = raw.split_whitespace().next().unwrap_or("");
+            writeln!(err, "    {name_str}: {kind} <redacted>")?;
+        } else {
+            let raw = value.to_str().unwrap_or("<binary>");
+            writeln!(err, "    {name_str}: {raw}")?;
+        }
+    }
+
+    if query.is_empty() {
+        writeln!(err, "  Query:    <none>")?;
+    } else {
+        writeln!(err, "  Query:")?;
+        for (k, v) in query {
+            writeln!(err, "    {k}={v}")?;
+        }
+    }
+
+    match body {
+        None => writeln!(err, "  Body:     <none>")?,
+        Some(v) => {
+            let pretty =
+                serde_json::to_string_pretty(v).unwrap_or_else(|_| "<unserializable>".to_string());
+            writeln!(err, "  Body:")?;
+            for line in pretty.lines() {
+                writeln!(err, "    {line}")?;
+            }
+        }
+    }
+
+    err.flush()?;
+    Ok(())
+}
+
+// -------------------------------------------------------------------------
+// Unit tests
+// -------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn normalize_endpoint_adds_leading_slash() {
+        assert_eq!(
+            normalize_endpoint("rest/api/2/myself"),
+            "/rest/api/2/myself"
+        );
+    }
+
+    #[test]
+    fn normalize_endpoint_preserves_leading_slash() {
+        assert_eq!(
+            normalize_endpoint("/wiki/rest/api/content/1"),
+            "/wiki/rest/api/content/1"
+        );
+    }
+
+    #[test]
+    fn detect_pagination_jira_search_shape() {
+        let v = json!({
+            "startAt": 0,
+            "maxResults": 50,
+            "total": 100,
+            "issues": [],
+        });
+        assert_eq!(detect_pagination_style(&v), PaginationStyle::JiraSearch);
+    }
+
+    #[test]
+    fn detect_pagination_jira_agile_shape() {
+        let v = json!({
+            "values": [{"id": 1}],
+            "startAt": 0,
+            "isLast": false,
+        });
+        assert_eq!(detect_pagination_style(&v), PaginationStyle::JiraAgile);
+    }
+
+    #[test]
+    fn detect_pagination_confluence_links_next() {
+        let v = json!({
+            "results": [{"id": 1}],
+            "_links": { "next": "/wiki/api/v2/pages?cursor=abc" },
+        });
+        assert_eq!(
+            detect_pagination_style(&v),
+            PaginationStyle::ConfluenceLinksNext
+        );
+    }
+
+    #[test]
+    fn detect_pagination_none_on_scalar() {
+        assert_eq!(detect_pagination_style(&json!(42)), PaginationStyle::None);
+    }
+
+    #[test]
+    fn detect_pagination_none_on_bare_array() {
+        assert_eq!(detect_pagination_style(&json!([])), PaginationStyle::None);
+    }
+
+    #[test]
+    fn detect_pagination_none_on_unrelated_object() {
+        let v = json!({"emailAddress": "me@example.com"});
+        assert_eq!(detect_pagination_style(&v), PaginationStyle::None);
+    }
+
+    #[test]
+    fn parse_field_literal_string() {
+        let mut io = IoStreams::test();
+        let (k, v) = parse_field("name=widget", &mut io).unwrap();
+        assert_eq!(k, "name");
+        assert_eq!(v, "widget");
+    }
+
+    #[test]
+    fn parse_field_from_file() {
+        let mut io = IoStreams::test();
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("payload.txt");
+        std::fs::write(&path, "contents-from-file").unwrap();
+        let spec = format!("body=@{}", path.display());
+        let (k, v) = parse_field(&spec, &mut io).unwrap();
+        assert_eq!(k, "body");
+        assert_eq!(v, "contents-from-file");
+    }
+
+    #[test]
+    fn parse_field_missing_separator_errors() {
+        let mut io = IoStreams::test();
+        let err = parse_field("no-equals-sign", &mut io).unwrap_err();
+        assert!(err.to_string().contains("KEY=VALUE"), "got: {err}");
+    }
+
+    #[test]
+    fn parse_raw_field_number() {
+        let (k, v) = parse_raw_field("count=42").unwrap();
+        assert_eq!(k, "count");
+        assert_eq!(v, json!(42));
+    }
+
+    #[test]
+    fn parse_raw_field_array() {
+        let (k, v) = parse_raw_field("tags=[1,2,3]").unwrap();
+        assert_eq!(k, "tags");
+        assert_eq!(v, json!([1, 2, 3]));
+    }
+
+    #[test]
+    fn parse_raw_field_nested_object() {
+        let (k, v) = parse_raw_field(r#"fields={"project":{"key":"TEST"}}"#).unwrap();
+        assert_eq!(k, "fields");
+        assert_eq!(v, json!({"project": {"key": "TEST"}}));
+    }
+
+    #[test]
+    fn parse_raw_field_invalid_json_errors() {
+        let err = parse_raw_field("count=not-json").unwrap_err();
+        assert!(err.to_string().contains("not valid JSON"), "got: {err}");
+    }
+
+    #[test]
+    fn parse_method_case_insensitive() {
+        assert_eq!(parse_method("get").unwrap(), Method::GET);
+        assert_eq!(parse_method("Post").unwrap(), Method::POST);
+        assert_eq!(parse_method("DELETE").unwrap(), Method::DELETE);
+    }
+
+    #[test]
+    fn parse_method_rejects_invalid() {
+        assert!(parse_method("not a method").is_err());
+    }
+
+    #[test]
+    fn build_headers_parses_colon_form() {
+        let h = build_headers(&["X-Test:hello".to_string(), "X-Foo: bar".to_string()]).unwrap();
+        assert_eq!(h.get("X-Test").unwrap(), "hello");
+        assert_eq!(h.get("X-Foo").unwrap(), "bar");
+    }
+
+    #[test]
+    fn build_headers_rejects_missing_colon() {
+        assert!(build_headers(&["no-colon".to_string()]).is_err());
+    }
+
+    #[test]
+    fn parse_queries_ok() {
+        let q =
+            parse_queries(&["jql=project=TEST".to_string(), "fields=*all".to_string()]).unwrap();
+        // The first `=` is the separator; the remainder is the literal value.
+        assert_eq!(q[0], ("jql".to_string(), "project=TEST".to_string()));
+        assert_eq!(q[1], ("fields".to_string(), "*all".to_string()));
+    }
+
+    #[test]
+    fn parse_queries_rejects_missing_equals() {
+        assert!(parse_queries(&["no-equals".to_string()]).is_err());
+    }
+
+    #[test]
+    fn build_body_none_without_fields() {
+        let mut io = IoStreams::test();
+        assert!(build_body(&[], &[], None, &mut io).unwrap().is_none());
+    }
+
+    #[test]
+    fn build_body_merges_fields_and_raw_fields_last_wins() {
+        let mut io = IoStreams::test();
+        let fields = vec!["a=one".to_string(), "b=two".to_string()];
+        let raw = vec!["b=99".to_string(), "c=[1,2]".to_string()];
+        let body = build_body(&fields, &raw, None, &mut io).unwrap().unwrap();
+        assert_eq!(body["a"], json!("one"));
+        // Raw field for `b` overrides the string field of the same name.
+        assert_eq!(body["b"], json!(99));
+        assert_eq!(body["c"], json!([1, 2]));
+    }
+
+    #[test]
+    fn split_next_url_absolute() {
+        let (endpoint, query) = split_next_url(
+            "https://example.atlassian.net/wiki/api/v2/pages?cursor=abc&limit=25",
+            "example.atlassian.net",
+        );
+        assert_eq!(endpoint, "/wiki/api/v2/pages");
+        assert_eq!(
+            query,
+            vec![
+                ("cursor".to_string(), "abc".to_string()),
+                ("limit".to_string(), "25".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn split_next_url_relative_path() {
+        let (endpoint, query) = split_next_url(
+            "/wiki/rest/api/content/search?cql=type%3Dpage&start=25",
+            "example.atlassian.net",
+        );
+        assert_eq!(endpoint, "/wiki/rest/api/content/search");
+        assert_eq!(
+            query,
+            vec![
+                ("cql".to_string(), "type=page".to_string()),
+                ("start".to_string(), "25".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn split_next_url_no_query() {
+        let (endpoint, query) = split_next_url("/rest/api/2/search", "example.atlassian.net");
+        assert_eq!(endpoint, "/rest/api/2/search");
+        assert!(query.is_empty());
+    }
+
+    #[test]
+    fn is_safe_method_classification() {
+        assert!(is_safe_method(&Method::GET));
+        assert!(is_safe_method(&Method::HEAD));
+        assert!(is_safe_method(&Method::OPTIONS));
+        assert!(!is_safe_method(&Method::POST));
+        assert!(!is_safe_method(&Method::PUT));
+        assert!(!is_safe_method(&Method::DELETE));
+    }
+}

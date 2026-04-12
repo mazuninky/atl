@@ -18,14 +18,17 @@ Unified command-line interface for Atlassian **Confluence** and **Jira**. Writte
 
 ### From GitHub Releases (recommended)
 
-Prebuilt binaries for Linux (x86_64), macOS (arm64), and Windows (x86_64) are attached to every release:
-
 ```sh
-# Latest release for your platform
-https://github.com/mazuninky/atl/releases/latest
+curl -sSfL https://raw.githubusercontent.com/mazuninky/atl/master/scripts/install.sh | sh
 ```
 
-Download, extract, and move `atl` into your `PATH`. Each archive contains a matching `*.sha256` for verification.
+To install a specific version:
+
+```sh
+curl -sSfL https://raw.githubusercontent.com/mazuninky/atl/master/scripts/install.sh | sh -s -- --version 2026.15.1
+```
+
+Prebuilt binaries are available for Linux (x86_64), macOS (arm64), and Windows (x86_64). The script installs to `/usr/local/bin` by default; use `--install-dir DIR` to override. On Windows, download from the [releases page](https://github.com/mazuninky/atl/releases/latest) manually.
 
 ### From source
 

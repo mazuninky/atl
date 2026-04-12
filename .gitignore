@@ -2,3 +2,4 @@
 tests/contract/specs/
 *.patched.json
 .claude/agent-memory/
+.claude/settings.local.json

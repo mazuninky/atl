@@ -47,7 +47,7 @@
         {
           "name": "maps_jira_token_to_atl_api_token",
           "type": "regex",
-          "value": "ATL_API_TOKEN\\s*=\\s*\\$\\{?JIRA_TOKEN\\}?",
+          "value": "ATL_API_TOKEN\\s*=\\s*['\"]?\\$\\{?JIRA_TOKEN\\}?['\"]?",
           "description": "Maps provided JIRA_TOKEN into ATL_API_TOKEN for atl"
         },
         {

@@ -68,7 +68,10 @@ fn dispatch(cli: &Cli, io: &mut IoStreams) -> Result<()> {
     };
 
     match &cli.command {
-        Command::Init => commands::init::run_init(&cli.format, io, &transforms),
+        Command::Init => {
+            let prompter = atl::auth::InquirePrompter;
+            commands::init::run_init(io, &prompter)
+        }
         Command::Config(cmd) => commands::config::run(
             &cmd.command,
             cli.config.as_deref(),

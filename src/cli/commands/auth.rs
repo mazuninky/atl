@@ -157,16 +157,21 @@ async fn login(
     prompter: &dyn Prompter,
     retries: u32,
 ) -> Result<()> {
-    let mut config = ConfigLoader::load(config_path)?.unwrap_or_default();
+    let mut config = ConfigLoader::load(config_path)?
+        .ok_or_else(|| anyhow!("no config found; run `atl init` first"))?;
     if config.default_profile.is_empty() {
         config.default_profile = "default".to_string();
     }
 
     let profile_name = resolve_profile_name(args.profile.as_deref(), cli_profile, &config);
 
-    // Interactive inputs common to every selected service.
-    let domain = resolve_domain(args, io, prompter)?;
-    let email = resolve_email(args, io, prompter)?;
+    // Look up any existing profile so resolve_domain / resolve_email can
+    // pre-fill from the config when no CLI flag was given.
+    let existing_profile = config.profiles.get(&profile_name);
+
+    // Domain and email are read from config silently — no prompts.
+    let domain = resolve_domain(args, existing_profile)?;
+    let email = resolve_email(args, existing_profile)?;
 
     // Token resolution: with-token reads stdin, otherwise prompter.password.
     let token = resolve_token_input(args, io, prompter)?;
@@ -280,34 +285,44 @@ async fn login(
     Ok(())
 }
 
-/// Reads `--domain`, prompting if absent.
-fn resolve_domain(
-    args: &AuthLoginArgs,
-    io: &mut IoStreams,
-    prompter: &dyn Prompter,
-) -> Result<String> {
+/// Extracts the domain from a config profile, checking jira first then confluence.
+fn domain_from_profile(profile: Option<&Profile>) -> Option<&str> {
+    let p = profile?;
+    p.jira
+        .as_ref()
+        .map(|i| i.domain.as_str())
+        .or_else(|| p.confluence.as_ref().map(|i| i.domain.as_str()))
+        .filter(|d| !d.is_empty())
+}
+
+/// Extracts the email from a config profile, checking jira first then confluence.
+fn email_from_profile(profile: Option<&Profile>) -> Option<&str> {
+    let p = profile?;
+    p.jira
+        .as_ref()
+        .and_then(|i| i.email.as_deref())
+        .or_else(|| p.confluence.as_ref().and_then(|i| i.email.as_deref()))
+        .filter(|e| !e.is_empty())
+}
+
+/// Reads `--domain`, falling back to the config profile silently.
+/// Never prompts — requires that `atl init` has configured the domain.
+fn resolve_domain(args: &AuthLoginArgs, profile: Option<&Profile>) -> Result<String> {
     if let Some(d) = args.domain.as_deref() {
         if d.trim().is_empty() {
             bail!("--domain cannot be empty");
         }
         return Ok(d.to_string());
     }
-    if !io.is_stdin_tty() || !io.is_stdout_tty() {
-        bail!("interactive login requires a TTY; pass --domain or run in an interactive shell");
+    if let Some(d) = domain_from_profile(profile) {
+        return Ok(d.to_string());
     }
-    let d = prompter.text("Atlassian domain (e.g. acme.atlassian.net):", None)?;
-    if d.trim().is_empty() {
-        bail!("domain cannot be empty");
-    }
-    Ok(d)
+    bail!("domain not configured in profile; run `atl init` to set it up")
 }
 
-/// Reads `--email`, prompting when absent and auth mode is Basic.
-fn resolve_email(
-    args: &AuthLoginArgs,
-    io: &mut IoStreams,
-    prompter: &dyn Prompter,
-) -> Result<Option<String>> {
+/// Reads `--email`, falling back to the config profile silently.
+/// Never prompts — requires that `atl init` has configured the email.
+fn resolve_email(args: &AuthLoginArgs, profile: Option<&Profile>) -> Result<Option<String>> {
     if let Some(e) = args.email.as_deref() {
         if e.trim().is_empty() {
             bail!("--email cannot be empty");
@@ -319,14 +334,10 @@ fn resolve_email(
     if matches!(args.auth_type, AuthKind::Bearer) {
         return Ok(None);
     }
-    if !io.is_stdin_tty() || !io.is_stdout_tty() {
-        bail!("interactive login requires a TTY; pass --email or run in an interactive shell");
+    if let Some(e) = email_from_profile(profile) {
+        return Ok(Some(e.to_string()));
     }
-    let e = prompter.text("Email:", None)?;
-    if e.trim().is_empty() {
-        bail!("email cannot be empty");
-    }
-    Ok(Some(e))
+    bail!("email not configured in profile; run `atl init` to set it up")
 }
 
 /// Reads the token: either from stdin (`--with-token`) or from the

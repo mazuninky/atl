@@ -137,21 +137,9 @@ impl AtlassianInstance {
     }
 }
 
-pub fn default_config() -> &'static str {
-    include_str!("default_config.toml")
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn default_config_parses() {
-        let content = default_config();
-        let config: Config = toml::from_str(content).unwrap();
-        assert_eq!(config.default_profile, "default");
-        assert!(config.profiles.contains_key("default"));
-    }
 
     #[test]
     fn resolve_profile_default() {

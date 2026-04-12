@@ -12,17 +12,14 @@
 //! 3. Templates are rendered from the current value as the root context, so
 //!    `{{ foo.bar }}` works without any wrapping.
 //!
-//! jq is provided by the jaq 2.x family:
-//! - `jaq-core = "2"` — compiler + runtime.
-//! - `jaq-std = "2"` — .jq standard library (definitions like `map`).
-//! - `jaq-json = "1"` — value type + native filters (`length`, `keys`, …).
-//!
-//! jaq 3.x exists but was not yet compatible with the 2.x core API surface
-//! used elsewhere; we pinned to 2.x so that core, std and json line up.
+//! jq is provided by the jaq 3.x family:
+//! - `jaq-core = "3"` — compiler + runtime.
+//! - `jaq-std = "3"` — .jq standard library (definitions like `map`).
+//! - `jaq-json = "2"` — value type + native filters (`length`, `keys`, …).
 
 use anyhow::{Context, Result};
 use jaq_core::load::{Arena, File, Loader};
-use jaq_core::{Compiler, Ctx, Native, RcIter};
+use jaq_core::{Compiler, Ctx, Vars, data, unwrap_valr};
 use jaq_json::Val;
 use minijinja::{Environment, Value as MjValue};
 use serde_json::Value;
@@ -110,10 +107,13 @@ pub fn apply(value: Value, t: &Transforms<'_>) -> Result<Transformed> {
 /// - 1 value → that value
 /// - N values → `Value::Array`
 fn run_jq(expr: &str, input: Value) -> Result<Value> {
-    // Parse + load the expression. The loader's static library is jaq-std's
-    // .jq definitions — `map`, `join`, `flatten`, …
+    // Parse + load the expression. The loader's static library includes defs
+    // from all three crates — `map`, `join`, `flatten`, …
     let arena = Arena::default();
-    let loader = Loader::new(jaq_std::defs());
+    let defs = jaq_core::defs()
+        .chain(jaq_std::defs())
+        .chain(jaq_json::defs());
+    let loader = Loader::new(defs);
     let modules = loader
         .load(
             &arena,
@@ -124,24 +124,29 @@ fn run_jq(expr: &str, input: Value) -> Result<Value> {
         )
         .map_err(|e| anyhow::anyhow!("jq parse error: {}", format_load_errors(&e)))?;
 
-    // Compile with the native filter tables from jaq-std (math, regex,
-    // time, …) **and** jaq-json (length, keys, type, …). Both must be
-    // present or simple filters like `length` fail to resolve.
-    let filter = Compiler::<_, Native<Val>>::default()
-        .with_funs(jaq_std::funs().chain(jaq_json::funs()))
+    // Compile with the native filter tables from all three crates (core,
+    // jaq-std for math/regex/time, jaq-json for length/keys/type/…). All
+    // must be present or simple filters like `length` fail to resolve.
+    let funs = jaq_core::funs()
+        .chain(jaq_std::funs())
+        .chain(jaq_json::funs());
+    let filter = Compiler::default()
+        .with_funs(funs)
         .compile(modules)
         .map_err(|e| anyhow::anyhow!("jq compile error: {e:?}"))?;
 
-    // The runtime needs an `Inputs` stream; we never feed extra inputs, so
-    // we hand it an empty iterator.
-    let inputs = RcIter::new(core::iter::empty());
-    let ctx = Ctx::new([], &inputs);
-    let val: Val = input.into();
+    // Build the runtime context. jaq 3.x uses Vars instead of RcIter for
+    // variable bindings, and the context is parameterised over the LUT type.
+    let ctx = Ctx::<data::JustLut<Val>>::new(&filter.lut, Vars::new([]));
+    let val: Val =
+        serde_json::from_value(input).context("jq runtime error: failed to convert input")?;
 
     let mut results: Vec<Value> = Vec::new();
-    for item in filter.run((ctx, val)) {
+    for item in filter.id.run((ctx, val)).map(unwrap_valr) {
         let v = item.map_err(|e| anyhow::anyhow!("jq runtime error: {e}"))?;
-        results.push(Value::from(v));
+        let json_val: Value = serde_json::from_str(&v.to_string())
+            .context("jq runtime error: failed to convert output")?;
+        results.push(json_val);
     }
 
     Ok(match results.len() {

@@ -61,9 +61,9 @@ comfy-table = "7"
 csv = "1"
 
 # jq / template post-processing (P3)
-jaq-core = "2"
-jaq-std = "2"
-jaq-json = { version = "1", features = ["serde_json"] }
+jaq-core = "3"
+jaq-std = "3"
+jaq-json = { version = "2", features = ["serde"] }
 minijinja = { version = "2", default-features = false, features = ["builtins", "serde"] }
 
 # Self-update

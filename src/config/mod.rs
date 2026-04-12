@@ -66,26 +66,6 @@ impl Config {
 }
 
 impl AtlassianInstance {
-    /// Legacy token accessor preserved for back-compat with callers that do
-    /// not yet carry a profile name.
-    ///
-    /// Resolution order: `ATL_API_TOKEN` env → `api_token` TOML field →
-    /// `None`. This method does **not** consult the OS keyring — call
-    /// [`AtlassianInstance::resolved_token`] for the full resolution chain.
-    ///
-    /// Command handlers should call [`crate::auth::resolve_instance`] on a
-    /// fresh clone of this instance before handing it to
-    /// [`crate::client::build_http_client`], so the keyring fallback is
-    /// included.
-    pub fn effective_api_token(&self) -> Option<String> {
-        if let Ok(env_token) = std::env::var("ATL_API_TOKEN")
-            && !env_token.trim().is_empty()
-        {
-            return Some(env_token);
-        }
-        self.api_token.clone()
-    }
-
     /// Resolves the API token using the full `env → TOML → keyring` chain.
     ///
     /// # Parameters
@@ -105,8 +85,7 @@ impl AtlassianInstance {
         kind: &str,
         store: &dyn crate::auth::SecretStore,
     ) -> Option<String> {
-        // 1. Env var always wins — matches existing `effective_api_token`
-        //    behaviour and keeps CI workflows stable.
+        // 1. Env var always wins — keeps CI workflows stable.
         if let Ok(env_token) = std::env::var("ATL_API_TOKEN")
             && !env_token.trim().is_empty()
         {
@@ -164,36 +143,6 @@ mod tests {
         };
         assert!(config.resolve_profile(Some("staging")).is_some());
         assert!(config.resolve_profile(Some("missing")).is_none());
-    }
-
-    #[test]
-    fn effective_api_token_from_config() {
-        let inst = AtlassianInstance {
-            domain: "example.com".into(),
-            email: Some("me@example.com".into()),
-            api_token: Some("cfg-token".into()),
-            auth_type: AuthType::default(),
-            api_path: None,
-            read_only: false,
-        };
-        assert_eq!(inst.effective_api_token().as_deref(), Some("cfg-token"));
-    }
-
-    #[test]
-    fn effective_api_token_none_without_env() {
-        // Clear the env var to ensure fallback behavior
-        unsafe {
-            std::env::remove_var("ATL_API_TOKEN");
-        }
-        let inst = AtlassianInstance {
-            domain: "example.com".into(),
-            email: Some("me@example.com".into()),
-            api_token: None,
-            auth_type: AuthType::default(),
-            api_path: None,
-            read_only: false,
-        };
-        assert!(inst.effective_api_token().is_none());
     }
 
     // -------------------------------------------------------------------

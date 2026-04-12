@@ -121,10 +121,12 @@ fn env_flag_enabled(name: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_util::env_lock;
 
     #[test]
     fn env_flag_enabled_variants() {
-        // SAFETY: env mutation in a single-threaded unit test.
+        let _g = env_lock();
+        // SAFETY: env mutation serialized via env_lock().
         unsafe {
             std::env::remove_var("ATL_TEST_FLAG");
             assert!(!env_flag_enabled("ATL_TEST_FLAG"));

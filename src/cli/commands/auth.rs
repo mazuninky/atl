@@ -110,9 +110,16 @@ fn set_instance_on_profile(profile: &mut Profile, kind: &str, instance: Atlassia
 
 /// Issues the minimal "who am I" request used to verify a freshly-entered
 /// token. Returns `Ok(())` on 2xx, `Err` with an explanatory message on 4xx.
+///
+/// The instance passed here already has `api_token` set inline (the caller
+/// clones the instance and injects the token before calling), so the
+/// `build_http_client` inside `raw_request` will find it in the TOML field
+/// step of the resolution chain. We still need to provide a store for the
+/// signature — an `InMemoryStore` would suffice but the real store is harmless.
 async fn verify_instance(
     kind: &str,
     instance: &AtlassianInstance,
+    store: &dyn SecretStore,
     retries: u32,
 ) -> Result<serde_json::Value> {
     let endpoint = match kind {
@@ -121,8 +128,13 @@ async fn verify_instance(
         other => bail!("unknown service kind: {other}"),
     };
     debug!("verifying {kind} token against {endpoint}");
+    // Profile name is irrelevant here — the token is already inlined on
+    // the instance, so keyring lookup won't be reached.
     let value = raw_request(
         instance,
+        "_verify",
+        kind,
+        store,
         reqwest::Method::GET,
         endpoint,
         HeaderMap::new(),
@@ -217,7 +229,7 @@ async fn login(
         if !args.skip_verify {
             let mut verify_instance_cloned = instance.clone();
             verify_instance_cloned.api_token = Some(token.clone());
-            let result = verify_instance(kind, &verify_instance_cloned, retries).await;
+            let result = verify_instance(kind, &verify_instance_cloned, store, retries).await;
             match result {
                 Ok(value) => {
                     let label = extract_account_label(&value)
@@ -366,10 +378,11 @@ fn resolve_token_input(
     // generated from their server's user profile instead.
     match args.auth_type {
         AuthKind::Basic => {
-            writeln!(
-                io.stdout(),
-                "Generate an API token at https://id.atlassian.com/manage-profile/security/api-tokens"
-            )?;
+            let url = "https://id.atlassian.com/manage-profile/security/api-tokens";
+            writeln!(io.stdout(), "Generate an API token at {url}")?;
+            // Best-effort: open the URL in the default browser so the user
+            // doesn't have to copy-paste. Silently ignored on headless systems.
+            let _ = webbrowser::open(url);
         }
         AuthKind::Bearer => {
             writeln!(
@@ -574,7 +587,7 @@ async fn report_service_status(
 
     let mut verify_inst = instance.clone();
     verify_inst.api_token = Some(token);
-    match verify_instance(kind, &verify_inst, retries).await {
+    match verify_instance(kind, &verify_inst, store, retries).await {
         Ok(_) => {
             writeln!(
                 io.stdout(),

@@ -80,7 +80,7 @@ fn build_jql(args: &JiraSearchArgs) -> anyhow::Result<String> {
     let mut clauses = Vec::new();
 
     if let Some(jql) = &args.jql {
-        clauses.push(jql.clone());
+        clauses.push(format!("({jql})"));
     }
     if let Some(v) = &args.status {
         clauses.push(format!("status = \"{}\"", escape_jql(v)));
@@ -516,4 +516,68 @@ async fn dispatch(
     stop_res?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Helper to build a `JiraSearchArgs` with all fields defaulted.
+    fn default_search_args() -> JiraSearchArgs {
+        JiraSearchArgs {
+            jql: None,
+            limit: 50,
+            all: false,
+            fields: "key,summary".to_string(),
+            status: None,
+            priority: None,
+            assignee: None,
+            reporter: None,
+            r#type: None,
+            label: None,
+            component: None,
+            resolution: None,
+            created: None,
+            created_after: None,
+            updated: None,
+            updated_after: None,
+            watching: false,
+            order_by: None,
+            reverse: false,
+        }
+    }
+
+    #[test]
+    fn build_jql_raw_only() {
+        let mut args = default_search_args();
+        args.jql = Some("project = FOO".to_string());
+        let result = build_jql(&args).unwrap();
+        assert_eq!(result, "(project = FOO)");
+    }
+
+    #[test]
+    fn build_jql_raw_parenthesized_with_filter() {
+        let mut args = default_search_args();
+        args.jql = Some("status = Done OR assignee = me".to_string());
+        args.status = Some("Open".to_string());
+        let result = build_jql(&args).unwrap();
+        assert_eq!(
+            result,
+            "(status = Done OR assignee = me) AND status = \"Open\""
+        );
+    }
+
+    #[test]
+    fn build_jql_status_only() {
+        let mut args = default_search_args();
+        args.status = Some("In Progress".to_string());
+        let result = build_jql(&args).unwrap();
+        assert_eq!(result, "status = \"In Progress\"");
+    }
+
+    #[test]
+    fn build_jql_empty_returns_error() {
+        let args = default_search_args();
+        assert!(build_jql(&args).is_err());
+    }
 }

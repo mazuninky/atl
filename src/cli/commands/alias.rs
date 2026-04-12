@@ -46,7 +46,14 @@ pub(crate) const BUILTINS: &[&str] = &[
 ///
 /// The short-form alternatives (`-p`, `-F`) are handled separately by
 /// [`find_subcommand_index`] but listed here so both forms stay in sync.
-const VALUE_FLAGS_LONG: &[&str] = &["--config", "--profile", "--format", "--jq", "--template"];
+const VALUE_FLAGS_LONG: &[&str] = &[
+    "--config",
+    "--profile",
+    "--format",
+    "--jq",
+    "--template",
+    "--retries",
+];
 const VALUE_FLAGS_SHORT: &[&str] = &["-p", "-F"];
 
 /// Expand user-defined aliases in `argv` using the current config.
@@ -403,6 +410,14 @@ mod tests {
                 "me",
             ])),
             Some(5)
+        );
+    }
+
+    #[test]
+    fn find_sub_after_retries_flag() {
+        assert_eq!(
+            find_subcommand_index(&argv(&["atl", "--retries", "5", "jira"])),
+            Some(3)
         );
     }
 

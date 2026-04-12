@@ -277,6 +277,12 @@ impl ConfluenceClient {
         self.get_v2(&path, &params).await
     }
 
+    /// Fetch all attachments for a page using cursor-based pagination.
+    pub async fn get_attachments_all(&self, page_id: &str, page_size: u32) -> Result<Value, Error> {
+        let path = format!("/pages/{page_id}/attachments");
+        self.paginate_v2(&path, &[], page_size).await
+    }
+
     pub async fn get_comments(&self, page_id: &str, limit: u32) -> Result<Value, Error> {
         self.get_v2(
             &format!("/pages/{page_id}/footer-comments"),

@@ -35,9 +35,7 @@ pub(super) async fn export_page(
     std::fs::write(page_file.as_std_path(), body_content)?;
     info!("Wrote page content to {page_file}");
 
-    let attachments = client
-        .get_attachments(&args.page_id, 200, None, None)
-        .await?;
+    let attachments = client.get_attachments_all(&args.page_id, 200).await?;
     let mut count = 0u32;
     if let Some(results) = attachments.get("results").and_then(Value::as_array)
         && !results.is_empty()
@@ -209,6 +207,12 @@ pub(super) fn maybe_convert_markdown(body: String, input_format: &InputFormat) -
     }
 }
 
+/// Windows reserved device names that cannot be used as filenames.
+const WINDOWS_RESERVED: &[&str] = &[
+    "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8",
+    "COM9", "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+];
+
 fn sanitize_filename(name: &str) -> String {
     // Use only the filename component (strip any path separators)
     let base = name.rsplit(['/', '\\']).next().unwrap_or(name);
@@ -219,11 +223,31 @@ fn sanitize_filename(name: &str) -> String {
             _ => c,
         })
         .collect();
+
     // Prevent names like "." or ".." that could escape the directory
     if sanitized.is_empty() || sanitized == "." || sanitized == ".." {
         return "_".to_string();
     }
-    sanitized
+
+    // Strip trailing dots and spaces (Windows cannot create such files)
+    let sanitized = sanitized.trim_end_matches(['.', ' ']);
+    if sanitized.is_empty() {
+        return "_".to_string();
+    }
+
+    // Check if the stem (name without extension) is a Windows reserved name
+    let stem = match sanitized.find('.') {
+        Some(pos) => &sanitized[..pos],
+        None => sanitized,
+    };
+    if WINDOWS_RESERVED
+        .iter()
+        .any(|r| r.eq_ignore_ascii_case(stem))
+    {
+        return format!("_{sanitized}");
+    }
+
+    sanitized.to_string()
 }
 
 pub(super) fn render_tree(
@@ -255,4 +279,54 @@ pub(super) fn render_tree(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sanitize_normal_name() {
+        assert_eq!(sanitize_filename("hello.txt"), "hello.txt");
+    }
+
+    #[test]
+    fn sanitize_replaces_illegal_chars() {
+        assert_eq!(sanitize_filename("a<b>c:d"), "a_b_c_d");
+    }
+
+    #[test]
+    fn sanitize_empty_and_dots() {
+        assert_eq!(sanitize_filename(""), "_");
+        assert_eq!(sanitize_filename("."), "_");
+        assert_eq!(sanitize_filename(".."), "_");
+    }
+
+    #[test]
+    fn sanitize_strips_trailing_dots_and_spaces() {
+        assert_eq!(sanitize_filename("file. ."), "file");
+        assert_eq!(sanitize_filename("test..."), "test");
+        assert_eq!(sanitize_filename("doc   "), "doc");
+    }
+
+    #[test]
+    fn sanitize_windows_reserved_names() {
+        assert_eq!(sanitize_filename("CON"), "_CON");
+        assert_eq!(sanitize_filename("con"), "_con");
+        assert_eq!(sanitize_filename("NUL.txt"), "_NUL.txt");
+        assert_eq!(sanitize_filename("COM1"), "_COM1");
+        assert_eq!(sanitize_filename("lpt3.log"), "_lpt3.log");
+    }
+
+    #[test]
+    fn sanitize_non_reserved_with_reserved_substring() {
+        // "CONNECT" starts with "CON" but the stem is "CONNECT", not "CON"
+        assert_eq!(sanitize_filename("CONNECT.txt"), "CONNECT.txt");
+    }
+
+    #[test]
+    fn sanitize_path_separator_stripping() {
+        assert_eq!(sanitize_filename("foo/bar.txt"), "bar.txt");
+        assert_eq!(sanitize_filename("foo\\bar.txt"), "bar.txt");
+    }
 }

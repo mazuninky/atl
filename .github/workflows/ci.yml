@@ -34,7 +34,8 @@ jobs:
       - name: Cache cargo registry and target
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: lint
+          shared-key: debug-ubuntu
+          save-if: ${{ github.ref == 'refs/heads/master' }}
 
       - name: cargo fmt --check
         run: cargo fmt --all -- --check
@@ -69,7 +70,8 @@ jobs:
       - name: Cache cargo registry and target
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: test-${{ matrix.os }}
+          shared-key: ${{ runner.os == 'Linux' && 'debug-ubuntu' || format('test-{0}', matrix.os) }}
+          save-if: ${{ github.ref == 'refs/heads/master' }}
 
       - name: cargo test
         run: cargo test --all-targets --locked
@@ -94,6 +96,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           shared-key: msrv
+          save-if: ${{ github.ref == 'refs/heads/master' }}
 
       - name: cargo check
         run: cargo check --all-targets --locked
@@ -121,6 +124,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           shared-key: release-${{ matrix.os }}
+          save-if: ${{ github.ref == 'refs/heads/master' }}
 
       - name: cargo build --release
         run: cargo build --release --locked

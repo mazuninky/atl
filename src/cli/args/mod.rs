@@ -24,10 +24,15 @@ use crate::output::OutputFormat;
 #[command(name = "atl")]
 #[command(author, version, about, long_about = None)]
 // Subcommands define their own `--version` argument (content version in
-// Confluence update endpoints), so we suppress the auto-generated
-// `--version` flag globally to avoid clap debug-assertion collisions.
+// Confluence update endpoints), so we suppress the auto-generated global
+// `--version` and re-add it as a non-global flag on `Cli` only.
 #[command(disable_version_flag = true)]
+#[allow(clippy::manual_non_exhaustive)]
 pub struct Cli {
+    /// Print version
+    #[arg(long, action = clap::ArgAction::Version)]
+    version: (),
+
     /// Increase logging verbosity (-v, -vv, -vvv)
     #[arg(short, long, action = clap::ArgAction::Count, global = true)]
     pub verbose: u8,

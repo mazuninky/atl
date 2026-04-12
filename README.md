@@ -139,6 +139,18 @@ atl api --service jira -X POST rest/api/2/issue \
     --raw-field 'fields={"project":{"key":"TEST"}}'
 ```
 
+## Claude Code skill
+
+An `atl` skill for [Claude Code](https://claude.ai/code) is available, giving Claude deep knowledge of all `atl` commands, flags, output formats, and common workflows.
+
+Install from [skills.sh](https://skills.sh):
+
+```sh
+claude skill install mazuninky/atl
+```
+
+The skill covers Confluence and Jira commands, `atl api` passthrough, output pipelines (`-F json`, `--jq`, `--template`), CI/scripting patterns, aliases, authentication, and common pitfalls.
+
 ## Shell completions
 
 ```sh

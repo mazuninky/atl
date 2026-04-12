@@ -23,6 +23,10 @@ cargo clippy --all-targets -- -D warnings
 
 Pre-commit hooks live in `lefthook.yml` (fmt-check, clippy, test). The deny rules in `.claude/settings.json` block bypassing them — never use `--no-verify` / `-n`. Hooks can take ~10s; that's normal.
 
+## PR and merge policy
+
+**NEVER merge PRs without explicit user approval.** When branch protection blocks a merge, that is a signal to stop and let the user review — do NOT bypass it with `--admin`. Always create the PR, report the URL, and wait for the user to review and confirm before merging. This applies even if the user says "подлей" or "merge" — show them the PR first.
+
 `cargo test` runs both unit tests (in `src/`) and integration test binaries under `tests/`. The Atlassian contract tests (`tests/contract_*.rs`) are `#[ignore]` by default — they only run when a Prism mock server is up.
 
 ## Architecture (the parts that aren't obvious from `ls`)

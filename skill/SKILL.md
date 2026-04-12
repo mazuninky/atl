@@ -295,14 +295,15 @@ atl api --service jira -H "X-Custom:value" rest/api/2/myself
 
 All commands support the same output pipeline: `-F <format>`, `--jq`, `--template`. Always use the short form `-F` (not `--format`) — it's the idiomatic style.
 
-**Prefer `-F toon`** as the default human-readable format — it produces compact, structured output that is easier to scan than `console` tables. Use `console` only when tabular layout is specifically needed.
+**Prefer `-F toon`** when running `atl` commands yourself (i.e. when the output goes into your context). TOON (Token-Oriented Object Notation) is a compact structured format that uses significantly fewer tokens than JSON while preserving all data — this saves context window space. Use `-F json` only when the user's script needs machine-parseable output or when using `--jq`.
 
 ```bash
-# Toon output (preferred for human-readable display)
+# Toon output (preferred when you read the output — saves tokens)
 atl -F toon j view PROJ-123
 atl -F toon c info 123456
+atl -F toon j search "project = PROJ" --limit 5
 
-# JSON output (for machine parsing and scripting)
+# JSON output (for scripting, --jq, and machine parsing)
 atl -F json j search "project = PROJ" --limit 5
 
 # Extract specific fields with jq

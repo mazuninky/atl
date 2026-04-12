@@ -16,7 +16,7 @@ env:
 
 jobs:
   lint:
-    name: lint (fmt + clippy)
+    name: lint (fmt + clippy + docs)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -27,7 +27,6 @@ jobs:
           components: rustfmt, clippy
 
       - name: Install Linux system dependencies
-        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends libdbus-1-dev pkg-config
@@ -43,13 +42,18 @@ jobs:
       - name: cargo clippy
         run: cargo clippy --all-targets --locked -- -D warnings
 
+      - name: Check docs/reference/ is up to date
+        run: |
+          scripts/gen-docs.sh
+          git diff --exit-code docs/reference/
+
   test:
     name: test (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: ${{ github.event_name == 'push' && fromJSON('["ubuntu-latest","macos-latest","windows-latest"]') || fromJSON('["ubuntu-latest"]') }}
     steps:
       - uses: actions/checkout@v6
 
@@ -82,7 +86,6 @@ jobs:
           toolchain: "1.94"
 
       - name: Install Linux system dependencies
-        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends libdbus-1-dev pkg-config
@@ -97,12 +100,11 @@ jobs:
 
   build-release-smoke:
     name: build-release-smoke (${{ matrix.os }})
-    needs: [lint, test]
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: ${{ github.event_name == 'push' && fromJSON('["ubuntu-latest","macos-latest","windows-latest"]') || fromJSON('["ubuntu-latest"]') }}
     steps:
       - uses: actions/checkout@v6
 
@@ -123,35 +125,9 @@ jobs:
       - name: cargo build --release
         run: cargo build --release --locked
 
-  docs-up-to-date:
-    name: docs-up-to-date
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Install stable toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install Linux system dependencies
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libdbus-1-dev pkg-config
-
-      - name: Cache cargo registry and target
-        uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: docs
-
-      - name: Regenerate docs reference
-        run: scripts/gen-docs.sh
-
-      - name: Assert docs/reference/ is clean
-        run: git diff --exit-code docs/reference/
-
   ci-success:
     name: ci-success
-    needs: [lint, test, msrv, build-release-smoke, docs-up-to-date]
+    needs: [lint, test, msrv, build-release-smoke]
     runs-on: ubuntu-latest
     if: always()
     steps:

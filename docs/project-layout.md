@@ -30,7 +30,6 @@ If you just want to build and test, see [`.github/CONTRIBUTING.md`](../.github/C
 │   ├── releasing.md            # operator checklist for cutting a release
 │   ├── command-line-syntax.md  # CLI notation conventions
 │   ├── project-layout.md       # this file
-│   └── CONTRACT_TESTS_PLAN.md  # plan for Prism-backed E2E contract tests
 ├── src/
 │   ├── main.rs                 # 3 jobs: parse args, init logging, dispatch
 │   ├── lib.rs                  # library root, module re-exports
@@ -170,7 +169,7 @@ Concrete walkthrough for adding, say, `atl jira filter list`:
 
 5. **Test it.**
    - Unit-test any new pure helpers alongside the code.
-   - If the command touches the wire protocol, add a contract test under `tests/` per [`docs/CONTRACT_TESTS_PLAN.md`](CONTRACT_TESTS_PLAN.md).
+   - If the command touches the wire protocol, add a contract test under `tests/`.
    - Smoke-test locally against a real instance or the Prism mock.
 
 6. **Run the full local check** before opening a PR:

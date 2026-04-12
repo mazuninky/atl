@@ -23,7 +23,7 @@ cargo clippy --all-targets -- -D warnings
 
 Pre-commit hooks live in `lefthook.yml` (fmt-check, clippy, test). The deny rules in `.claude/settings.json` block bypassing them — never use `--no-verify` / `-n`. Hooks can take ~10s; that's normal.
 
-`cargo test` runs both unit tests (in `src/`) and integration test binaries under `tests/`. The Atlassian contract tests (`tests/contract_*.rs`) are `#[ignore]` by default — they only run when a Prism mock server is up. See [`docs/CONTRACT_TESTS_PLAN.md`](docs/CONTRACT_TESTS_PLAN.md).
+`cargo test` runs both unit tests (in `src/`) and integration test binaries under `tests/`. The Atlassian contract tests (`tests/contract_*.rs`) are `#[ignore]` by default — they only run when a Prism mock server is up.
 
 ## Architecture (the parts that aren't obvious from `ls`)
 

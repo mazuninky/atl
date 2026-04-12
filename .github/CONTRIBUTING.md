@@ -39,7 +39,7 @@ If you installed lefthook, every commit automatically runs `cargo fmt --check`, 
 
 ### Integration and contract tests
 
-End-to-end contract tests live under `tests/` and use [Prism](https://github.com/stoplightio/prism) to mock Atlassian APIs against the official OpenAPI specs. See [`docs/CONTRACT_TESTS_PLAN.md`](../docs/CONTRACT_TESTS_PLAN.md) for the approach. If you change a command that touches the wire protocol, add or update a contract test for it.
+End-to-end contract tests live under `tests/` and use [Prism](https://github.com/stoplightio/prism) to mock Atlassian APIs against the official OpenAPI specs. If you change a command that touches the wire protocol, add or update a contract test for it.
 
 ## Project layout
 

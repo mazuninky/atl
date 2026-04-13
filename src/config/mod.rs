@@ -18,6 +18,14 @@ pub struct Config {
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TokenStorage {
+    #[default]
+    Keyring,
+    Config,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Profile {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -28,6 +36,8 @@ pub struct Profile {
     pub default_project: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub default_space: Option<String>,
+    #[serde(default)]
+    pub token_storage: TokenStorage,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

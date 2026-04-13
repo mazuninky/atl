@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::io::Write;
 
 use crate::auth::Prompter;
-use crate::config::{AtlassianInstance, AuthType, Config, ConfigLoader, Profile};
+use crate::config::{AtlassianInstance, AuthType, Config, ConfigLoader, Profile, TokenStorage};
 use crate::io::IoStreams;
 
 /// Runs the `atl init` command.
@@ -51,16 +51,10 @@ pub fn run_init(io: &mut IoStreams, prompter: &dyn Prompter) -> anyhow::Result<(
         ],
     )?;
 
-    let api_token = if token_storage == 1 {
-        let token = prompter.password(
-            "API token (from https://id.atlassian.com/manage-profile/security/api-tokens):",
-        )?;
-        if token.trim().is_empty() {
-            anyhow::bail!("API token cannot be empty");
-        }
-        Some(token.trim().to_string())
+    let token_storage_value = if token_storage == 1 {
+        TokenStorage::Config
     } else {
-        None
+        TokenStorage::Keyring
     };
 
     // 4. Same domain for Confluence and Jira?
@@ -82,7 +76,7 @@ pub fn run_init(io: &mut IoStreams, prompter: &dyn Prompter) -> anyhow::Result<(
     let jira_instance = AtlassianInstance {
         domain: domain.clone(),
         email: Some(email.clone()),
-        api_token: api_token.clone(),
+        api_token: None,
         auth_type: AuthType::Basic,
         api_path: None,
         read_only: false,
@@ -90,7 +84,7 @@ pub fn run_init(io: &mut IoStreams, prompter: &dyn Prompter) -> anyhow::Result<(
     let confluence_instance = AtlassianInstance {
         domain: confluence_domain,
         email: Some(email),
-        api_token,
+        api_token: None,
         auth_type: AuthType::Basic,
         api_path: None,
         read_only: false,
@@ -100,6 +94,7 @@ pub fn run_init(io: &mut IoStreams, prompter: &dyn Prompter) -> anyhow::Result<(
         jira: Some(jira_instance),
         default_project: None,
         default_space: None,
+        token_storage: token_storage_value,
     };
     let mut profiles = HashMap::new();
     profiles.insert("default".to_string(), profile);
@@ -112,17 +107,7 @@ pub fn run_init(io: &mut IoStreams, prompter: &dyn Prompter) -> anyhow::Result<(
     let written_path = ConfigLoader::save(&config, Some(path.as_ref()))?;
 
     writeln!(io.stdout(), "Config written to {written_path}")?;
-    if token_storage == 1 {
-        writeln!(
-            io.stdout(),
-            "API token stored in config file. You're ready to go!"
-        )?;
-    } else {
-        writeln!(
-            io.stdout(),
-            "Run `atl auth login` to store your API token securely in the OS keyring."
-        )?;
-    }
+    writeln!(io.stdout(), "Run `atl auth login` to store your API token.")?;
 
     Ok(())
 }
@@ -233,7 +218,7 @@ mod tests {
     }
 
     #[test]
-    fn interactive_wizard_stores_token_in_config_file() {
+    fn interactive_wizard_config_storage_sets_token_storage() {
         let dir = tempfile::TempDir::new().unwrap();
         let config_path = dir.path().join("atl").join("atl.toml");
         let utf8_path = camino::Utf8PathBuf::try_from(config_path).unwrap();
@@ -242,7 +227,6 @@ mod tests {
             MockResponse::Text("acme.atlassian.net".into()),
             MockResponse::Text("alice@acme.com".into()),
             MockResponse::Select(1), // token storage: config file
-            MockResponse::Password("my-secret-token".into()), // API token
             MockResponse::Select(0), // same domain
         ]);
 
@@ -253,26 +237,11 @@ mod tests {
             .unwrap()
             .unwrap();
         let profile = reloaded.profiles.get("default").unwrap();
-        let jira = profile.jira.as_ref().unwrap();
-        assert_eq!(jira.api_token.as_deref(), Some("my-secret-token"));
-        let confluence = profile.confluence.as_ref().unwrap();
-        assert_eq!(confluence.api_token.as_deref(), Some("my-secret-token"));
+        assert!(matches!(profile.token_storage, TokenStorage::Config));
+        // No token should be set — auth login handles that.
+        assert!(profile.jira.as_ref().unwrap().api_token.is_none());
+        assert!(profile.confluence.as_ref().unwrap().api_token.is_none());
         assert_eq!(prompter.remaining(), 0);
-    }
-
-    #[test]
-    fn interactive_wizard_rejects_empty_token() {
-        let prompter = MockPrompter::new(vec![
-            MockResponse::Text("acme.atlassian.net".into()),
-            MockResponse::Text("alice@acme.com".into()),
-            MockResponse::Select(1),             // token storage: config file
-            MockResponse::Password("  ".into()), // empty token
-        ]);
-
-        let result = build_config_from_prompts(&prompter);
-        assert!(result.is_err());
-        let msg = format!("{}", result.unwrap_err());
-        assert!(msg.contains("cannot be empty"), "got: {msg}");
     }
 
     #[test]
@@ -395,16 +364,10 @@ mod tests {
                 "Config file (simpler, no keychain prompts)",
             ],
         )?;
-        let api_token = if token_storage == 1 {
-            let token = prompter.password(
-                "API token (from https://id.atlassian.com/manage-profile/security/api-tokens):",
-            )?;
-            if token.trim().is_empty() {
-                anyhow::bail!("API token cannot be empty");
-            }
-            Some(token.trim().to_string())
+        let token_storage_value = if token_storage == 1 {
+            TokenStorage::Config
         } else {
-            None
+            TokenStorage::Keyring
         };
 
         let same_domain = prompter.select(
@@ -423,7 +386,7 @@ mod tests {
         let jira_instance = AtlassianInstance {
             domain: domain.clone(),
             email: Some(email.clone()),
-            api_token: api_token.clone(),
+            api_token: None,
             auth_type: AuthType::Basic,
             api_path: None,
             read_only: false,
@@ -431,7 +394,7 @@ mod tests {
         let confluence_instance = AtlassianInstance {
             domain: confluence_domain,
             email: Some(email),
-            api_token,
+            api_token: None,
             auth_type: AuthType::Basic,
             api_path: None,
             read_only: false,
@@ -441,6 +404,7 @@ mod tests {
             jira: Some(jira_instance),
             default_project: None,
             default_space: None,
+            token_storage: token_storage_value,
         };
         let mut profiles = HashMap::new();
         profiles.insert("default".to_string(), profile);

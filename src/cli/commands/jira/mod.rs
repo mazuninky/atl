@@ -255,6 +255,116 @@ fn flatten_issues(value: Value) -> Value {
     Value::Array(flat)
 }
 
+/// Flattens a single Jira issue for human-readable console display.
+///
+/// Extracts key fields from the nested `fields` object and produces a flat
+/// key-value object that the console reporter renders as a readable list
+/// instead of a giant JSON blob.
+fn flatten_issue(value: Value) -> Value {
+    let fields = value.get("fields").unwrap_or(&Value::Null);
+    let key = value.get("key").and_then(Value::as_str).unwrap_or_default();
+
+    let summary = fields
+        .get("summary")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let status = fields
+        .get("status")
+        .and_then(|s| s.get("name"))
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let priority = fields
+        .get("priority")
+        .and_then(|p| p.get("name"))
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let issue_type = fields
+        .get("issuetype")
+        .and_then(|t| t.get("name"))
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let project = fields
+        .get("project")
+        .and_then(|p| p.get("key"))
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let assignee = fields
+        .get("assignee")
+        .and_then(|a| a.get("displayName"))
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let reporter = fields
+        .get("reporter")
+        .and_then(|r| r.get("displayName"))
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let created = fields
+        .get("created")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let updated = fields
+        .get("updated")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let description = fields
+        .get("description")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let resolution = fields
+        .get("resolution")
+        .and_then(|r| r.get("name"))
+        .and_then(Value::as_str)
+        .unwrap_or("");
+
+    let labels = fields
+        .get("labels")
+        .and_then(Value::as_array)
+        .map(|arr| {
+            arr.iter()
+                .filter_map(Value::as_str)
+                .collect::<Vec<_>>()
+                .join(", ")
+        })
+        .unwrap_or_default();
+
+    let components = fields
+        .get("components")
+        .and_then(Value::as_array)
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|c| c.get("name").and_then(Value::as_str))
+                .collect::<Vec<_>>()
+                .join(", ")
+        })
+        .unwrap_or_default();
+
+    let mut map = serde_json::Map::new();
+    map.insert("key".into(), Value::String(key.into()));
+    map.insert("summary".into(), Value::String(summary.into()));
+    map.insert("type".into(), Value::String(issue_type.into()));
+    map.insert("status".into(), Value::String(status.into()));
+    map.insert("priority".into(), Value::String(priority.into()));
+    map.insert("assignee".into(), Value::String(assignee.into()));
+    map.insert("reporter".into(), Value::String(reporter.into()));
+    map.insert("project".into(), Value::String(project.into()));
+    if !labels.is_empty() {
+        map.insert("labels".into(), Value::String(labels));
+    }
+    if !components.is_empty() {
+        map.insert("components".into(), Value::String(components));
+    }
+    if !resolution.is_empty() {
+        map.insert("resolution".into(), Value::String(resolution.into()));
+    }
+    map.insert("created".into(), Value::String(created.into()));
+    map.insert("updated".into(), Value::String(updated.into()));
+    if !description.is_empty() {
+        map.insert("description".into(), Value::String(description.into()));
+    }
+
+    Value::Object(map)
+}
+
 async fn dispatch(
     cmd: &JiraSubcommand,
     client: &JiraClient,
@@ -281,7 +391,14 @@ async fn dispatch(
                 value
             }
         }
-        JiraSubcommand::View(args) => client.get_issue(&args.key, &[]).await?,
+        JiraSubcommand::View(args) => {
+            let value = client.get_issue(&args.key, &[]).await?;
+            if matches!(format, OutputFormat::Console) {
+                flatten_issue(value)
+            } else {
+                value
+            }
+        }
         JiraSubcommand::Create(args) => {
             let mut fields = json!({
                 "project": { "key": &args.project },

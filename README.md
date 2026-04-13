@@ -41,6 +41,12 @@ cd atl
 cargo install --path .
 ```
 
+On macOS, ad-hoc sign the binary so it can access the login keychain without password prompts:
+
+```sh
+codesign -s - -f ~/.cargo/bin/atl
+```
+
 ### Self-update
 
 Once installed, `atl` can update itself from GitHub Releases:

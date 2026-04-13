@@ -24,6 +24,7 @@ impl ConfigLoader {
                 debug!("Loading config from {p}");
                 let content = std::fs::read_to_string(p.as_std_path())?;
                 let config: Config = toml::from_str(&content)?;
+
                 Ok(Some(config))
             }
             None => {
@@ -122,7 +123,7 @@ impl ConfigLoader {
 }
 
 /// Writes the config file with owner-only permissions on Unix (`0o600`) so
-/// any legacy `api_token` field cannot be read by other users on the host.
+/// any `api_token` field cannot be read by other users on the host.
 /// On non-Unix platforms falls back to `std::fs::write`, which uses the
 /// default OS-assigned permissions.
 fn write_config_file(path: &std::path::Path, content: &[u8]) -> std::io::Result<()> {

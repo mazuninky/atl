@@ -1,0 +1,150 @@
+{
+  "skill_name": "atl",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "найди все открытые баги назначенные на меня в проекте BACKEND и покажи ключ, название и приоритет",
+      "expected_output": "Uses `atl -F toon j search \"project = BACKEND\" --status Open --type Bug --assignee currentUser() --fields 'key,summary,priority'` or equivalent. Project must go in JQL (no --project flag exists). Uses -F toon since Claude reads the output. Filter flags for status/type/assignee.",
+      "assertions": [
+        { "text": "Uses -F toon (not -F json) since output is for Claude's context", "type": "output" },
+        { "text": "Project is in JQL string, not a --project flag (which doesn't exist)", "type": "output" },
+        { "text": "Uses filter flags (--status, --type, --assignee) for non-project filters", "type": "output" },
+        { "text": "Specifies --fields to limit returned data", "type": "output" },
+        { "text": "Uses currentUser() for --assignee, not a hardcoded account ID", "type": "output" }
+      ],
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "создай страницу в Confluence в пространстве TEAM с заголовком 'Sprint 42 Retro Notes', контент возьми из файла ~/docs/retro.md, положи её под родительскую страницу 98765",
+      "expected_output": "Uses `atl c create --space TEAM --title 'Sprint 42 Retro Notes' --body @~/docs/retro.md --input-format markdown --parent 98765`. Must use --input-format markdown (not --body-format). Must use @file syntax for body.",
+      "assertions": [
+        { "text": "Uses --input-format markdown (not --body-format)", "type": "output" },
+        { "text": "Uses @~/docs/retro.md syntax to read body from file", "type": "output" },
+        { "text": "Includes --parent 98765", "type": "output" },
+        { "text": "Uses --space TEAM (not --space-id)", "type": "output" }
+      ],
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "переведи задачу ORB-456 в статус Done",
+      "expected_output": "First runs `atl j transitions ORB-456` to get available transition IDs, then uses `atl j move ORB-456 --transition <ID>`. Must NOT use status name 'Done' directly — must look up the numeric transition ID first.",
+      "assertions": [
+        { "text": "Runs atl j transitions ORB-456 first to get IDs", "type": "output" },
+        { "text": "Uses numeric transition ID in atl j move (not status name 'Done')", "type": "output" },
+        { "text": "Uses -F toon for the transitions lookup", "type": "output" }
+      ],
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "мне нужно обновить содержимое страницы 54321 в Confluence — замени body на файл updated-design.md, заголовок оставь прежним",
+      "expected_output": "First runs `atl -F toon c info 54321` to get current title and version number, then runs `atl c update 54321 --title '<current title>' --body @updated-design.md --version <N+1> --input-format markdown`. Must get version first, pass all three required flags.",
+      "assertions": [
+        { "text": "Runs atl c info first to get current version and title", "type": "output" },
+        { "text": "Uses info (not read) — lighter, no body fetched", "type": "output" },
+        { "text": "Passes all three required flags: --title, --body, --version", "type": "output" },
+        { "text": "Increments version by 1 from info result", "type": "output" },
+        { "text": "Uses --input-format markdown", "type": "output" }
+      ],
+      "files": []
+    },
+    {
+      "id": 5,
+      "prompt": "покажи задачи в текущем активном спринте на доске 42, хочу видеть ключ, статус и assignee",
+      "expected_output": "First runs `atl -F toon j sprint list 42 --state active` to find the active sprint ID, then runs `atl -F toon j sprint issues <SPRINT_ID> --fields 'key,status,assignee'`. Board ID is positional (not --board-id flag).",
+      "assertions": [
+        { "text": "Uses sprint list with board_id as positional arg (not --board-id)", "type": "output" },
+        { "text": "Uses --state active to filter for active sprint", "type": "output" },
+        { "text": "Follows up with sprint issues using the sprint ID from step 1", "type": "output" },
+        { "text": "Specifies --fields to limit returned data", "type": "output" }
+      ],
+      "files": []
+    },
+    {
+      "id": 6,
+      "prompt": "напиши bash-скрипт который берёт все задачи в статусе 'To Do' из проекта PLATFORM и добавляет к каждой комментарий 'Reviewed in weekly sync'",
+      "expected_output": "Script uses -F json (not toon, because it's for scripting), --jq to extract keys, --all for complete results, and loops through keys calling atl j comment. Sets ATL_API_TOKEN or assumes it's set.",
+      "assertions": [
+        { "text": "Uses -F json (not toon) since output is parsed by script", "type": "output" },
+        { "text": "Uses --jq '.issues[].key' to extract issue keys", "type": "output" },
+        { "text": "Uses --all to get complete results", "type": "output" },
+        { "text": "Loops through keys and calls atl j comment for each", "type": "output" }
+      ],
+      "files": []
+    },
+    {
+      "id": 7,
+      "prompt": "загрузи файл diagram.png как вложение к странице 11111 в Confluence и покажи список всех вложений после загрузки",
+      "expected_output": "Runs `atl c attachment upload 11111 --file ./diagram.png` then `atl -F toon c attachment list 11111`.",
+      "assertions": [
+        { "text": "Uses atl c attachment upload with page_id as positional arg", "type": "output" },
+        { "text": "Uses --file flag for the file path", "type": "output" },
+        { "text": "Follows up with attachment list to verify", "type": "output" }
+      ],
+      "files": []
+    },
+    {
+      "id": 8,
+      "prompt": "какие задачи были обновлены за последнюю неделю в проекте INFRA? отсортируй по дате обновления, сначала свежие",
+      "expected_output": "Uses `atl -F toon j search \"project = INFRA\" --updated-after 2026-04-06 --order-by updated --reverse` (date is today minus 7 days). Project goes in JQL, date/order use filter flags.",
+      "assertions": [
+        { "text": "Project is in JQL string, not a --project flag", "type": "output" },
+        { "text": "Uses --updated-after with a date approximately 7 days ago", "type": "output" },
+        { "text": "Uses --order-by updated", "type": "output" },
+        { "text": "Uses --reverse for descending order", "type": "output" }
+      ],
+      "files": []
+    },
+    {
+      "id": 9,
+      "prompt": "нужно получить список всех кастомных полей в Jira и вывести в CSV формате",
+      "expected_output": "Uses `atl -F csv j field list --custom`.",
+      "assertions": [
+        { "text": "Uses -F csv for CSV output", "type": "output" },
+        { "text": "Uses --custom flag to filter for custom fields only", "type": "output" },
+        { "text": "Does NOT use -F json with jq conversion — CSV is native", "type": "output" }
+      ],
+      "files": []
+    },
+    {
+      "id": 10,
+      "prompt": "создай задачу типа Bug в проекте CORE с высоким приоритетом, назначь на меня. Заголовок: 'Login page returns 500 on empty password'. В описании напиши шаги воспроизведения. Добавь лейблы auth и critical",
+      "expected_output": "Uses atl j create with all appropriate flags. Must use --assignee with a way to get current user's account ID (either atl j me first, or note that --assignee doesn't accept currentUser()). Must use --labels 'auth,critical' as comma-separated.",
+      "assertions": [
+        { "text": "Uses --project CORE", "type": "output" },
+        { "text": "Uses --issue-type Bug", "type": "output" },
+        { "text": "Uses --priority High", "type": "output" },
+        { "text": "Uses --labels with comma-separated values", "type": "output" },
+        { "text": "Either gets account ID via atl j me or explains the limitation", "type": "output" },
+        { "text": "Uses --description with reproduction steps", "type": "output" }
+      ],
+      "files": []
+    },
+    {
+      "id": 11,
+      "prompt": "нужно через atl api сделать POST запрос на endpoint rest/api/2/issue чтобы создать задачу с кастомным JSON payload из файла payload.json",
+      "expected_output": "Uses `atl api --service jira -X POST rest/api/2/issue --input @payload.json`. Must use --input (not --field/--raw-field) for file-based body.",
+      "assertions": [
+        { "text": "Uses atl api --service jira", "type": "output" },
+        { "text": "Uses -X POST for the HTTP method", "type": "output" },
+        { "text": "Uses --input @payload.json (not --field or --raw-field)", "type": "output" },
+        { "text": "Does NOT try to use atl j create for this (user explicitly asked for atl api)", "type": "output" }
+      ],
+      "files": []
+    },
+    {
+      "id": 12,
+      "prompt": "найди страницу с названием 'API Design Guidelines' в пространстве ENGINEERING, прочитай её содержимое и скажи мне основные разделы",
+      "expected_output": "First uses `atl -F toon c find --title 'API Design Guidelines' --space ENGINEERING` to get page ID, then `atl -F toon c read <PAGE_ID>` to read content. Uses -F toon for both since Claude reads the output.",
+      "assertions": [
+        { "text": "Uses atl c find to locate the page by title first", "type": "output" },
+        { "text": "Uses --space ENGINEERING to narrow the search", "type": "output" },
+        { "text": "Then reads the page using the ID from find results", "type": "output" },
+        { "text": "Uses -F toon for both commands", "type": "output" }
+      ],
+      "files": []
+    }
+  ]
+}

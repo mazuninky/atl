@@ -17,7 +17,7 @@ Unified, non-interactive CLI for Atlassian **Confluence** and **Jira**. Works wi
 
 ## Composing a command
 
-```
+```text
 atl [global-flags] <service> <action> [subaction] [args]
 ```
 

@@ -1,6 +1,6 @@
 [package]
 name = "atl"
-version = "2026.15.4"
+version = "2026.16.1"
 edition = "2024"
 rust-version = "1.94"
 description = "Unified CLI for Atlassian Confluence and Jira"

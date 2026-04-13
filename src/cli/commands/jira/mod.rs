@@ -79,9 +79,17 @@ fn escape_jql(value: &str) -> String {
 
 fn build_jql(args: &JiraSearchArgs) -> anyhow::Result<String> {
     let mut clauses = Vec::new();
+    let mut raw_order_by: Option<String> = None;
 
     if let Some(jql) = &args.jql {
-        clauses.push(format!("({jql})"));
+        // Split off ORDER BY clause so it doesn't get wrapped in parentheses.
+        if let Some(pos) = jql.to_ascii_uppercase().find(" ORDER BY ") {
+            let (filter_part, order_part) = jql.split_at(pos);
+            clauses.push(format!("({filter_part})"));
+            raw_order_by = Some(order_part.to_string());
+        } else {
+            clauses.push(format!("({jql})"));
+        }
     }
     if let Some(v) = &args.status {
         clauses.push(format!("status = \"{}\"", escape_jql(v)));
@@ -137,9 +145,12 @@ fn build_jql(args: &JiraSearchArgs) -> anyhow::Result<String> {
 
     let mut jql = clauses.join(" AND ");
 
+    // --order-by flag takes precedence over ORDER BY in raw JQL
     if let Some(field) = &args.order_by {
         let dir = if args.reverse { "DESC" } else { "ASC" };
         jql.push_str(&format!(" ORDER BY {field} {dir}"));
+    } else if let Some(order) = &raw_order_by {
+        jql.push_str(order);
     }
 
     Ok(jql)
@@ -191,6 +202,169 @@ fn cmd_uses_pager(cmd: &JiraSubcommand) -> bool {
     matches!(cmd, JiraSubcommand::View(_) | JiraSubcommand::Search(_))
 }
 
+/// Flattens Jira issue objects for human-readable console table display.
+///
+/// Extracts key fields from the nested `fields` object and drops metadata
+/// like `expand`, `id`, and `self` that clutter the table.
+fn flatten_issues(value: Value) -> Value {
+    let Value::Array(issues) = value else {
+        return value;
+    };
+    let flat: Vec<Value> = issues
+        .into_iter()
+        .map(|issue| {
+            let key = issue.get("key").and_then(Value::as_str).unwrap_or_default();
+            let fields = issue.get("fields").unwrap_or(&Value::Null);
+            let summary = fields
+                .get("summary")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            let status = fields
+                .get("status")
+                .and_then(|s| s.get("name"))
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            let priority = fields
+                .get("priority")
+                .and_then(|p| p.get("name"))
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            let assignee = fields
+                .get("assignee")
+                .and_then(|a| a.get("displayName"))
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            let issue_type = fields
+                .get("issuetype")
+                .and_then(|t| t.get("name"))
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+
+            let mut map = serde_json::Map::new();
+            map.insert("key".into(), Value::String(key.into()));
+            map.insert("summary".into(), Value::String(summary.into()));
+            map.insert("status".into(), Value::String(status.into()));
+            map.insert("priority".into(), Value::String(priority.into()));
+            map.insert("assignee".into(), Value::String(assignee.into()));
+            if !issue_type.is_empty() {
+                map.insert("type".into(), Value::String(issue_type.into()));
+            }
+            Value::Object(map)
+        })
+        .collect();
+    Value::Array(flat)
+}
+
+/// Flattens a single Jira issue for human-readable console display.
+///
+/// Extracts key fields from the nested `fields` object and produces a flat
+/// key-value object that the console reporter renders as a readable list
+/// instead of a giant JSON blob.
+fn flatten_issue(value: Value) -> Value {
+    let fields = value.get("fields").unwrap_or(&Value::Null);
+    let key = value.get("key").and_then(Value::as_str).unwrap_or_default();
+
+    let summary = fields
+        .get("summary")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let status = fields
+        .get("status")
+        .and_then(|s| s.get("name"))
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let priority = fields
+        .get("priority")
+        .and_then(|p| p.get("name"))
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let issue_type = fields
+        .get("issuetype")
+        .and_then(|t| t.get("name"))
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let project = fields
+        .get("project")
+        .and_then(|p| p.get("key"))
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let assignee = fields
+        .get("assignee")
+        .and_then(|a| a.get("displayName"))
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let reporter = fields
+        .get("reporter")
+        .and_then(|r| r.get("displayName"))
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let created = fields
+        .get("created")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let updated = fields
+        .get("updated")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let description = fields
+        .get("description")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let resolution = fields
+        .get("resolution")
+        .and_then(|r| r.get("name"))
+        .and_then(Value::as_str)
+        .unwrap_or("");
+
+    let labels = fields
+        .get("labels")
+        .and_then(Value::as_array)
+        .map(|arr| {
+            arr.iter()
+                .filter_map(Value::as_str)
+                .collect::<Vec<_>>()
+                .join(", ")
+        })
+        .unwrap_or_default();
+
+    let components = fields
+        .get("components")
+        .and_then(Value::as_array)
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|c| c.get("name").and_then(Value::as_str))
+                .collect::<Vec<_>>()
+                .join(", ")
+        })
+        .unwrap_or_default();
+
+    let mut map = serde_json::Map::new();
+    map.insert("key".into(), Value::String(key.into()));
+    map.insert("summary".into(), Value::String(summary.into()));
+    map.insert("type".into(), Value::String(issue_type.into()));
+    map.insert("status".into(), Value::String(status.into()));
+    map.insert("priority".into(), Value::String(priority.into()));
+    map.insert("assignee".into(), Value::String(assignee.into()));
+    map.insert("reporter".into(), Value::String(reporter.into()));
+    map.insert("project".into(), Value::String(project.into()));
+    if !labels.is_empty() {
+        map.insert("labels".into(), Value::String(labels));
+    }
+    if !components.is_empty() {
+        map.insert("components".into(), Value::String(components));
+    }
+    if !resolution.is_empty() {
+        map.insert("resolution".into(), Value::String(resolution.into()));
+    }
+    map.insert("created".into(), Value::String(created.into()));
+    map.insert("updated".into(), Value::String(updated.into()));
+    if !description.is_empty() {
+        map.insert("description".into(), Value::String(description.into()));
+    }
+
+    Value::Object(map)
+}
+
 async fn dispatch(
     cmd: &JiraSubcommand,
     client: &JiraClient,
@@ -202,13 +376,35 @@ async fn dispatch(
         JiraSubcommand::Search(args) => {
             let jql = build_jql(args)?;
             let fields: Vec<&str> = args.fields.split(',').map(str::trim).collect();
-            if args.all {
+            let value = if args.all {
                 client.search_issues_all(&jql, args.limit, &fields).await?
             } else {
                 client.search_issues(&jql, args.limit, &fields).await?
+            };
+            // For human-readable output, extract the issues array and flatten
+            // nested fields so the console reporter renders a clean table
+            // instead of a raw JSON blob. Skip flattening when the user
+            // requested custom fields — flatten would drop them.
+            let is_default_fields = args.fields == "key,summary,status,assignee,priority";
+            if matches!(format, OutputFormat::Console) {
+                let issues = value.get("issues").cloned().unwrap_or(value);
+                if is_default_fields {
+                    flatten_issues(issues)
+                } else {
+                    issues
+                }
+            } else {
+                value
             }
         }
-        JiraSubcommand::View(args) => client.get_issue(&args.key, &[]).await?,
+        JiraSubcommand::View(args) => {
+            let value = client.get_issue(&args.key, &[]).await?;
+            if matches!(format, OutputFormat::Console) {
+                flatten_issue(value)
+            } else {
+                value
+            }
+        }
         JiraSubcommand::Create(args) => {
             let mut fields = json!({
                 "project": { "key": &args.project },
@@ -573,6 +769,43 @@ mod tests {
     }
 
     #[test]
+    fn build_jql_raw_with_order_by() {
+        let mut args = default_search_args();
+        args.jql = Some("project = FOO ORDER BY created DESC".to_string());
+        let result = build_jql(&args).unwrap();
+        assert_eq!(result, "(project = FOO) ORDER BY created DESC");
+    }
+
+    #[test]
+    fn build_jql_raw_order_by_with_filter() {
+        let mut args = default_search_args();
+        args.jql = Some("project = FOO ORDER BY created".to_string());
+        args.status = Some("Open".to_string());
+        let result = build_jql(&args).unwrap();
+        assert_eq!(
+            result,
+            "(project = FOO) AND status = \"Open\" ORDER BY created"
+        );
+    }
+
+    #[test]
+    fn build_jql_raw_order_by_overridden_by_flag() {
+        let mut args = default_search_args();
+        args.jql = Some("project = FOO ORDER BY created".to_string());
+        args.order_by = Some("updated".to_string());
+        let result = build_jql(&args).unwrap();
+        assert_eq!(result, "(project = FOO) ORDER BY updated ASC");
+    }
+
+    #[test]
+    fn build_jql_raw_order_by_case_insensitive() {
+        let mut args = default_search_args();
+        args.jql = Some("project = FOO order by created DESC".to_string());
+        let result = build_jql(&args).unwrap();
+        assert_eq!(result, "(project = FOO) order by created DESC");
+    }
+
+    #[test]
     fn build_jql_status_only() {
         let mut args = default_search_args();
         args.status = Some("In Progress".to_string());
@@ -641,6 +874,122 @@ mod tests {
     #[test]
     fn escape_jql_empty_string() {
         assert_eq!(escape_jql(""), "");
+    }
+
+    // ---- flatten_issues ----
+
+    #[test]
+    fn flatten_issues_extracts_fields() {
+        let input = json!([
+            {
+                "expand": "renderedFields",
+                "id": "12294",
+                "self": "https://example.atlassian.net/rest/api/3/issue/12294",
+                "key": "ORB-196",
+                "fields": {
+                    "summary": "Some summary",
+                    "status": { "name": "To Do" },
+                    "priority": { "name": "High" },
+                    "assignee": { "displayName": "laskin.sergey" },
+                    "issuetype": { "name": "Task" }
+                }
+            }
+        ]);
+        let result = flatten_issues(input);
+        let issues = result.as_array().expect("should be an array");
+        assert_eq!(issues.len(), 1);
+
+        let issue = &issues[0];
+        assert_eq!(issue.get("key").and_then(Value::as_str), Some("ORB-196"));
+        assert_eq!(
+            issue.get("summary").and_then(Value::as_str),
+            Some("Some summary")
+        );
+        assert_eq!(issue.get("status").and_then(Value::as_str), Some("To Do"));
+        assert_eq!(issue.get("priority").and_then(Value::as_str), Some("High"));
+        assert_eq!(
+            issue.get("assignee").and_then(Value::as_str),
+            Some("laskin.sergey")
+        );
+        assert_eq!(issue.get("type").and_then(Value::as_str), Some("Task"));
+
+        // Metadata fields should be absent.
+        assert!(issue.get("expand").is_none());
+        assert!(issue.get("id").is_none());
+        assert!(issue.get("self").is_none());
+        assert!(issue.get("fields").is_none());
+    }
+
+    #[test]
+    fn flatten_issues_null_assignee() {
+        let input = json!([
+            {
+                "key": "ORB-10",
+                "fields": {
+                    "summary": "No assignee",
+                    "status": { "name": "Open" },
+                    "priority": { "name": "Low" },
+                    "assignee": null
+                }
+            }
+        ]);
+        let result = flatten_issues(input);
+        let issue = &result.as_array().unwrap()[0];
+        assert_eq!(issue.get("assignee").and_then(Value::as_str), Some(""));
+    }
+
+    #[test]
+    fn flatten_issues_no_issuetype_omits_type() {
+        let input = json!([
+            {
+                "key": "ORB-11",
+                "fields": {
+                    "summary": "No type",
+                    "status": { "name": "Done" },
+                    "priority": { "name": "Medium" }
+                }
+            }
+        ]);
+        let result = flatten_issues(input);
+        let issue = &result.as_array().unwrap()[0];
+        assert!(
+            issue.get("type").is_none(),
+            "type column should be absent when issuetype is missing"
+        );
+    }
+
+    #[test]
+    fn flatten_issues_non_array_passthrough() {
+        let input = json!({"total": 0, "issues": []});
+        let result = flatten_issues(input.clone());
+        assert_eq!(
+            result, input,
+            "non-array input should pass through unchanged"
+        );
+    }
+
+    #[test]
+    fn flatten_issues_preserves_column_order() {
+        let input = json!([
+            {
+                "key": "X-1",
+                "fields": {
+                    "summary": "s",
+                    "status": { "name": "st" },
+                    "priority": { "name": "p" },
+                    "assignee": { "displayName": "a" },
+                    "issuetype": { "name": "t" }
+                }
+            }
+        ]);
+        let result = flatten_issues(input);
+        let issue = result.as_array().unwrap()[0].as_object().unwrap();
+        let keys: Vec<&String> = issue.keys().collect();
+        assert_eq!(
+            keys,
+            vec!["key", "summary", "status", "priority", "assignee", "type"],
+            "columns should appear in insertion order with preserve_order enabled"
+        );
     }
 
     // ---- insert_extra_fields ----

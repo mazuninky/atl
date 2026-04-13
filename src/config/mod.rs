@@ -18,6 +18,14 @@ pub struct Config {
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TokenStorage {
+    #[default]
+    Keyring,
+    Config,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Profile {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -28,6 +36,8 @@ pub struct Profile {
     pub default_project: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub default_space: Option<String>,
+    #[serde(default)]
+    pub token_storage: TokenStorage,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -35,11 +45,8 @@ pub struct AtlassianInstance {
     pub domain: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub email: Option<String>,
-    /// Deprecated: prefer storing the token in the OS keyring via
-    /// `atl auth login`. The `api_token` field in `atl.toml` is still
-    /// accepted for back-compat and for CI configs that baked the token
-    /// into the config file, but it triggers a one-shot deprecation
-    /// warning through `tracing::warn!` the first time it is read.
+    /// API token stored directly in the config file. Alternative to
+    /// the OS keyring — simpler setup, works without keychain prompts.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub api_token: Option<String>,
     #[serde(default)]
@@ -92,12 +99,8 @@ impl AtlassianInstance {
             return Some(env_token);
         }
 
-        // 2. Legacy TOML field. Warn (once per call) so users are nudged
-        //    toward `atl auth login` without crashing existing setups.
+        // 2. Token from config file.
         if let Some(toml_token) = self.api_token.as_ref() {
-            tracing::warn!(
-                "api_token in atl.toml is deprecated; run `atl auth login --profile {profile}` to migrate to the OS keyring"
-            );
             return Some(toml_token.clone());
         }
 

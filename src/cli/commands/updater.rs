@@ -221,6 +221,33 @@ pub fn run_update(
         .update()
         .map_err(|e| anyhow::anyhow!("self-update failed: {e}"))?;
 
+    // Ad-hoc codesign on macOS so the updated binary retains keychain
+    // access without prompting for the login keychain password.
+    #[cfg(target_os = "macos")]
+    if status.updated()
+        && let Ok(exe) = std::env::current_exe()
+    {
+        let result = std::process::Command::new("codesign")
+            .args(["-s", "-", "-f"])
+            .arg(&exe)
+            .output();
+        match result {
+            Ok(output) if output.status.success() => {
+                debug!("ad-hoc codesign applied to {}", exe.display());
+            }
+            Ok(output) => {
+                debug!(
+                    "codesign failed (exit {}): {}",
+                    output.status,
+                    String::from_utf8_lossy(&output.stderr)
+                );
+            }
+            Err(e) => {
+                debug!("codesign command not found or failed to run: {e}");
+            }
+        }
+    }
+
     let new_version = status.version().trim_start_matches('v').to_string();
     let value = if status.updated() {
         json!({

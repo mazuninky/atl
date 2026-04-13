@@ -21,6 +21,19 @@ cargo fmt --all -- --check
 cargo clippy --all-targets -- -D warnings
 ```
 
+### Local dev install
+
+`scripts/install.sh` installs to `/usr/local/bin` (or `~/.local/bin` as fallback). For dev builds use `--root ~/.local` to avoid conflicts:
+
+```bash
+cargo install --path . --root ~/.local --force
+codesign -s - -f ~/.local/bin/atl   # macOS only — required for keychain access
+```
+
+`scripts/install.sh` runs `codesign` automatically; after `cargo install` you must run it yourself.
+
+### Pre-commit hooks
+
 Pre-commit hooks live in `lefthook.yml` (fmt-check, clippy, test). The deny rules in `.claude/settings.json` block bypassing them — never use `--no-verify` / `-n`. Hooks can take ~10s; that's normal.
 
 ## PR and merge policy

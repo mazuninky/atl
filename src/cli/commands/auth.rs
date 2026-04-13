@@ -18,7 +18,7 @@ use crate::cli::args::{
     AuthTokenArgs, SingleService,
 };
 use crate::client::raw_request;
-use crate::config::{AtlassianInstance, AuthType, Config, ConfigLoader, Profile};
+use crate::config::{AtlassianInstance, AuthType, Config, ConfigLoader, Profile, TokenStorage};
 use crate::io::IoStreams;
 
 /// Dispatches the selected `atl auth` subcommand.
@@ -196,10 +196,12 @@ async fn login(
     // Ensure the profile exists in the config.
     let profile_entry = config.profiles.entry(profile_name.clone()).or_default();
 
+    let use_config_storage = matches!(profile_entry.token_storage, TokenStorage::Config);
+
     // Stage keyring writes so nothing reaches the secret store until every
     // verification has succeeded. If any step fails mid-loop the staged
     // entries are simply discarded, leaving keyring and config untouched.
-    let mut staged_writes: Vec<(String, String, String)> = Vec::with_capacity(kinds.len());
+    let mut staged_keyring_writes: Vec<(String, String, String)> = Vec::with_capacity(kinds.len());
 
     for kind in &kinds {
         let mut instance = instance_for(profile_entry, kind)
@@ -219,9 +221,6 @@ async fn login(
             instance.email = email.clone();
         }
         instance.auth_type = auth_type_from_cli(args.auth_type);
-        // The whole point of login is to move tokens out of TOML — drop any
-        // legacy plaintext token on this instance.
-        instance.api_token = None;
 
         // Verify the token works before persisting anything. We build a
         // temporary verification instance with api_token inlined so the
@@ -249,21 +248,28 @@ async fn login(
             }
         }
 
-        // Stage the keyring write; actual `store.set()` is deferred so an
-        // earlier success cannot leak into the keyring when a later kind
-        // fails verification.
-        let account = account_for_instance(&instance);
-        let svc = service_name(&profile_name, kind);
-        staged_writes.push((svc, account, token.clone()));
+        // Persist the token according to the profile's storage preference.
+        if use_config_storage {
+            instance.api_token = Some(token.clone());
+        } else {
+            instance.api_token = None;
+            // Stage the keyring write; actual `store.set()` is deferred so
+            // an earlier success cannot leak into the keyring when a later
+            // kind fails verification.
+            let account = account_for_instance(&instance);
+            let svc = service_name(&profile_name, kind);
+            staged_keyring_writes.push((svc, account, token.clone()));
+        }
 
         // Save the instance back onto the profile.
         set_instance_on_profile(profile_entry, kind, instance);
     }
 
-    // Commit staged keyring writes. Roll back already-committed entries on
-    // any set failure so we never leave partial state behind.
-    let mut committed: Vec<(String, String)> = Vec::with_capacity(staged_writes.len());
-    for (svc, account, secret) in &staged_writes {
+    // Commit staged keyring writes (empty when using config storage). Roll
+    // back already-committed entries on any set failure so we never leave
+    // partial state behind.
+    let mut committed: Vec<(String, String)> = Vec::with_capacity(staged_keyring_writes.len());
+    for (svc, account, secret) in &staged_keyring_writes {
         if let Err(e) = store.set(svc, account, secret) {
             for (rb_svc, rb_account) in &committed {
                 let _ = store.delete(rb_svc, rb_account);
@@ -438,7 +444,7 @@ fn logout(
         )?;
         removed += 1;
 
-        // Also clear any legacy plaintext token.
+        // Also clear any plaintext token from the config file.
         if let Some(inst) = match *kind {
             "confluence" => profile.confluence.as_mut(),
             "jira" => profile.jira.as_mut(),
@@ -447,7 +453,7 @@ fn logout(
         {
             writeln!(
                 io.stdout(),
-                "cleaning up legacy api_token in atl.toml for {profile_name}/{kind}"
+                "cleaning up api_token in atl.toml for {profile_name}/{kind}"
             )?;
             inst.api_token = None;
             legacy_cleaned = true;
@@ -538,7 +544,7 @@ async fn report_service_status(
         source = Some("env");
         token_for_check = Some(std::env::var("ATL_API_TOKEN").unwrap_or_default());
     } else if instance.api_token.is_some() {
-        source = Some("toml (deprecated)");
+        source = Some("toml");
         token_for_check = instance.api_token.clone();
     } else {
         match store.get(&svc, &account) {

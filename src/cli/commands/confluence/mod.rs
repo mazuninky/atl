@@ -75,6 +75,126 @@ fn cmd_uses_pager(cmd: &ConfluenceSubcommand) -> bool {
     )
 }
 
+/// Flattens a Confluence search response for human-readable console display.
+///
+/// Extracts the `results` array and maps each item to a flat object with
+/// only `id`, `title`, `type`, `status`, and `url` fields, dropping noisy
+/// metadata like `childTypes`, `macroRenderedOutput`, `restrictions`,
+/// `_expandable`, and `_links`.
+fn flatten_confluence_search(value: Value) -> Value {
+    let results = match value.get("results").and_then(Value::as_array) {
+        Some(arr) => arr,
+        None => return value,
+    };
+    let flat: Vec<Value> = results
+        .iter()
+        .map(|item| {
+            let id = item.get("id").and_then(Value::as_str).unwrap_or_default();
+            let title = item
+                .get("title")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            let r#type = item.get("type").and_then(Value::as_str).unwrap_or_default();
+            let status = item
+                .get("status")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            let url = item
+                .get("_links")
+                .and_then(|l| l.get("webui"))
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+
+            let mut map = serde_json::Map::new();
+            map.insert("id".into(), Value::String(id.into()));
+            map.insert("title".into(), Value::String(title.into()));
+            map.insert("type".into(), Value::String(r#type.into()));
+            map.insert("status".into(), Value::String(status.into()));
+            map.insert("url".into(), Value::String(url.into()));
+            Value::Object(map)
+        })
+        .collect();
+    Value::Array(flat)
+}
+
+/// Flattens a single Confluence page for human-readable console display.
+///
+/// Extracts key fields from the nested API response and produces a flat
+/// key-value object that the console reporter renders as a readable list
+/// instead of a giant JSON blob.
+fn flatten_confluence_page(value: Value) -> Value {
+    let id = value.get("id").and_then(Value::as_str).unwrap_or_default();
+    let title = value
+        .get("title")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let status = value
+        .get("status")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let space_id = value
+        .get("spaceId")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let created = value
+        .get("createdAt")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let version_num = value
+        .get("version")
+        .and_then(|v| v.get("number"))
+        .and_then(Value::as_u64)
+        .map(|n| n.to_string())
+        .unwrap_or_default();
+    let updated = value
+        .get("version")
+        .and_then(|v| v.get("createdAt"))
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+
+    // Build full URL from _links
+    let base = value
+        .get("_links")
+        .and_then(|l| l.get("base"))
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let webui = value
+        .get("_links")
+        .and_then(|l| l.get("webui"))
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let url = if !base.is_empty() && !webui.is_empty() {
+        format!("{base}{webui}")
+    } else {
+        webui.to_string()
+    };
+
+    // Extract body content from whatever representation is available
+    let body = value
+        .get("body")
+        .and_then(Value::as_object)
+        .and_then(|obj| obj.values().next())
+        .and_then(|repr| repr.get("value"))
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+
+    let mut map = serde_json::Map::new();
+    map.insert("id".into(), Value::String(id.into()));
+    map.insert("title".into(), Value::String(title.into()));
+    map.insert("status".into(), Value::String(status.into()));
+    map.insert("spaceId".into(), Value::String(space_id.into()));
+    map.insert("version".into(), Value::String(version_num));
+    map.insert("created".into(), Value::String(created.into()));
+    map.insert("updated".into(), Value::String(updated.into()));
+    if !url.is_empty() {
+        map.insert("url".into(), Value::String(url));
+    }
+    if !body.is_empty() {
+        map.insert("body".into(), Value::String(body.into()));
+    }
+    Value::Object(map)
+}
+
 async fn dispatch(
     cmd: &ConfluenceSubcommand,
     client: &ConfluenceClient,
@@ -103,16 +223,26 @@ async fn dispatch(
             if args.include_favorited_by {
                 expand.push("metadata.currentuser.favourited");
             }
-            client
+            let value = client
                 .get_page(&args.page_id, args.body_format.as_str(), &expand)
-                .await?
+                .await?;
+            if matches!(format, OutputFormat::Console) {
+                flatten_confluence_page(value)
+            } else {
+                value
+            }
         }
         ConfluenceSubcommand::Info(args) => client.get_page_info(&args.page_id).await?,
         ConfluenceSubcommand::Search(args) => {
-            if args.all {
+            let value = if args.all {
                 client.search_all(&args.cql, args.limit).await?
             } else {
                 client.search(&args.cql, args.limit).await?
+            };
+            if matches!(format, OutputFormat::Console) {
+                flatten_confluence_search(value)
+            } else {
+                value
             }
         }
         ConfluenceSubcommand::Space(cmd) => space::dispatch_space(&cmd.command, client).await?,
@@ -180,7 +310,12 @@ async fn dispatch(
                 let escaped_space = space.replace('\\', "\\\\").replace('"', "\\\"");
                 cql.push_str(&format!(" AND space=\"{escaped_space}\""));
             }
-            client.search(&cql, args.limit).await?
+            let value = client.search(&cql, args.limit).await?;
+            if matches!(format, OutputFormat::Console) {
+                flatten_confluence_search(value)
+            } else {
+                value
+            }
         }
         ConfluenceSubcommand::CreateComment(args) => {
             let body = read_body_arg(&args.body)?;
@@ -397,4 +532,225 @@ async fn dispatch(
     stop_res?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    // ---- flatten_confluence_search ----
+
+    #[test]
+    fn flatten_search_extracts_fields() {
+        let input = json!({
+            "results": [
+                {
+                    "id": "98486",
+                    "type": "page",
+                    "status": "current",
+                    "title": "Template - Meeting notes",
+                    "childTypes": {},
+                    "macroRenderedOutput": {},
+                    "restrictions": {},
+                    "_expandable": { "container": "/rest/api/space/TEAM" },
+                    "_links": {
+                        "webui": "/spaces/TEAM/pages/98486/Template+-+Meeting+notes",
+                        "self": "https://example.atlassian.net/wiki/rest/api/content/98486",
+                        "tinyui": "/x/toAB"
+                    }
+                }
+            ],
+            "start": 0,
+            "limit": 3,
+            "size": 1,
+            "_links": {}
+        });
+        let result = flatten_confluence_search(input);
+        let items = result.as_array().expect("should be an array");
+        assert_eq!(items.len(), 1);
+
+        let item = &items[0];
+        assert_eq!(item.get("id").and_then(Value::as_str), Some("98486"));
+        assert_eq!(
+            item.get("title").and_then(Value::as_str),
+            Some("Template - Meeting notes")
+        );
+        assert_eq!(item.get("type").and_then(Value::as_str), Some("page"));
+        assert_eq!(item.get("status").and_then(Value::as_str), Some("current"));
+        assert_eq!(
+            item.get("url").and_then(Value::as_str),
+            Some("/spaces/TEAM/pages/98486/Template+-+Meeting+notes")
+        );
+
+        // Metadata fields should be absent.
+        assert!(item.get("childTypes").is_none());
+        assert!(item.get("macroRenderedOutput").is_none());
+        assert!(item.get("restrictions").is_none());
+        assert!(item.get("_expandable").is_none());
+        assert!(item.get("_links").is_none());
+    }
+
+    #[test]
+    fn flatten_search_no_results_key_passthrough() {
+        let input = json!({"total": 0});
+        let result = flatten_confluence_search(input.clone());
+        assert_eq!(
+            result, input,
+            "input without results key should pass through unchanged"
+        );
+    }
+
+    #[test]
+    fn flatten_search_preserves_column_order() {
+        let input = json!({
+            "results": [{
+                "id": "1",
+                "type": "page",
+                "status": "current",
+                "title": "T",
+                "_links": { "webui": "/x" }
+            }],
+            "size": 1
+        });
+        let result = flatten_confluence_search(input);
+        let item = result.as_array().unwrap()[0].as_object().unwrap();
+        let keys: Vec<&String> = item.keys().collect();
+        assert_eq!(
+            keys,
+            vec!["id", "title", "type", "status", "url"],
+            "columns should appear in insertion order"
+        );
+    }
+
+    // ---- flatten_confluence_page ----
+
+    #[test]
+    fn flatten_page_extracts_fields() {
+        let input = json!({
+            "id": "98420",
+            "title": "Page title",
+            "status": "current",
+            "spaceId": "98309",
+            "parentType": null,
+            "parentId": null,
+            "createdAt": "2025-10-29T12:00:00Z",
+            "version": { "number": 4, "createdAt": "2025-11-01T08:30:00Z" },
+            "body": {
+                "storage": {
+                    "value": "<p>Hello world</p>",
+                    "representation": "storage"
+                }
+            },
+            "_links": {
+                "webui": "/spaces/inno/overview",
+                "base": "https://example.atlassian.net/wiki"
+            },
+            "ownerId": "abc123",
+            "authorId": "def456",
+            "lastOwnerId": null,
+            "position": 195
+        });
+        let result = flatten_confluence_page(input);
+        let obj = result.as_object().expect("should be an object");
+
+        assert_eq!(obj.get("id").and_then(Value::as_str), Some("98420"));
+        assert_eq!(obj.get("title").and_then(Value::as_str), Some("Page title"));
+        assert_eq!(obj.get("status").and_then(Value::as_str), Some("current"));
+        assert_eq!(obj.get("spaceId").and_then(Value::as_str), Some("98309"));
+        assert_eq!(obj.get("version").and_then(Value::as_str), Some("4"));
+        assert_eq!(
+            obj.get("created").and_then(Value::as_str),
+            Some("2025-10-29T12:00:00Z")
+        );
+        assert_eq!(
+            obj.get("updated").and_then(Value::as_str),
+            Some("2025-11-01T08:30:00Z")
+        );
+        assert_eq!(
+            obj.get("url").and_then(Value::as_str),
+            Some("https://example.atlassian.net/wiki/spaces/inno/overview")
+        );
+        assert_eq!(
+            obj.get("body").and_then(Value::as_str),
+            Some("<p>Hello world</p>")
+        );
+
+        // Dropped fields should be absent.
+        assert!(obj.get("parentType").is_none());
+        assert!(obj.get("parentId").is_none());
+        assert!(obj.get("ownerId").is_none());
+        assert!(obj.get("authorId").is_none());
+        assert!(obj.get("lastOwnerId").is_none());
+        assert!(obj.get("position").is_none());
+        assert!(obj.get("_links").is_none());
+    }
+
+    #[test]
+    fn flatten_page_url_without_base() {
+        let input = json!({
+            "id": "1",
+            "title": "T",
+            "status": "current",
+            "_links": { "webui": "/spaces/X/overview" }
+        });
+        let result = flatten_confluence_page(input);
+        assert_eq!(
+            result.get("url").and_then(Value::as_str),
+            Some("/spaces/X/overview"),
+            "url should be just webui when base is absent"
+        );
+    }
+
+    #[test]
+    fn flatten_page_omits_empty_body() {
+        let input = json!({
+            "id": "1",
+            "title": "T",
+            "status": "current"
+        });
+        let result = flatten_confluence_page(input);
+        assert!(
+            result.get("body").is_none(),
+            "body key should be absent when no body content exists"
+        );
+    }
+
+    #[test]
+    fn flatten_page_omits_empty_url() {
+        let input = json!({
+            "id": "1",
+            "title": "T",
+            "status": "current"
+        });
+        let result = flatten_confluence_page(input);
+        assert!(
+            result.get("url").is_none(),
+            "url key should be absent when _links is missing"
+        );
+    }
+
+    #[test]
+    fn flatten_page_preserves_column_order() {
+        let input = json!({
+            "id": "1",
+            "title": "T",
+            "status": "current",
+            "spaceId": "S",
+            "createdAt": "2025-01-01T00:00:00Z",
+            "version": { "number": 1, "createdAt": "2025-01-01T00:00:00Z" },
+            "_links": { "webui": "/x", "base": "https://example.com" },
+            "body": { "storage": { "value": "content" } }
+        });
+        let result = flatten_confluence_page(input);
+        let obj = result.as_object().unwrap();
+        let keys: Vec<&String> = obj.keys().collect();
+        assert_eq!(
+            keys,
+            vec![
+                "id", "title", "status", "spaceId", "version", "created", "updated", "url", "body"
+            ],
+            "columns should appear in insertion order"
+        );
+    }
 }

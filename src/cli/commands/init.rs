@@ -42,7 +42,28 @@ pub fn run_init(io: &mut IoStreams, prompter: &dyn Prompter) -> anyhow::Result<(
     // 2. Email
     let email = prompt_non_empty(prompter, "Email:")?;
 
-    // 3. Same domain for Confluence and Jira?
+    // 3. Token storage method
+    let token_storage = prompter.select(
+        "Where to store API tokens?",
+        &[
+            "OS keyring (secure, may prompt for keychain password on macOS)",
+            "Config file (simpler, no keychain prompts)",
+        ],
+    )?;
+
+    let api_token = if token_storage == 1 {
+        let token = prompter.password(
+            "API token (from https://id.atlassian.com/manage-profile/security/api-tokens):",
+        )?;
+        if token.trim().is_empty() {
+            anyhow::bail!("API token cannot be empty");
+        }
+        Some(token.trim().to_string())
+    } else {
+        None
+    };
+
+    // 4. Same domain for Confluence and Jira?
     let same_domain = prompter.select(
         "Do Confluence and Jira use the same domain?",
         &["Yes, same domain", "No, different domains"],
@@ -61,7 +82,7 @@ pub fn run_init(io: &mut IoStreams, prompter: &dyn Prompter) -> anyhow::Result<(
     let jira_instance = AtlassianInstance {
         domain: domain.clone(),
         email: Some(email.clone()),
-        api_token: None,
+        api_token: api_token.clone(),
         auth_type: AuthType::Basic,
         api_path: None,
         read_only: false,
@@ -69,7 +90,7 @@ pub fn run_init(io: &mut IoStreams, prompter: &dyn Prompter) -> anyhow::Result<(
     let confluence_instance = AtlassianInstance {
         domain: confluence_domain,
         email: Some(email),
-        api_token: None,
+        api_token,
         auth_type: AuthType::Basic,
         api_path: None,
         read_only: false,
@@ -91,10 +112,17 @@ pub fn run_init(io: &mut IoStreams, prompter: &dyn Prompter) -> anyhow::Result<(
     let written_path = ConfigLoader::save(&config, Some(path.as_ref()))?;
 
     writeln!(io.stdout(), "Config written to {written_path}")?;
-    writeln!(
-        io.stdout(),
-        "Run `atl auth login` to store your API token securely in the OS keyring."
-    )?;
+    if token_storage == 1 {
+        writeln!(
+            io.stdout(),
+            "API token stored in config file. You're ready to go!"
+        )?;
+    } else {
+        writeln!(
+            io.stdout(),
+            "Run `atl auth login` to store your API token securely in the OS keyring."
+        )?;
+    }
 
     Ok(())
 }
@@ -153,6 +181,7 @@ mod tests {
         let prompter = MockPrompter::new(vec![
             MockResponse::Text("acme.atlassian.net".into()),
             MockResponse::Text("alice@acme.com".into()),
+            MockResponse::Select(0), // token storage: keyring
             MockResponse::Select(0), // same domain ("Yes, same domain")
         ]);
 
@@ -186,6 +215,7 @@ mod tests {
         let prompter = MockPrompter::new(vec![
             MockResponse::Text("acme.atlassian.net".into()),
             MockResponse::Text("alice@acme.com".into()),
+            MockResponse::Select(0), // token storage: keyring
             MockResponse::Select(1), // different domain ("No, different domains")
             MockResponse::Text("wiki.acme.com".into()),
         ]);
@@ -200,6 +230,49 @@ mod tests {
         assert_eq!(profile.jira.as_ref().unwrap().domain, "acme.atlassian.net");
         assert_eq!(profile.confluence.as_ref().unwrap().domain, "wiki.acme.com");
         assert_eq!(prompter.remaining(), 0);
+    }
+
+    #[test]
+    fn interactive_wizard_stores_token_in_config_file() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let config_path = dir.path().join("atl").join("atl.toml");
+        let utf8_path = camino::Utf8PathBuf::try_from(config_path).unwrap();
+
+        let prompter = MockPrompter::new(vec![
+            MockResponse::Text("acme.atlassian.net".into()),
+            MockResponse::Text("alice@acme.com".into()),
+            MockResponse::Select(1), // token storage: config file
+            MockResponse::Password("my-secret-token".into()), // API token
+            MockResponse::Select(0), // same domain
+        ]);
+
+        let config = build_config_from_prompts(&prompter).unwrap();
+        ConfigLoader::save(&config, Some(utf8_path.as_ref())).unwrap();
+
+        let reloaded = ConfigLoader::load(Some(utf8_path.as_ref()))
+            .unwrap()
+            .unwrap();
+        let profile = reloaded.profiles.get("default").unwrap();
+        let jira = profile.jira.as_ref().unwrap();
+        assert_eq!(jira.api_token.as_deref(), Some("my-secret-token"));
+        let confluence = profile.confluence.as_ref().unwrap();
+        assert_eq!(confluence.api_token.as_deref(), Some("my-secret-token"));
+        assert_eq!(prompter.remaining(), 0);
+    }
+
+    #[test]
+    fn interactive_wizard_rejects_empty_token() {
+        let prompter = MockPrompter::new(vec![
+            MockResponse::Text("acme.atlassian.net".into()),
+            MockResponse::Text("alice@acme.com".into()),
+            MockResponse::Select(1),             // token storage: config file
+            MockResponse::Password("  ".into()), // empty token
+        ]);
+
+        let result = build_config_from_prompts(&prompter);
+        assert!(result.is_err());
+        let msg = format!("{}", result.unwrap_err());
+        assert!(msg.contains("cannot be empty"), "got: {msg}");
     }
 
     #[test]
@@ -314,6 +387,26 @@ mod tests {
             "Atlassian domain (e.g. acme or acme.atlassian.net):",
         )?);
         let email = prompt_non_empty(prompter, "Email:")?;
+
+        let token_storage = prompter.select(
+            "Where to store API tokens?",
+            &[
+                "OS keyring (secure, may prompt for keychain password on macOS)",
+                "Config file (simpler, no keychain prompts)",
+            ],
+        )?;
+        let api_token = if token_storage == 1 {
+            let token = prompter.password(
+                "API token (from https://id.atlassian.com/manage-profile/security/api-tokens):",
+            )?;
+            if token.trim().is_empty() {
+                anyhow::bail!("API token cannot be empty");
+            }
+            Some(token.trim().to_string())
+        } else {
+            None
+        };
+
         let same_domain = prompter.select(
             "Do Confluence and Jira use the same domain?",
             &["Yes, same domain", "No, different domains"],
@@ -330,7 +423,7 @@ mod tests {
         let jira_instance = AtlassianInstance {
             domain: domain.clone(),
             email: Some(email.clone()),
-            api_token: None,
+            api_token: api_token.clone(),
             auth_type: AuthType::Basic,
             api_path: None,
             read_only: false,
@@ -338,7 +431,7 @@ mod tests {
         let confluence_instance = AtlassianInstance {
             domain: confluence_domain,
             email: Some(email),
-            api_token: None,
+            api_token,
             auth_type: AuthType::Basic,
             api_path: None,
             read_only: false,

@@ -258,6 +258,12 @@ main() {
     cp "${EXTRACTED_DIR}/${BINARY_NAME}" "${INSTALL_DIR}/${BINARY_NAME}"
     chmod +x "${INSTALL_DIR}/${BINARY_NAME}"
 
+    # Ad-hoc codesign on macOS so the binary can access the login keychain
+    # without triggering a password prompt on every rebuild / reinstall.
+    if [ "$(uname -s)" = "Darwin" ] && command -v codesign >/dev/null 2>&1; then
+        codesign -s - -f "${INSTALL_DIR}/${BINARY_NAME}" 2>/dev/null || true
+    fi
+
     log ""
     log "atl v${VERSION} installed to ${INSTALL_DIR}/${BINARY_NAME}"
 

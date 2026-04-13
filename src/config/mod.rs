@@ -35,11 +35,8 @@ pub struct AtlassianInstance {
     pub domain: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub email: Option<String>,
-    /// Deprecated: prefer storing the token in the OS keyring via
-    /// `atl auth login`. The `api_token` field in `atl.toml` is still
-    /// accepted for back-compat and for CI configs that baked the token
-    /// into the config file, but it triggers a one-shot deprecation
-    /// warning through `tracing::warn!` the first time it is read.
+    /// API token stored directly in the config file. Alternative to
+    /// the OS keyring — simpler setup, works without keychain prompts.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub api_token: Option<String>,
     #[serde(default)]
@@ -92,10 +89,7 @@ impl AtlassianInstance {
             return Some(env_token);
         }
 
-        // 2. Legacy TOML field — still accepted for back-compat.
-        //    The deprecation warning is emitted once at config load time
-        //    (see `ConfigLoader::load`) rather than here, to avoid
-        //    false-positive warnings during `atl auth login` verification.
+        // 2. Token from config file.
         if let Some(toml_token) = self.api_token.as_ref() {
             return Some(toml_token.clone());
         }

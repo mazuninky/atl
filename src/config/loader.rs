@@ -25,28 +25,6 @@ impl ConfigLoader {
                 let content = std::fs::read_to_string(p.as_std_path())?;
                 let config: Config = toml::from_str(&content)?;
 
-                // Emit a one-shot deprecation warning for each profile that
-                // still carries a legacy `api_token` field in the TOML file.
-                // Doing this here (rather than in `resolved_token`) avoids
-                // false-positive warnings when `atl auth login` temporarily
-                // clones an instance with `api_token = Some(...)` for
-                // verification.
-                for (name, profile) in &config.profiles {
-                    for (kind, inst) in
-                        [("confluence", &profile.confluence), ("jira", &profile.jira)]
-                    {
-                        if let Some(inst) = inst
-                            && inst.api_token.is_some()
-                        {
-                            tracing::warn!(
-                                "api_token in atl.toml [{kind}] is deprecated; \
-                                 run `atl auth login --profile {name}` to migrate \
-                                 to the OS keyring"
-                            );
-                        }
-                    }
-                }
-
                 Ok(Some(config))
             }
             None => {
@@ -145,7 +123,7 @@ impl ConfigLoader {
 }
 
 /// Writes the config file with owner-only permissions on Unix (`0o600`) so
-/// any legacy `api_token` field cannot be read by other users on the host.
+/// any `api_token` field cannot be read by other users on the host.
 /// On non-Unix platforms falls back to `std::fs::write`, which uses the
 /// default OS-assigned permissions.
 fn write_config_file(path: &std::path::Path, content: &[u8]) -> std::io::Result<()> {

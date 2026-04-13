@@ -219,8 +219,8 @@ async fn login(
             instance.email = email.clone();
         }
         instance.auth_type = auth_type_from_cli(args.auth_type);
-        // The whole point of login is to move tokens out of TOML — drop any
-        // legacy plaintext token on this instance.
+        // `atl auth login` stores tokens in the keyring — clear any
+        // existing plaintext token from the config file.
         instance.api_token = None;
 
         // Verify the token works before persisting anything. We build a
@@ -438,7 +438,7 @@ fn logout(
         )?;
         removed += 1;
 
-        // Also clear any legacy plaintext token.
+        // Also clear any plaintext token from the config file.
         if let Some(inst) = match *kind {
             "confluence" => profile.confluence.as_mut(),
             "jira" => profile.jira.as_mut(),
@@ -447,7 +447,7 @@ fn logout(
         {
             writeln!(
                 io.stdout(),
-                "cleaning up legacy api_token in atl.toml for {profile_name}/{kind}"
+                "cleaning up api_token in atl.toml for {profile_name}/{kind}"
             )?;
             inst.api_token = None;
             legacy_cleaned = true;
@@ -538,7 +538,7 @@ async fn report_service_status(
         source = Some("env");
         token_for_check = Some(std::env::var("ATL_API_TOKEN").unwrap_or_default());
     } else if instance.api_token.is_some() {
-        source = Some("toml (deprecated)");
+        source = Some("toml");
         token_for_check = instance.api_token.clone();
     } else {
         match store.get(&svc, &account) {

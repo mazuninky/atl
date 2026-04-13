@@ -74,7 +74,10 @@ impl JiraClient {
         max_results: u32,
         fields: &[&str],
     ) -> Result<Value, Error> {
-        let url = format!("{}/search", self.base_url);
+        let url = format!(
+            "{}/search/jql",
+            self.base_url.replace("/rest/api/2", "/rest/api/3")
+        );
         let fields_str = fields.join(",");
         debug!("GET {url} jql={jql}");
         let resp = self
@@ -91,6 +94,10 @@ impl JiraClient {
     }
 
     /// Search with auto-pagination: fetch all matching issues.
+    ///
+    /// Uses the v3 token-based pagination (`nextPageToken`) endpoint.
+    /// The returned JSON preserves the synthetic `startAt`/`maxResults`/`total`
+    /// shape so downstream consumers are unaffected.
     pub async fn search_issues_all(
         &self,
         jql: &str,
@@ -98,35 +105,38 @@ impl JiraClient {
         fields: &[&str],
     ) -> Result<Value, Error> {
         let mut all_issues = Vec::new();
-        let mut start_at = 0u32;
+        let url = format!(
+            "{}/search/jql",
+            self.base_url.replace("/rest/api/2", "/rest/api/3")
+        );
         let fields_str = fields.join(",");
+        let mut next_page_token: Option<String> = None;
         loop {
-            let url = format!("{}/search", self.base_url);
-            debug!("GET {url} jql={jql} startAt={start_at} maxResults={page_size}");
-            let resp = self
-                .http
-                .get(&url)
-                .query(&[
-                    ("jql", jql),
-                    ("startAt", &start_at.to_string()),
-                    ("maxResults", &page_size.to_string()),
-                    ("fields", &fields_str),
-                ])
-                .send()
-                .await?;
+            debug!("GET {url} jql={jql} maxResults={page_size} nextPageToken={next_page_token:?}");
+            let mut query: Vec<(&str, String)> = vec![
+                ("jql", jql.to_string()),
+                ("maxResults", page_size.to_string()),
+                ("fields", fields_str.clone()),
+            ];
+            if let Some(token) = &next_page_token {
+                query.push(("nextPageToken", token.clone()));
+            }
+            let resp = self.http.get(&url).query(&query).send().await?;
             let page: Value = handle_response(resp).await?;
-            let total = page.get("total").and_then(Value::as_u64).unwrap_or(0) as u32;
             if let Some(issues) = page.get("issues").and_then(Value::as_array) {
                 if issues.is_empty() {
                     break;
                 }
-                start_at += issues.len() as u32;
                 all_issues.extend(issues.iter().cloned());
             } else {
                 break;
             }
-            if start_at >= total {
-                break;
+            // Token-based pagination: continue if nextPageToken is present and non-empty
+            match page.get("nextPageToken").and_then(Value::as_str) {
+                Some(token) if !token.is_empty() => {
+                    next_page_token = Some(token.to_string());
+                }
+                _ => break,
             }
         }
         Ok(serde_json::json!({

@@ -949,8 +949,8 @@ mod tests {
 
     #[test]
     fn split_next_url_no_query() {
-        let (endpoint, query) = split_next_url("/rest/api/2/search", "example.atlassian.net");
-        assert_eq!(endpoint, "/rest/api/2/search");
+        let (endpoint, query) = split_next_url("/rest/api/3/search/jql", "example.atlassian.net");
+        assert_eq!(endpoint, "/rest/api/3/search/jql");
         assert!(query.is_empty());
     }
 

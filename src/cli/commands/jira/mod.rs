@@ -202,6 +202,59 @@ fn cmd_uses_pager(cmd: &JiraSubcommand) -> bool {
     matches!(cmd, JiraSubcommand::View(_) | JiraSubcommand::Search(_))
 }
 
+/// Flattens Jira issue objects for human-readable console table display.
+///
+/// Extracts key fields from the nested `fields` object and drops metadata
+/// like `expand`, `id`, and `self` that clutter the table.
+fn flatten_issues(value: Value) -> Value {
+    let Value::Array(issues) = value else {
+        return value;
+    };
+    let flat: Vec<Value> = issues
+        .into_iter()
+        .map(|issue| {
+            let key = issue.get("key").and_then(Value::as_str).unwrap_or_default();
+            let fields = issue.get("fields").unwrap_or(&Value::Null);
+            let summary = fields
+                .get("summary")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            let status = fields
+                .get("status")
+                .and_then(|s| s.get("name"))
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            let priority = fields
+                .get("priority")
+                .and_then(|p| p.get("name"))
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            let assignee = fields
+                .get("assignee")
+                .and_then(|a| a.get("displayName"))
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            let issue_type = fields
+                .get("issuetype")
+                .and_then(|t| t.get("name"))
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+
+            let mut map = serde_json::Map::new();
+            map.insert("key".into(), Value::String(key.into()));
+            map.insert("summary".into(), Value::String(summary.into()));
+            map.insert("status".into(), Value::String(status.into()));
+            map.insert("priority".into(), Value::String(priority.into()));
+            map.insert("assignee".into(), Value::String(assignee.into()));
+            if !issue_type.is_empty() {
+                map.insert("type".into(), Value::String(issue_type.into()));
+            }
+            Value::Object(map)
+        })
+        .collect();
+    Value::Array(flat)
+}
+
 async fn dispatch(
     cmd: &JiraSubcommand,
     client: &JiraClient,
@@ -213,10 +266,19 @@ async fn dispatch(
         JiraSubcommand::Search(args) => {
             let jql = build_jql(args)?;
             let fields: Vec<&str> = args.fields.split(',').map(str::trim).collect();
-            if args.all {
+            let value = if args.all {
                 client.search_issues_all(&jql, args.limit, &fields).await?
             } else {
                 client.search_issues(&jql, args.limit, &fields).await?
+            };
+            // For human-readable output, extract the issues array and flatten
+            // nested fields so the console reporter renders a clean table
+            // instead of a raw JSON blob.
+            if matches!(format, OutputFormat::Console) {
+                let issues = value.get("issues").cloned().unwrap_or(value);
+                flatten_issues(issues)
+            } else {
+                value
             }
         }
         JiraSubcommand::View(args) => client.get_issue(&args.key, &[]).await?,
@@ -689,6 +751,122 @@ mod tests {
     #[test]
     fn escape_jql_empty_string() {
         assert_eq!(escape_jql(""), "");
+    }
+
+    // ---- flatten_issues ----
+
+    #[test]
+    fn flatten_issues_extracts_fields() {
+        let input = json!([
+            {
+                "expand": "renderedFields",
+                "id": "12294",
+                "self": "https://example.atlassian.net/rest/api/3/issue/12294",
+                "key": "ORB-196",
+                "fields": {
+                    "summary": "Some summary",
+                    "status": { "name": "To Do" },
+                    "priority": { "name": "High" },
+                    "assignee": { "displayName": "laskin.sergey" },
+                    "issuetype": { "name": "Task" }
+                }
+            }
+        ]);
+        let result = flatten_issues(input);
+        let issues = result.as_array().expect("should be an array");
+        assert_eq!(issues.len(), 1);
+
+        let issue = &issues[0];
+        assert_eq!(issue.get("key").and_then(Value::as_str), Some("ORB-196"));
+        assert_eq!(
+            issue.get("summary").and_then(Value::as_str),
+            Some("Some summary")
+        );
+        assert_eq!(issue.get("status").and_then(Value::as_str), Some("To Do"));
+        assert_eq!(issue.get("priority").and_then(Value::as_str), Some("High"));
+        assert_eq!(
+            issue.get("assignee").and_then(Value::as_str),
+            Some("laskin.sergey")
+        );
+        assert_eq!(issue.get("type").and_then(Value::as_str), Some("Task"));
+
+        // Metadata fields should be absent.
+        assert!(issue.get("expand").is_none());
+        assert!(issue.get("id").is_none());
+        assert!(issue.get("self").is_none());
+        assert!(issue.get("fields").is_none());
+    }
+
+    #[test]
+    fn flatten_issues_null_assignee() {
+        let input = json!([
+            {
+                "key": "ORB-10",
+                "fields": {
+                    "summary": "No assignee",
+                    "status": { "name": "Open" },
+                    "priority": { "name": "Low" },
+                    "assignee": null
+                }
+            }
+        ]);
+        let result = flatten_issues(input);
+        let issue = &result.as_array().unwrap()[0];
+        assert_eq!(issue.get("assignee").and_then(Value::as_str), Some(""));
+    }
+
+    #[test]
+    fn flatten_issues_no_issuetype_omits_type() {
+        let input = json!([
+            {
+                "key": "ORB-11",
+                "fields": {
+                    "summary": "No type",
+                    "status": { "name": "Done" },
+                    "priority": { "name": "Medium" }
+                }
+            }
+        ]);
+        let result = flatten_issues(input);
+        let issue = &result.as_array().unwrap()[0];
+        assert!(
+            issue.get("type").is_none(),
+            "type column should be absent when issuetype is missing"
+        );
+    }
+
+    #[test]
+    fn flatten_issues_non_array_passthrough() {
+        let input = json!({"total": 0, "issues": []});
+        let result = flatten_issues(input.clone());
+        assert_eq!(
+            result, input,
+            "non-array input should pass through unchanged"
+        );
+    }
+
+    #[test]
+    fn flatten_issues_preserves_column_order() {
+        let input = json!([
+            {
+                "key": "X-1",
+                "fields": {
+                    "summary": "s",
+                    "status": { "name": "st" },
+                    "priority": { "name": "p" },
+                    "assignee": { "displayName": "a" },
+                    "issuetype": { "name": "t" }
+                }
+            }
+        ]);
+        let result = flatten_issues(input);
+        let issue = result.as_array().unwrap()[0].as_object().unwrap();
+        let keys: Vec<&String> = issue.keys().collect();
+        assert_eq!(
+            keys,
+            vec!["key", "summary", "status", "priority", "assignee", "type"],
+            "columns should appear in insertion order with preserve_order enabled"
+        );
     }
 
     // ---- insert_extra_fields ----

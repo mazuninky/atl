@@ -383,10 +383,16 @@ async fn dispatch(
             };
             // For human-readable output, extract the issues array and flatten
             // nested fields so the console reporter renders a clean table
-            // instead of a raw JSON blob.
+            // instead of a raw JSON blob. Skip flattening when the user
+            // requested custom fields — flatten would drop them.
+            let is_default_fields = args.fields == "key,summary,status,assignee,priority";
             if matches!(format, OutputFormat::Console) {
                 let issues = value.get("issues").cloned().unwrap_or(value);
-                flatten_issues(issues)
+                if is_default_fields {
+                    flatten_issues(issues)
+                } else {
+                    issues
+                }
             } else {
                 value
             }

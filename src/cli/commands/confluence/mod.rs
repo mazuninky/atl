@@ -226,7 +226,7 @@ async fn dispatch(
             let value = client
                 .get_page(&args.page_id, args.body_format.as_str(), &expand)
                 .await?;
-            if matches!(format, OutputFormat::Console) {
+            if matches!(format, OutputFormat::Console) && expand.is_empty() {
                 flatten_confluence_page(value)
             } else {
                 value

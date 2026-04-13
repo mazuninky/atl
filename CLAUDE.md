@@ -23,7 +23,7 @@ cargo clippy --all-targets -- -D warnings
 
 ### Local dev install
 
-`scripts/install.sh` and dev builds both install to `~/.local/bin/`. Always use `--root ~/.local` so there is only one copy on `$PATH`:
+`scripts/install.sh` installs to `/usr/local/bin` (or `~/.local/bin` as fallback). For dev builds use `--root ~/.local` to avoid conflicts:
 
 ```bash
 cargo install --path . --root ~/.local --force

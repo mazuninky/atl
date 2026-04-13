@@ -144,12 +144,17 @@ fn normalize_domain(input: &str) -> String {
         s.truncate(s.len() - 1);
     }
 
-    // If there is no dot, treat it as a bare Atlassian Cloud subdomain.
-    if !s.contains('.') {
-        s.push_str(".atlassian.net");
-    }
+    // Split host from path before applying the Cloud shorthand.
+    let split_at = s.find('/').unwrap_or(s.len());
+    let host = &s[..split_at];
+    let path = &s[split_at..];
 
-    s
+    // If the host has no dot, treat it as a bare Atlassian Cloud subdomain.
+    if !host.contains('.') && !host.contains(':') {
+        format!("{host}.atlassian.net{path}")
+    } else {
+        s
+    }
 }
 
 #[cfg(test)]
@@ -336,6 +341,19 @@ mod tests {
         assert_eq!(
             normalize_domain("acme.atlassian.net/wiki"),
             "acme.atlassian.net/wiki"
+        );
+    }
+
+    #[test]
+    fn normalize_domain_bare_subdomain_with_path() {
+        assert_eq!(normalize_domain("acme/wiki"), "acme.atlassian.net/wiki");
+    }
+
+    #[test]
+    fn normalize_domain_localhost_with_port_and_path() {
+        assert_eq!(
+            normalize_domain("localhost:8080/jira"),
+            "localhost:8080/jira"
         );
     }
 

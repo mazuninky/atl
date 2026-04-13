@@ -29,7 +29,7 @@ pub enum ApiService {
     after_help = "EXAMPLES:\n\
                   \n    \
                   atl api --service jira rest/api/2/myself\n    \
-                  atl api --service jira rest/api/3/search/jql --query jql='project=TEST' --paginate\n    \
+                  atl api --service jira rest/api/3/search/jql --query jql='project=TEST' --paginate  # Cloud only\n    \
                   atl api --service confluence /wiki/api/v2/pages --query space-id=123 --paginate\n    \
                   atl api --service jira --method POST rest/api/2/issue \\\n        \
                   --raw-field fields='{\"project\":{\"key\":\"TEST\"}}'\n    \

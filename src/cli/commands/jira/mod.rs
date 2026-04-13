@@ -79,9 +79,17 @@ fn escape_jql(value: &str) -> String {
 
 fn build_jql(args: &JiraSearchArgs) -> anyhow::Result<String> {
     let mut clauses = Vec::new();
+    let mut raw_order_by: Option<String> = None;
 
     if let Some(jql) = &args.jql {
-        clauses.push(format!("({jql})"));
+        // Split off ORDER BY clause so it doesn't get wrapped in parentheses.
+        if let Some(pos) = jql.to_ascii_uppercase().find(" ORDER BY ") {
+            let (filter_part, order_part) = jql.split_at(pos);
+            clauses.push(format!("({filter_part})"));
+            raw_order_by = Some(order_part.to_string());
+        } else {
+            clauses.push(format!("({jql})"));
+        }
     }
     if let Some(v) = &args.status {
         clauses.push(format!("status = \"{}\"", escape_jql(v)));
@@ -137,9 +145,12 @@ fn build_jql(args: &JiraSearchArgs) -> anyhow::Result<String> {
 
     let mut jql = clauses.join(" AND ");
 
+    // --order-by flag takes precedence over ORDER BY in raw JQL
     if let Some(field) = &args.order_by {
         let dir = if args.reverse { "DESC" } else { "ASC" };
         jql.push_str(&format!(" ORDER BY {field} {dir}"));
+    } else if let Some(order) = &raw_order_by {
+        jql.push_str(order);
     }
 
     Ok(jql)
@@ -570,6 +581,43 @@ mod tests {
             result,
             "(status = Done OR assignee = me) AND status = \"Open\""
         );
+    }
+
+    #[test]
+    fn build_jql_raw_with_order_by() {
+        let mut args = default_search_args();
+        args.jql = Some("project = FOO ORDER BY created DESC".to_string());
+        let result = build_jql(&args).unwrap();
+        assert_eq!(result, "(project = FOO) ORDER BY created DESC");
+    }
+
+    #[test]
+    fn build_jql_raw_order_by_with_filter() {
+        let mut args = default_search_args();
+        args.jql = Some("project = FOO ORDER BY created".to_string());
+        args.status = Some("Open".to_string());
+        let result = build_jql(&args).unwrap();
+        assert_eq!(
+            result,
+            "(project = FOO) AND status = \"Open\" ORDER BY created"
+        );
+    }
+
+    #[test]
+    fn build_jql_raw_order_by_overridden_by_flag() {
+        let mut args = default_search_args();
+        args.jql = Some("project = FOO ORDER BY created".to_string());
+        args.order_by = Some("updated".to_string());
+        let result = build_jql(&args).unwrap();
+        assert_eq!(result, "(project = FOO) ORDER BY updated ASC");
+    }
+
+    #[test]
+    fn build_jql_raw_order_by_case_insensitive() {
+        let mut args = default_search_args();
+        args.jql = Some("project = FOO order by created DESC".to_string());
+        let result = build_jql(&args).unwrap();
+        assert_eq!(result, "(project = FOO) order by created DESC");
     }
 
     #[test]

@@ -13,33 +13,45 @@ description: >
 
 # atl CLI
 
-`atl` is a unified, non-interactive CLI for Atlassian **Confluence** and **Jira**. It works with both Cloud and Data Center/Server instances, supports structured output (`console`, `json`, `toon`, `toml`, `csv`), multiple named profiles, and a generic `atl api` passthrough for any REST endpoint.
+Unified, non-interactive CLI for Atlassian **Confluence** and **Jira**. Works with Cloud and Data Center/Server. Structured output, multiple named profiles, and `atl api` passthrough for any REST endpoint.
 
-## Key design principles
+## Composing a command
 
-- **Non-interactive**: no prompts, no spinners, no colour unless stdout is a TTY. Output is identical under `| cat` and in CI. The only exceptions are `atl init` (setup wizard) and `atl auth login`.
-- **Structured output**: every command returns structured data. Use `-F json` to get machine-readable output, `--jq` to filter with jq expressions, `--template` for minijinja templates.
-- **Multi-profile**: one config file, many profiles. Switch with `-p <name>` or `ATL_PROFILE` env var.
-
-## Setup
-
-```bash
-# Install
-curl -sSfL https://raw.githubusercontent.com/mazuninky/atl/master/scripts/install.sh | sh
-
-# Interactive setup wizard (creates config + stores token in OS keyring)
-atl init
-
-# Or authenticate manually
-atl auth login --domain acme.atlassian.net --email me@acme.com
+```
+atl [global-flags] <service> <action> [subaction] [args]
 ```
 
-Config lives at `~/.config/atl/atl.toml`. Environment overrides: `ATL_CONFIG`, `ATL_PROFILE`, `ATL_API_TOKEN`.
+1. **Which service?** `confluence` (or `conf`, `c`) / `jira` (or `j`) / `api` (passthrough)
+2. **Which action?** Match the verb: `search`, `view`, `create`, `update`, `delete`, `move`, etc.
+3. **Output?** `-F toon` when you read the output, `-F json` for scripts/`--jq`, `-F csv` for spreadsheets
+4. **Pagination?** `--all` for full result sets, `--limit N` for bounded queries
+5. **Body content?** `@file` to read from file, `-` for stdin, or a literal string
+6. **Profile?** `-p <name>` or `ATL_PROFILE` env var
 
-## Command structure
+For endpoints without a dedicated command, fall back to `atl api --service <svc> <endpoint>`.
 
-```text
-atl [global-flags] <service> <action> [args]
+For the **full list** of every command and flag, see:
+- Confluence: `references/confluence-commands.md`
+- Jira: `references/jira-commands.md`
+
+## Output formatting
+
+**Prefer `-F toon`** when running `atl` commands yourself (output goes into your context). TOON is a compact format that uses significantly fewer tokens than JSON while preserving all data. Use `-F json` only when the user's script needs machine-parseable output or when using `--jq`.
+
+```bash
+# When YOU read the output — saves context tokens
+atl -F toon j view PROJ-123
+atl -F toon c info 123456
+
+# When a SCRIPT parses the output
+atl -F json j search "project = PROJ" --jq '.issues[].key'
+
+# Minijinja template
+atl j search "project = PROJ" \
+  --template '{% for i in issues %}{{ i.key }}: {{ i.fields.summary }}{% endfor %}'
+
+# CSV for spreadsheet import
+atl -F csv j search "project = PROJ" --fields "key,summary,status,priority"
 ```
 
 ### Global flags
@@ -52,73 +64,65 @@ atl [global-flags] <service> <action> [args]
 | `--template` | | Format output with a minijinja template |
 | `--no-color` | | Disable colored output |
 | `--no-pager` | | Don't pipe through pager |
-| `--retries` | | Max HTTP retries on transient errors (default: 3, 0 = off) |
+| `--retries` | | Max HTTP retries (default: 3, 0 = off) |
 | `--verbose` | `-v` | Increase log verbosity (-v, -vv, -vvv) |
 | `--quiet` | `-q` | Suppress all output except errors |
 | `--config` | | Path to alternate config file |
 
-### Service aliases
+### Body input convention
 
-- `confluence` = `conf` = `c`
-- `jira` = `j`
+Commands that accept `--body`, `atl j comment`, or `atl api --input` support three forms:
 
-## Confluence commands
+| Form | Description |
+|---|---|
+| `"literal string"` | Inline text |
+| `@path/to/file` | Read from file |
+| `-` | Read from stdin |
 
-### Reading and searching
+## Confluence — common operations
+
+Service aliases: `confluence` = `conf` = `c`
+
+### Reading & searching
 
 ```bash
-# Read a page by ID (returns full body)
-atl c read 123456
-atl c read 123456 --body-format view     # rendered HTML instead of storage format
-atl c read 123456 --web                   # open in browser
-
-# Get page metadata (lightweight — no body, includes version number)
-# Use `info` instead of `read` when you only need metadata (title, version, status)
-atl c info 123456
-
-# Search with CQL
+atl c read 123456                                  # full page body (storage format)
+atl c read 123456 --body-format view               # rendered HTML
+atl c read 123456 --web                            # open in browser
+atl c info 123456                                  # metadata only (no body — fast)
 atl c search "space = DEV AND type = page" --limit 10
-atl c search "space = DEV AND type = page" --all    # auto-paginate
-
-# Find by title
+atl c search "space = DEV AND type = page" --all   # auto-paginate all results
 atl c find --title "Design notes" --space DEV
-
-# List child pages
-atl c children 123456
-atl c children 123456 --depth 3 --tree    # indented tree view
-
-# List pages in a space (v2 API)
-atl c page-list --space-id 65537 --limit 50
+atl c children 123456 --depth 3 --tree             # indented tree view
+atl c page-list --space-id 65537 --limit 50        # list pages via v2 API
 ```
 
-### Creating and updating
+### Creating & updating
 
 ```bash
-# Create page from literal body (Confluence storage format)
-atl c create --space DEV --title "New page" --body "<p>Hello</p>"
-
-# Create page from markdown file
+# Create from markdown file
 atl c create --space DEV --title "Design" --body @design.md --input-format markdown
 
-# Create page from stdin
-echo "<p>content</p>" | atl c create --space DEV --title "Piped" --body -
-
-# Create with parent
+# Create with parent page
 atl c create --space DEV --title "Sub-page" --body @body.md --parent 123456 --input-format markdown
 
-# Update a page (--title, --body, and --version are ALL required)
-atl c update 123456 --title "Updated title" --body @new-body.md --version 5 --input-format markdown
+# Update — ALL THREE flags are required: --title, --body, --version
+# Step 1: get current version and title
+atl -F toon c info 123456
+# Step 2: increment version by 1, pass existing title
+atl c update 123456 --title "Title" --body @new.md --version 5 --input-format markdown
 
-# Typical update workflow: get current version first, then update
-# atl c info 123456   →  note the version number (e.g. 4)
-# atl c update 123456 --title "Same or new title" --body @new.md --version 5
+# Scriptable pattern: extract values programmatically
+TITLE=$(atl -F json c info 123456 --jq '.title')
+VERSION=$(atl -F json c info 123456 --jq '.version.number')
+atl c update 123456 --title "$TITLE" --body @new.md --version $((VERSION + 1)) --input-format markdown
 
-# Update title only
+# Update title only (still needs version)
 atl c update-title 123456 --title "Better title" --version 5
 
-# Delete (move to trash)
+# Delete
 atl c delete 123456
-atl c delete 123456 --purge    # permanent delete
+atl c delete 123456 --purge                        # permanent delete
 ```
 
 ### Attachments
@@ -126,8 +130,9 @@ atl c delete 123456 --purge    # permanent delete
 ```bash
 atl c attachment list 123456
 atl c attachment upload 123456 --file ./diagram.png
-atl c attachment download ATT789 --output ./downloads/
+atl c attachment download ATT789 --page-id 123456 --output ./downloads/
 atl c attachment delete ATT789
+atl c attachment get ATT789                        # attachment metadata (v2)
 ```
 
 ### Comments (v2)
@@ -135,52 +140,71 @@ atl c attachment delete ATT789
 ```bash
 atl c footer-comment list 123456
 atl c footer-comment create 123456 --body "Looks good!"
+atl c footer-comment get COMMENT_ID
+atl c footer-comment update COMMENT_ID --body "Updated" --version 2
+atl c footer-comment delete COMMENT_ID
 atl c inline-comment list 123456
+atl c inline-comment list 123456 --resolution-status open
 ```
 
 ### Other operations
 
 ```bash
-atl c export 123456 --output-dir ./backup/       # export page + attachments
-atl c copy-tree 123456 --target-space NEWSPACE    # copy page tree
-atl c versions 123456                              # version history
-atl c label list 123456                            # page labels
-atl c label add 123456 --labels "review,draft"     # add labels
-atl c space list                                   # list spaces
-atl c space get DEV                                # space details
+atl c export 123456 --output-dir ./backup/
+atl c copy-tree 123456 --target-space NEWSPACE --dry-run
+atl c versions 123456
+atl c label list 123456
+atl c label add 123456 review draft
+atl c label remove 123456 draft
+atl c space list --all
+atl c space get SPACE_ID
+atl c blog list --space DEV
+atl c blog read BLOG_ID
+atl c blog create --space DEV --title "Update" --body @post.md --input-format markdown
+atl c task list --page-id 123456
+atl c property list 123456
+atl c property set 123456 my-key --value '{"foo": 1}'
 ```
 
-## Jira commands
+## Jira — common operations
+
+Service alias: `jira` = `j`
 
 ### Searching
 
+There is **no `--project` filter flag** — project filtering goes in JQL. For simple conditions (status, type, assignee) prefer filter flags; for complex expressions or project scoping use JQL. You can mix both — `atl` combines JQL and filter flags via AND.
+
 ```bash
-# Search with raw JQL
+# Project filtering always goes in JQL
 atl j search "project = PROJ AND status = Open" --limit 20
-atl j search "assignee = currentUser() AND resolution = Unresolved"
 
-# Search with filter flags (combined via AND)
+# Simple filters — use flags (readable, less quoting)
 atl j search --status "In Progress" --assignee currentUser() --type Bug
-atl j search --project PROJ --label urgent --order-by priority --reverse
 
-# Fetch all results
+# Mix JQL (for project) with flags (for the rest)
+atl j search "project = PROJ" --label urgent --order-by priority --reverse
+atl j search "project = PROJ" --type Bug --assignee currentUser()
+
+# Date filters
+atl j search "project = PROJ" --created-after 2026-01-01 --watching
+
+# Fetch all results (auto-paginate past default limit of 50)
 atl j search "project = PROJ" --all
 
 # Choose which fields to return
 atl j search "project = PROJ" --fields "key,summary,status,created,assignee"
 ```
 
-### Viewing and creating
+Available filter flags: `--status`, `--priority`, `--assignee`, `--reporter`, `--type`, `--label`, `--component`, `--resolution`, `--created`, `--created-after`, `--updated`, `--updated-after`, `--watching`, `--order-by`, `--reverse`.
+
+### Viewing & creating
 
 ```bash
-# View a single issue
 atl j view PROJ-123
-atl j view PROJ-123 --web     # open in browser
+atl j view PROJ-123 --web                  # open in browser
+atl j me                                    # current user info
 
-# Current user info
-atl j me
-
-# Create an issue
+# Create issue
 atl j create --project PROJ --issue-type Task --summary "Fix login bug"
 atl j create --project PROJ --issue-type Bug \
   --summary "Error on save" \
@@ -199,356 +223,240 @@ atl j create --project PROJ --issue-type Story \
   --custom customfield_10001=team-alpha
 ```
 
-### Updating and transitioning
+### Updating & transitioning
 
 ```bash
 # Update fields
 atl j update PROJ-123 --summary "New title" --priority Medium
-atl j update PROJ-123 --labels "done,reviewed" --assignee 5b10ac...
+atl j update PROJ-123 --labels "done,reviewed" --fix-version "v2.0"
 
-# List available transitions
-atl j transitions PROJ-123
-
-# Move issue to new status (use transition ID from above)
-atl j move PROJ-123 --transition 31
+# Transition: ALWAYS use numeric transition ID, not status name
+atl j transitions PROJ-123                 # list available transitions + IDs
+atl j move PROJ-123 --transition 31        # use the numeric ID
 
 # Assign
-atl j assign PROJ-123 5b10ac8d82e05b22cc7d4ef5
+atl j assign PROJ-123 ACCOUNT_ID
 
-# Clone an issue
+# Clone
 atl j clone PROJ-123 --summary "Copy of PROJ-123"
+
+# Delete
+atl j delete PROJ-123
+atl j delete PROJ-123 --delete-subtasks
 ```
 
 ### Comments
 
 ```bash
-# Add a comment
 atl j comment PROJ-123 "This is done"
-atl j comment PROJ-123 @comment.md              # from file
-echo "LGTM" | atl j comment PROJ-123 -          # from stdin
-
-# List comments
-atl j comments PROJ-123
-
-# Get/delete specific comment
+atl j comment PROJ-123 @comment.md             # from file
+echo "LGTM" | atl j comment PROJ-123 -        # from stdin
+atl j comments PROJ-123                        # list comments
 atl j comment-get PROJ-123 10042
 atl j comment-delete PROJ-123 10042
 ```
 
-**Jira Cloud ADF note**: On Jira Cloud, comment `.body` is an Atlassian Document Format (ADF) object, not a plain string. When extracting comment text with `--jq`, you may need a deeper path like `.comments[].body.content[].content[].text` instead of just `.comments[].body`.
+**Jira Cloud ADF note**: On Jira Cloud, comment `.body` is an Atlassian Document Format (ADF) object. When extracting text with `--jq`, use a deeper path like `.comments[].body.content[].content[].text`.
 
-### Boards and sprints
+### Boards, sprints, epics
 
 ```bash
-atl j board list
+# Boards
 atl j board list --project PROJ
-atl j board view 42
+atl j board get 42
+atl j board issues 42 --limit 50
+atl j board backlog 42
 
-atl j sprint list --board-id 42
-atl j sprint view 100
-atl j sprint issues 100 --limit 50
+# Sprints — board_id is positional
+atl j sprint list 42                        # list sprints for board 42
+atl j sprint list 42 --state active         # filter by state
+atl j sprint get 100                        # sprint details
+atl j sprint issues 100 --limit 50          # issues in sprint
+atl j sprint create --board-id 42 --name "Sprint 5"
+atl j sprint move 100 PROJ-1 PROJ-2        # move issues into sprint
 
-atl j backlog-move --board-id 42 --issues PROJ-1,PROJ-2
+# Epics — board_id is positional for list
+atl j epic list 42                          # list epics for board
+atl j epic get PROJ-50                      # epic details
+atl j epic issues PROJ-50                   # issues in epic
+atl j epic add PROJ-50 PROJ-1 PROJ-2       # add issues to epic
+atl j epic remove PROJ-1 PROJ-2            # remove issues from epic
+
+# Backlog — issue keys are positional
+atl j backlog-move PROJ-1 PROJ-2
 ```
 
-### Other Jira operations
+### Other operations
 
 ```bash
-atl j link --link-type Blocks PROJ-1 PROJ-2        # link issues
-atl j attach PROJ-123 --file ./screenshot.png       # attach file
-atl j watch PROJ-123                                 # watch issue
-atl j watchers PROJ-123                              # list watchers
-atl j changelog PROJ-123                             # change history
-atl j worklog list PROJ-123                          # time tracking
-atl j project list                                   # list projects
-atl j field list                                     # list fields
-atl j filter list                                    # saved filters
+atl j link --link-type Blocks PROJ-1 PROJ-2
+atl j attach PROJ-123 --file ./screenshot.png
+atl j watch PROJ-123
+atl j unwatch PROJ-123
+atl j watchers PROJ-123
+atl j changelog PROJ-123
+atl j worklog list PROJ-123
+atl j worklog add PROJ-123 --time-spent "2h 30m" --comment "code review"
+atl j project list
+atl j project get PROJ
+atl j filter list --mine
+atl j filter create --name "My bugs" --jql "assignee = currentUser() AND type = Bug"
+atl j field list --custom
+atl j component list PROJ
+atl j version list PROJ
+atl j version release 42                    # mark version as released
+atl j labels --all
+atl j user search "john"
+atl j user assignable PROJ-123
 ```
 
 ## Generic REST passthrough (`atl api`)
 
-When a dedicated command doesn't exist, `atl api` gives you authenticated curl over your profile:
+For endpoints without a dedicated command:
 
 ```bash
 # GET
 atl api --service jira rest/api/2/myself
 atl api --service confluence /wiki/api/v2/pages --query space-id=123
 
-# With pagination
+# Auto-paginate
 atl api --service jira rest/api/2/search --query jql='project=TEST' --paginate
 
 # POST with JSON fields
 atl api --service jira -X POST rest/api/2/issue \
   --raw-field 'fields={"project":{"key":"TEST"},"summary":"New issue","issuetype":{"name":"Task"}}'
 
-# POST with body from file
+# POST from file
 atl api --service jira -X POST rest/api/2/issue --input @payload.json
 
-# Preview request without sending
+# Preview without sending
 atl api --service jira rest/api/2/myself --preview
-
-# Custom headers
-atl api --service jira -H "X-Custom:value" rest/api/2/myself
 ```
 
-## Output formatting
-
-All commands support the same output pipeline: `-F <format>`, `--jq`, `--template`. Always use the short form `-F` (not `--format`) — it's the idiomatic style.
-
-**Prefer `-F toon`** when running `atl` commands yourself (i.e. when the output goes into your context). TOON (Token-Oriented Object Notation) is a compact structured format that uses significantly fewer tokens than JSON while preserving all data — this saves context window space. Use `-F json` only when the user's script needs machine-parseable output or when using `--jq`.
+## Setup & auth
 
 ```bash
-# Toon output (preferred when you read the output — saves tokens)
-atl -F toon j view PROJ-123
-atl -F toon c info 123456
-atl -F toon j search "project = PROJ" --limit 5
+atl init                                       # interactive setup wizard
+atl auth login                                 # interactive login
+atl auth login --service jira --domain acme.atlassian.net --email me@acme.com
+atl auth login --with-token < token.txt        # non-interactive (CI)
+atl auth login --auth-type bearer              # PAT instead of email+token
+atl auth status                                # show auth status
+atl auth token --service jira                  # print resolved token
+atl auth logout
 
-# JSON output (for scripting, --jq, and machine parsing)
-atl -F json j search "project = PROJ" --limit 5
+atl config list                                # list profiles
+atl config show work                           # profile details
+atl config set-default work                    # switch default profile
+atl config set-defaults --project PROJ --space DEV
 
-# Extract specific fields with jq
-atl -F json j view PROJ-123 --jq '.fields.status.name'
-
-# Get just issue keys
-atl -F json j search "project = PROJ" --jq '.issues[].key'
-
-# Minijinja template
-atl j search "project = PROJ" \
-  --template '{% for i in issues %}{{ i.key }}: {{ i.fields.summary }}{% endfor %}'
-
-# CSV for spreadsheet import
-atl -F csv j search "project = PROJ" --fields "key,summary,status,priority"
-
-# TOML output
-atl -F toml c info 123456
-```
-
-## Configuration management
-
-```bash
-atl config list                           # list all profiles
-atl config show work                      # show profile details
-atl config set-default work               # set default profile
-atl config set-defaults --project PROJ    # set default Jira project
-atl config set-defaults --space DEV       # set default Confluence space
-atl config delete old-profile             # delete a profile
-```
-
-## Aliases
-
-User-defined command aliases for frequent operations:
-
-```bash
 atl alias set mybugs 'jira search "assignee = currentUser() AND type = Bug"'
 atl alias list
-atl alias delete mybugs
-
-# Use it
-atl mybugs
+atl browse PROJ-123                            # auto-detect service, open in browser
+atl self check                                 # check for updates
+atl self update                                # update binary
 ```
 
-## Authentication
+Config: `~/.config/atl/atl.toml`. Env overrides: `ATL_CONFIG`, `ATL_PROFILE`, `ATL_API_TOKEN`.
+
+Token resolution: `ATL_API_TOKEN` env > legacy `api_token` in TOML > OS keyring.
+
+## CI / scripting
+
+`atl` is non-interactive by design. Key points for CI:
+- Set `ATL_API_TOKEN` env — no keyring needed
+- Use `-F json` with `--jq` for machine parsing (**not** `-F toon` — toon is for human/Claude reading)
+- Use `--all` for complete result sets (default limits: 50 for Jira, 25 for Confluence)
+- Pager/color auto-disabled when stdout is not a TTY
 
 ```bash
-atl auth login                             # interactive wizard
-atl auth login --service jira --domain acme.atlassian.net --email me@acme.com
-atl auth login --with-token < token.txt    # non-interactive (CI)
-atl auth status                            # show auth status
-atl auth token --service jira              # print resolved token
-atl auth logout                            # remove stored credentials
-```
-
-Token resolution order: `ATL_API_TOKEN` env > legacy `api_token` in config TOML > OS keyring.
-
-For CI/scripts, set `ATL_API_TOKEN` environment variable — no keyring needed.
-
-## Body input convention
-
-Commands that accept a body (`--body`, `atl j comment`, `atl api --input`) support three forms:
-
-| Form | Description |
-|---|---|
-| `"literal string"` | Inline text |
-| `@path/to/file` | Read from file |
-| `-` | Read from stdin |
-
-## CI / scripting usage
-
-`atl` is non-interactive by design and works well in CI pipelines and shell scripts. Key points:
-
-- **Auth**: set `ATL_API_TOKEN` env var — no keyring or `atl auth login` needed
-- **Profile**: set `ATL_PROFILE` or use `-p <name>` if not using default
-- **Pager**: disabled automatically when stdout is not a TTY; add `--no-pager` explicitly if piping to a file just to be safe
-- **Color**: disabled automatically when stdout is not a TTY; `--no-color` for explicit control
-- **Machine output**: always use `-F json` with `--jq` or `--template` for parsing in scripts
-- **Pagination**: use `--all` to get complete result sets
-
-```bash
-#!/usr/bin/env bash
-set -euo pipefail
-
+# Basic bulk operation
 export ATL_API_TOKEN="${JIRA_TOKEN}"
-export ATL_PROFILE="ci"
-
-# Search and extract keys
 KEYS=$(atl -F json j search "project = PROJ AND status = Open" --all --jq '.issues[].key')
-
-# Loop over results
 for key in $KEYS; do
-  echo "Processing: $key"
-  atl j comment "$key" "Automated sweep — closing stale issues"
+  atl j comment "$key" "Automated sweep"
   atl j move "$key" --transition 31
 done
 ```
 
-## Self-update
-
 ```bash
-atl self check              # check for newer release
-atl self update              # download and replace binary
-atl self update --to 2026.16.2  # pin to specific version
-```
-
----
-
-## Examples
-
-**Example 1: Find all open bugs assigned to me and export as CSV**
-```bash
-atl -F csv j search --status Open --type Bug --assignee currentUser() --all \
-  --fields "key,summary,priority,created"
-```
-
-**Example 2: Create a Confluence page from a markdown file under a parent page**
-```bash
-atl c create --space DEV --title "Sprint 42 retro" \
-  --body @retro.md --input-format markdown --parent 98765
-```
-
-**Example 3: Bulk-transition issues from a JQL search**
-```bash
-# First find the transition ID
-atl j transitions PROJ-100
-
-# Then transition each issue
-for key in $(atl -F json j search "project = PROJ AND status = 'To Do'" --jq '.issues[].key' --all); do
-  atl j move "$key" --transition 31
+# Bulk with error handling (for CI — don't stop on first failure)
+FAILED=0
+for key in $KEYS; do
+  if atl j comment "$key" "Reviewed" 2>/dev/null; then
+    echo "[OK]   $key"
+  else
+    echo "[FAIL] $key"
+    FAILED=$((FAILED + 1))
+  fi
 done
+[ "$FAILED" -gt 0 ] && exit 1
 ```
 
-**Example 4: Use `atl api` for an endpoint without dedicated command support**
 ```bash
-# Get all dashboards
-atl api --service jira rest/api/2/dashboard --paginate
-
-# Create a filter
-atl api --service jira -X POST rest/api/2/filter \
-  --field name="My filter" --raw-field 'jql="project = PROJ"'
-```
-
-**Example 5: Script-friendly: extract issue status into a shell variable**
-```bash
+# Extract a single value for use in another command
 STATUS=$(atl -F json j view PROJ-123 --jq '.fields.status.name')
-echo "Current status: $STATUS"
+KEY=$(atl -F json j create --project PROJ --issue-type Bug --summary "Title" --jq '.key')
 ```
 
-**Example 6: CI pipeline — create an issue and capture the key**
+## Anti-examples
+
+**Using `read` when you only need metadata**
 ```bash
-export ATL_API_TOKEN="$JIRA_TOKEN"
-export ATL_PROFILE="ci"
-
-KEY=$(atl -F json j create --project PROJ --issue-type Bug \
-  --summary "Build failure in CI #${BUILD_NUMBER}" \
-  --jq '.key')
-echo "Created: $KEY"
-```
-
----
-
-## Anti-examples (common mistakes)
-
-**Anti-example 1: Using `--format` for the global flag**
-```bash
-# WRONG: the long flag is --format but short is -F
-atl --format json j view PROJ-123    # works but verbose
-atl -F json j view PROJ-123          # preferred, shorter
-
-# WRONG: placing format flag after the subcommand (it's global, works anywhere, but convention is before)
-atl j view PROJ-123 -F json          # works but unconventional
-```
-
-**Anti-example 2: Forgetting required flags on page update**
-```bash
-# WRONG: --title, --body, and --version are ALL required for update
-atl c update 123456 --body "content"                        # missing --title and --version
-atl c update 123456 --body "content" --version 5            # missing --title
-
-# RIGHT: get the current version with `info`, then pass all three required flags
-atl c info 123456                     # check current version (e.g. version: 4)
-atl c update 123456 --title "Page title" --body @content.md --version 5
-```
-
-**Anti-example 3: Using transition name instead of ID**
-```bash
-# WRONG: move expects a transition ID, not a name
-atl j move PROJ-123 --transition "Done"
-
-# RIGHT: get transition IDs first
-atl j transitions PROJ-123           # find the ID for "Done"
-atl j move PROJ-123 --transition 31  # use the numeric ID
-```
-
-**Anti-example 4: Writing to a read-only profile**
-```bash
-# If the profile has read_only = true, writes will be refused at the client layer.
-# The error comes from atl itself, not the server.
-atl -p readonly-prod c create --space DEV --title "Test"
-# Error: write operations are not allowed for read-only profiles
-```
-
-**Anti-example 5: Expecting interactive prompts from commands**
-```bash
-# WRONG: atl is non-interactive (except init/auth login).
-# Don't expect confirmation prompts before delete.
-atl c delete 123456   # this will delete immediately, no "are you sure?"
-atl j delete PROJ-1   # same — immediate deletion
-
-# Use --preview with atl api if you want to inspect before sending
-atl api --service jira -X DELETE rest/api/2/issue/PROJ-1 --preview
-```
-
-**Anti-example 6: Trying to use `--body-format markdown` on create (wrong flag name)**
-```bash
-# WRONG: the flag for input is --input-format, not --body-format
-atl c create --space DEV --title "X" --body @doc.md --body-format markdown
-
-# RIGHT:
-atl c create --space DEV --title "X" --body @doc.md --input-format markdown
-
-# --body-format is only for reading: it controls whether you get storage or view HTML
-atl c read 123456 --body-format view
-```
-
-**Anti-example 7: Using `atl c read` when you only need the version number**
-```bash
-# WRONG: reads the entire page body just to get the version
-atl -F json c read 123456 --include-versions --jq '.version.number'
-
-# RIGHT: `info` returns metadata without the body — faster and lighter
+# WRONG: fetches the entire page body just to get the version
+atl -F json c read 123456 --jq '.version.number'
+# RIGHT: `info` is lighter — no body
 atl -F json c info 123456 --jq '.version.number'
 ```
 
----
+**Forgetting required flags on page update**
+```bash
+# WRONG: --title, --body, and --version are ALL required
+atl c update 123456 --body "content"
+# RIGHT: get version first, then pass all three
+atl -F toon c info 123456
+atl c update 123456 --title "Page title" --body @content.md --version 5
+```
 
-## Quick reference for building `atl` commands
+**Using transition name instead of ID**
+```bash
+# WRONG: move expects a numeric transition ID
+atl j move PROJ-123 --transition "Done"
+# RIGHT: get IDs first
+atl j transitions PROJ-123
+atl j move PROJ-123 --transition 31
+```
 
-When composing an `atl` command, follow this decision tree:
+**Mixing up --body-format and --input-format**
+```bash
+# WRONG: --body-format is for reading, not writing
+atl c create --space DEV --title "X" --body @doc.md --body-format markdown
+# RIGHT: --input-format for writes, --body-format for reads
+atl c create --space DEV --title "X" --body @doc.md --input-format markdown
+atl c read 123456 --body-format view
+```
 
-1. **Which service?** `confluence` (or `c`) / `jira` (or `j`) / `api` (passthrough)
-2. **Which action?** Match the verb: `search`, `view`, `create`, `update`, `delete`, `move`, etc.
-3. **Output needs?** Add `-F json` for machine parsing, `--jq` for extraction, `-F csv` for spreadsheets
-4. **Pagination?** Add `--all` for full result sets, or `--limit N` for bounded queries
-5. **Body content?** Use `@file`, `-` (stdin), or inline string
-6. **Profile?** Add `-p <name>` or set `ATL_PROFILE` env var if not using default
+**Using -F json when you (Claude) read the output**
+```bash
+# WASTEFUL: JSON uses many tokens in your context
+atl -F json j search "project = PROJ" --limit 5
+# BETTER: TOON preserves all data in fewer tokens
+atl -F toon j search "project = PROJ" --limit 5
+```
 
-For endpoints without a dedicated command, fall back to `atl api --service <svc> <endpoint>`.
+**Writing to a read-only profile**
+```bash
+# read_only = true profiles refuse writes at the client layer
+atl -p readonly-prod c create --space DEV --title "Test"
+# → Error: write operations are not allowed for read-only profiles
+```
+
+## Full command reference
+
+For the complete list of all commands and flags:
+
+- **Confluence** — read `references/confluence-commands.md`
+  Covers: pages, spaces, blogs, attachments, comments (footer & inline), labels, properties, whiteboards, databases, folders, custom content, tasks, classification, admin
+
+- **Jira** — read `references/jira-commands.md`
+  Covers: issues, projects, boards, sprints, epics, filters, worklogs, components, versions, dashboards, users, groups, fields, workflows, screens, roles, webhooks, schemes, admin

@@ -2,8 +2,11 @@
 """Patch Jira Platform OpenAPI spec for use with Prism mock server.
 
 Two transforms:
-1. Rename `/rest/api/3/` paths to `/rest/api/2/` so they match the
-   paths atl actually sends (atl pins to v2, which is wire-compatible).
+1. Duplicate `/rest/api/3/` paths under `/rest/api/2/` so the spec matches
+   both Cloud (v3) and Data Center (v2) code paths in atl. Jira Cloud
+   exposes both v2 and v3 at the wire level; DC exposes only v2. Rather
+   than renaming v3 out of the spec (which hides the Cloud branches from
+   Prism), we keep v3 and add a v2 copy that shares the same schemas.
 2. Fix response examples that contain JSON-encoded strings. The official
    Atlassian spec ships ~695 examples as stringified JSON (e.g.
    `"example": "{\"foo\": 1}"`) rather than actual JSON objects. Prism
@@ -18,15 +21,27 @@ import os
 SPEC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "specs")
 
 
-def rename_jira_paths(spec):
+def duplicate_jira_paths(spec):
+    """Add `/rest/api/2/*` aliases for every `/rest/api/3/*` path.
+
+    The original v3 entries are preserved so Cloud-flavor code (which hits
+    `/rest/api/3/...`) is still validated. The v2 copies cover the Data
+    Center branch (which hits `/rest/api/2/...`). Both variants share the
+    same PathItem object — they are identical at the wire level on Cloud,
+    and DC is wire-compatible with v2 for the subset of endpoints we care
+    about.
+    """
     old_paths = spec.get("paths", {})
-    new_paths = {}
+    new_paths = dict(old_paths)
     count = 0
     for path, value in old_paths.items():
-        new_path = path.replace("/rest/api/3/", "/rest/api/2/")
-        new_paths[new_path] = value
-        if new_path != path:
-            count += 1
+        if "/rest/api/3/" not in path:
+            continue
+        v2_path = path.replace("/rest/api/3/", "/rest/api/2/")
+        if v2_path in new_paths:
+            continue
+        new_paths[v2_path] = value
+        count += 1
     spec["paths"] = new_paths
     return count
 
@@ -177,14 +192,14 @@ def fix_query_array_object_params(spec):
     return fixed
 
 
-def patch_file(input_name, output_name, rename_paths=False, prefix_basepath=False):
+def patch_file(input_name, output_name, duplicate_paths=False, prefix_basepath=False):
     input_path = os.path.join(SPEC_DIR, input_name)
     output_path = os.path.join(SPEC_DIR, output_name)
 
     with open(input_path) as f:
         spec = json.load(f)
 
-    renamed = rename_jira_paths(spec) if rename_paths else 0
+    duplicated = duplicate_jira_paths(spec) if duplicate_paths else 0
     fixed_examples = fix_string_examples(spec)
     fixed_params = fix_query_array_object_params(spec)
     fixed_bodies = fix_multipart_body_schemas(spec)
@@ -195,8 +210,8 @@ def patch_file(input_name, output_name, rename_paths=False, prefix_basepath=Fals
         json.dump(spec, f, separators=(",", ":"))
 
     print(f"{input_name} -> {output_name}")
-    if rename_paths:
-        print(f"  renamed {renamed} paths: /rest/api/3/ -> /rest/api/2/")
+    if duplicate_paths:
+        print(f"  duplicated {duplicated} paths: /rest/api/3/ -> +/rest/api/2/")
     print(f"  parsed {fixed_examples} stringified examples")
     if fixed_params:
         print(f"  rewrote {fixed_params} query 'array of object' params -> string")
@@ -209,7 +224,7 @@ def patch_file(input_name, output_name, rename_paths=False, prefix_basepath=Fals
 
 
 if __name__ == "__main__":
-    patch_file("jira-platform.v3.json", "jira-platform.patched.json", rename_paths=True)
+    patch_file("jira-platform.v3.json", "jira-platform.patched.json", duplicate_paths=True)
     patch_file("jira-software.v3.json", "jira-software.patched.json")
     patch_file("confluence.v3.json", "confluence.patched.json")
     patch_file(

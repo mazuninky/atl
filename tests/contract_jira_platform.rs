@@ -1,8 +1,9 @@
-//! Contract tests run against the Jira **Cloud** OpenAPI spec, but on a
-//! Prism server bound to `127.0.0.1`, which auto-detects as `JiraFlavor::DataCenter`.
-//! So these tests exercise the v2 (`/rest/api/2/*`) code branches. Cloud-flavor
-//! coverage (v3 `/search/jql`, v3 `/issue/bulk`, v3 archive) requires extending
-//! the OpenAPI spec with the v3 paths — tracked separately.
+//! Contract tests for Jira Platform. The default runner (`runner()` /
+//! `runner_ro()`) binds to Prism on `127.0.0.1`, which auto-detects as
+//! `JiraFlavor::DataCenter` — those tests validate the v2 code branches.
+//! `runner_cloud()` adds an explicit `flavor = "cloud"` override so tests
+//! using it validate the v3 branches (`/search/jql`, `/issue/bulk`,
+//! `/issue/archive`, `/issue/unarchive`). The patched spec documents both.
 
 mod common;
 
@@ -36,6 +37,22 @@ fn runner_ro() -> &'static AtlRunner {
     &SETUP_RO.1
 }
 
+static SETUP_CLOUD: LazyLock<(TestConfig, AtlRunner)> = LazyLock::new(|| {
+    // Force JiraClient onto the Cloud (v3) code paths even though Prism is
+    // bound to 127.0.0.1. Without this override the domain auto-detects as
+    // Data Center and we'd just be repeating the v2 tests above.
+    let config = TestConfigBuilder::new()
+        .jira(PRISM.base_url())
+        .jira_flavor("cloud")
+        .build();
+    let runner = AtlRunner::new(&config.config_path);
+    (config, runner)
+});
+
+fn runner_cloud() -> &'static AtlRunner {
+    &SETUP_CLOUD.1
+}
+
 // -- Issues Core --
 
 #[test]
@@ -61,6 +78,70 @@ fn search_with_filters() {
 #[ignore]
 fn search_with_limit() {
     runner().run_ok(&["jira", "search", "project=TEST", "--limit", "10"]);
+}
+
+// -- Issues Core (Cloud flavor) --
+//
+// Mirrors of the v2 search/bulk/archive tests above, run against an
+// instance with `flavor = "cloud"` so they exercise the v3 branches in
+// `JiraClient` (`/rest/api/3/search/jql`, `/rest/api/3/issue/bulk`,
+// `/rest/api/3/issue/archive`, `/rest/api/3/issue/unarchive`).
+
+#[test]
+#[ignore]
+fn search_basic_cloud() {
+    runner_cloud().run_ok(&["jira", "search", "project=TEST"]);
+}
+
+#[test]
+#[ignore]
+fn search_with_filters_cloud() {
+    runner_cloud().run_ok(&[
+        "jira",
+        "search",
+        "--status",
+        "Open",
+        "--assignee",
+        "currentUser()",
+    ]);
+}
+
+#[test]
+#[ignore]
+fn search_with_limit_cloud() {
+    runner_cloud().run_ok(&["jira", "search", "project=TEST", "--limit", "10"]);
+}
+
+#[test]
+#[ignore]
+fn bulk_create_cloud() {
+    // The bulk-create handler accepts either a raw JSON array of field
+    // objects or the full `{"issueUpdates": [...]}` envelope (see
+    // `JiraSubcommand::BulkCreate` in src/cli/commands/jira/mod.rs). A raw
+    // array is the smaller surface to keep stable.
+    let payload = r#"[{"project":{"key":"TEST"},"issuetype":{"name":"Task"},"summary":"bulk 1"}]"#;
+    let mut tmp = tempfile::NamedTempFile::new().expect("create tempfile");
+    std::io::Write::write_all(&mut tmp, payload.as_bytes()).expect("write payload");
+    let path = tmp.path().to_str().expect("utf-8 path");
+    let input_arg = format!("@{path}");
+    runner_cloud().run_ok(&["jira", "bulk-create", "--input", &input_arg]);
+}
+
+#[test]
+#[ignore]
+fn archive_bulk_cloud() {
+    // Two keys force the bulk path (`PUT /rest/api/3/issue/archive`). With a
+    // single key the dispatcher would call `archive_issue`, which hits
+    // `PUT /issue/{key}/archive` — that path is not in the patched spec.
+    runner_cloud().run_ok(&["jira", "archive", "TEST-1", "TEST-2"]);
+}
+
+#[test]
+#[ignore]
+fn unarchive_bulk_cloud() {
+    // `unarchive` always goes through `unarchive_issues_bulk`, so a single
+    // key still hits `PUT /rest/api/3/issue/unarchive`.
+    runner_cloud().run_ok(&["jira", "unarchive", "TEST-1", "TEST-2"]);
 }
 
 #[test]

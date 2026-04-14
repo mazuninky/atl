@@ -208,6 +208,7 @@ mod tests {
             auth_type: AuthType::default(),
             api_path: None,
             read_only: false,
+            flavor: None,
         }
     }
 

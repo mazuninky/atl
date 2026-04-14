@@ -271,6 +271,7 @@ mod tests {
             auth_type: AuthType::default(),
             api_path: api_path.map(String::from),
             read_only: false,
+            flavor: None,
         }
     }
 
@@ -284,6 +285,7 @@ mod tests {
             auth_type: AuthType::Basic,
             api_path: None,
             read_only: false,
+            flavor: None,
         }
     }
 
@@ -383,6 +385,7 @@ mod tests {
             auth_type: AuthType::Basic,
             api_path: None,
             read_only: false,
+            flavor: None,
         };
         let store = InMemoryStore::new();
         store
@@ -418,6 +421,7 @@ mod tests {
             auth_type: AuthType::Basic,
             api_path: None,
             read_only: false,
+            flavor: None,
         }
     }
 
@@ -595,6 +599,7 @@ mod tests {
             auth_type: AuthType::Basic,
             api_path: None,
             read_only: true,
+            flavor: None,
         };
         let store = InMemoryStore::new();
 

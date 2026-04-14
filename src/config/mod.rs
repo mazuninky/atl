@@ -55,6 +55,12 @@ pub struct AtlassianInstance {
     pub api_path: Option<String>,
     #[serde(default)]
     pub read_only: bool,
+    /// Explicit Jira flavor override. When `None`, the flavor is
+    /// auto-detected from the domain (`*.atlassian.net` = Cloud,
+    /// everything else = Data Center / Server). Ignored for
+    /// Confluence instances — it only affects Jira routing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub flavor: Option<JiraFlavor>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -63,6 +69,21 @@ pub enum AuthType {
     #[default]
     Basic,
     Bearer,
+}
+
+/// Jira deployment flavor.
+///
+/// Jira Cloud (`*.atlassian.net`) and Jira Data Center / Server have
+/// diverging REST APIs: the v3 endpoints (`/rest/api/3/*`) only exist on
+/// Cloud, while v2 endpoints (`/rest/api/2/*`) exist on both but with
+/// different pagination shapes for some routes. The client layer branches
+/// on this enum to pick the right route.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum JiraFlavor {
+    #[default]
+    Cloud,
+    DataCenter,
 }
 
 impl Config {
@@ -86,6 +107,33 @@ impl AtlassianInstance {
     ///   [`crate::auth::SystemKeyring`].
     ///
     /// Returns `None` when no token is available from any source.
+    /// Resolves the Jira flavor for this instance.
+    ///
+    /// An explicit [`AtlassianInstance::flavor`] override wins. Otherwise the
+    /// flavor is auto-detected from the domain: anything under
+    /// `*.atlassian.net` is treated as [`JiraFlavor::Cloud`], everything else
+    /// (self-hosted hostnames like `jira.company.com`) is treated as
+    /// [`JiraFlavor::DataCenter`].
+    ///
+    /// The detection is scheme-insensitive — `https://acme.atlassian.net` and
+    /// `acme.atlassian.net` resolve identically. Path suffixes such as
+    /// `acme.atlassian.net/wiki` are preserved (Cloud).
+    #[must_use]
+    pub fn resolved_flavor(&self) -> JiraFlavor {
+        if let Some(f) = self.flavor {
+            return f;
+        }
+        let d = self
+            .domain
+            .trim_start_matches("https://")
+            .trim_start_matches("http://");
+        if d.ends_with(".atlassian.net") || d.contains(".atlassian.net/") {
+            JiraFlavor::Cloud
+        } else {
+            JiraFlavor::DataCenter
+        }
+    }
+
     pub fn resolved_token(
         &self,
         profile: &str,
@@ -166,7 +214,60 @@ mod tests {
             auth_type: AuthType::Basic,
             api_path: None,
             read_only: false,
+            flavor: None,
         }
+    }
+
+    // -------------------------------------------------------------------
+    // resolved_flavor: auto-detect + explicit override
+    // -------------------------------------------------------------------
+
+    fn make_flavor_instance(domain: &str, flavor: Option<JiraFlavor>) -> AtlassianInstance {
+        AtlassianInstance {
+            domain: domain.into(),
+            email: None,
+            api_token: None,
+            auth_type: AuthType::Basic,
+            api_path: None,
+            read_only: false,
+            flavor,
+        }
+    }
+
+    #[test]
+    fn resolved_flavor_cloud_from_bare_atlassian_net() {
+        let inst = make_flavor_instance("acme.atlassian.net", None);
+        assert_eq!(inst.resolved_flavor(), JiraFlavor::Cloud);
+    }
+
+    #[test]
+    fn resolved_flavor_cloud_from_https_url_with_trailing_slash() {
+        let inst = make_flavor_instance("https://acme.atlassian.net/", None);
+        assert_eq!(inst.resolved_flavor(), JiraFlavor::Cloud);
+    }
+
+    #[test]
+    fn resolved_flavor_cloud_from_atlassian_net_with_wiki_subpath() {
+        let inst = make_flavor_instance("acme.atlassian.net/wiki", None);
+        assert_eq!(inst.resolved_flavor(), JiraFlavor::Cloud);
+    }
+
+    #[test]
+    fn resolved_flavor_data_center_from_self_hosted_domain() {
+        let inst = make_flavor_instance("jira.company.com", None);
+        assert_eq!(inst.resolved_flavor(), JiraFlavor::DataCenter);
+    }
+
+    #[test]
+    fn resolved_flavor_explicit_data_center_overrides_atlassian_net() {
+        let inst = make_flavor_instance("acme.atlassian.net", Some(JiraFlavor::DataCenter));
+        assert_eq!(inst.resolved_flavor(), JiraFlavor::DataCenter);
+    }
+
+    #[test]
+    fn resolved_flavor_explicit_cloud_overrides_self_hosted() {
+        let inst = make_flavor_instance("jira.company.com", Some(JiraFlavor::Cloud));
+        assert_eq!(inst.resolved_flavor(), JiraFlavor::Cloud);
     }
 
     #[test]

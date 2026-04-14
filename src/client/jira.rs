@@ -58,6 +58,10 @@ impl JiraClient {
         self.base_url.replace("/rest/api/2", "/rest/agile/1.0")
     }
 
+    fn v3_base_url(&self) -> String {
+        self.base_url.replace("/rest/api/2", "/rest/api/3")
+    }
+
     /// Public accessor for the agile API base URL.
     pub fn agile_url(&self) -> String {
         self.agile_base_url()
@@ -166,6 +170,14 @@ impl JiraClient {
     pub async fn create_issue(&self, payload: &Value) -> Result<Value, Error> {
         self.assert_writable()?;
         let url = format!("{}/issue", self.base_url);
+        debug!("POST {url}");
+        let resp = self.http.post(&url).json(payload).send().await?;
+        handle_response(resp).await
+    }
+
+    pub async fn bulk_create_issues(&self, payload: &Value) -> Result<Value, Error> {
+        self.assert_writable()?;
+        let url = format!("{}/issue/bulk", self.v3_base_url());
         debug!("POST {url}");
         let resp = self.http.post(&url).json(payload).send().await?;
         handle_response(resp).await
@@ -338,6 +350,43 @@ impl JiraClient {
                 message: body,
             })
         }
+    }
+
+    // -- Issue archive/unarchive (v3 API) --
+
+    pub async fn archive_issue(&self, key: &str) -> Result<(), Error> {
+        self.assert_writable()?;
+        let url = format!("{}/issue/{key}/archive", self.v3_base_url());
+        debug!("PUT {url}");
+        let resp = self.http.put(&url).send().await?;
+        let status = resp.status();
+        if status.is_success() {
+            Ok(())
+        } else {
+            let body = resp.text().await.unwrap_or_default();
+            Err(Error::Api {
+                status: status.as_u16(),
+                message: body,
+            })
+        }
+    }
+
+    pub async fn archive_issues_bulk(&self, keys: &[String]) -> Result<Value, Error> {
+        self.assert_writable()?;
+        let url = format!("{}/issue/archive", self.v3_base_url());
+        let payload = serde_json::json!({"issueIdsOrKeys": keys});
+        debug!("PUT {url}");
+        let resp = self.http.put(&url).json(&payload).send().await?;
+        handle_response(resp).await
+    }
+
+    pub async fn unarchive_issues_bulk(&self, keys: &[String]) -> Result<Value, Error> {
+        self.assert_writable()?;
+        let url = format!("{}/issue/unarchive", self.v3_base_url());
+        let payload = serde_json::json!({"issueIdsOrKeys": keys});
+        debug!("PUT {url}");
+        let resp = self.http.put(&url).json(&payload).send().await?;
+        handle_response(resp).await
     }
 
     pub async fn get_project_features(&self, key: &str) -> Result<Value, Error> {

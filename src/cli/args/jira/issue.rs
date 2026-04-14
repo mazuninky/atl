@@ -354,3 +354,25 @@ pub struct JiraIdArgs {
     /// Resource ID
     pub id: String,
 }
+
+#[derive(Debug, Args)]
+pub struct JiraBulkCreateArgs {
+    /// JSON input: array of field objects or {"issueUpdates": [...]}.
+    /// Use @file to read from file, or - for stdin.
+    #[arg(long, short)]
+    pub input: String,
+}
+
+#[derive(Debug, Args)]
+pub struct JiraArchiveArgs {
+    /// Issue key(s) to archive (e.g. PROJ-123). Repeat for bulk.
+    #[arg(required = true)]
+    pub keys: Vec<String>,
+}
+
+#[derive(Debug, Args)]
+pub struct JiraUnarchiveArgs {
+    /// Issue key(s) to unarchive (e.g. PROJ-123). Repeat for bulk.
+    #[arg(required = true)]
+    pub keys: Vec<String>,
+}

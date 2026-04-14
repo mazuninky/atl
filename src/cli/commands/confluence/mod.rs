@@ -58,6 +58,7 @@ pub async fn run(
         .as_ref()
         .ok_or_else(|| anyhow::anyhow!("no Confluence instance configured in profile"))?;
     let store = SystemKeyring;
+
     let client =
         ConfluenceClient::connect(instance, resolved_profile_name, &store, retries).await?;
 

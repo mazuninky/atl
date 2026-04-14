@@ -183,6 +183,7 @@ async fn login(
 
     // Domain and email are read from config silently — no prompts.
     let domain = resolve_domain(args, existing_profile)?;
+
     let email = resolve_email(args, existing_profile)?;
 
     // Token resolution: with-token reads stdin, otherwise prompter.password.

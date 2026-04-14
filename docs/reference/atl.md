@@ -6103,6 +6103,9 @@ Usage: atl jira [OPTIONS] <COMMAND>
 - `permissions` — List all permissions
 - `my-permissions` — List my permissions
 - `labels` — List all labels
+- `bulk-create` — Bulk create issues from a JSON array
+- `archive` — Archive one or more issues
+- `unarchive` — Unarchive one or more issues
 
 #### atl jira search
 
@@ -11825,6 +11828,78 @@ Usage: atl jira labels [OPTIONS]
 
 - `--limit, -l` — Max results per page
 - `--all` — Fetch all results (auto-paginate)
+- `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
+- `--quiet, -q` — Suppress all output except errors
+- `--config` — Path to configuration file
+- `--profile, -p` — Profile name to use
+- `--format, -F` — Output format
+- `--no-color` — Disable colored output
+- `--no-pager` — Do not pipe long output through a pager
+- `--jq` — Query output with a jq expression
+- `--template` — Format output with a minijinja template
+- `--retries` — Maximum HTTP retries on transient errors (0 = off)
+
+#### atl jira bulk-create
+
+Bulk create issues from a JSON array
+
+**Usage**
+
+```
+Usage: atl jira bulk-create [OPTIONS] --input <INPUT>
+```
+
+**Options**
+
+- `--input, -i` — JSON input: array of field objects or {"issueUpdates": [...]}. Use @file to read from file, or - for stdin
+- `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
+- `--quiet, -q` — Suppress all output except errors
+- `--config` — Path to configuration file
+- `--profile, -p` — Profile name to use
+- `--format, -F` — Output format
+- `--no-color` — Disable colored output
+- `--no-pager` — Do not pipe long output through a pager
+- `--jq` — Query output with a jq expression
+- `--template` — Format output with a minijinja template
+- `--retries` — Maximum HTTP retries on transient errors (0 = off)
+
+#### atl jira archive
+
+Archive one or more issues
+
+**Usage**
+
+```
+Usage: atl jira archive [OPTIONS] <KEYS>...
+```
+
+**Options**
+
+- `<KEYS>` — Issue key(s) to archive (e.g. PROJ-123). Repeat for bulk
+- `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
+- `--quiet, -q` — Suppress all output except errors
+- `--config` — Path to configuration file
+- `--profile, -p` — Profile name to use
+- `--format, -F` — Output format
+- `--no-color` — Disable colored output
+- `--no-pager` — Do not pipe long output through a pager
+- `--jq` — Query output with a jq expression
+- `--template` — Format output with a minijinja template
+- `--retries` — Maximum HTTP retries on transient errors (0 = off)
+
+#### atl jira unarchive
+
+Unarchive one or more issues
+
+**Usage**
+
+```
+Usage: atl jira unarchive [OPTIONS] <KEYS>...
+```
+
+**Options**
+
+- `<KEYS>` — Issue key(s) to unarchive (e.g. PROJ-123). Repeat for bulk
 - `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
 - `--quiet, -q` — Suppress all output except errors
 - `--config` — Path to configuration file

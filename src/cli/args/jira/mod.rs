@@ -233,4 +233,13 @@ pub enum JiraSubcommand {
 
     /// List all labels
     Labels(JiraLabelsArgs),
+
+    /// Bulk create issues from a JSON array
+    BulkCreate(JiraBulkCreateArgs),
+
+    /// Archive one or more issues
+    Archive(JiraArchiveArgs),
+
+    /// Unarchive one or more issues
+    Unarchive(JiraUnarchiveArgs),
 }

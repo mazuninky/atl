@@ -35,40 +35,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - language: rust
-            build-mode: manual
-          - language: actions
-            build-mode: none
+        language: [rust, actions]
 
     steps:
       - uses: actions/checkout@v6
-
-      - name: Install stable toolchain
-        if: matrix.language == 'rust'
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install Linux system dependencies
-        if: matrix.language == 'rust'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libdbus-1-dev pkg-config
-
-      - name: Cache cargo registry and target
-        if: matrix.language == 'rust'
-        uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: codeql
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
         with:
           languages: ${{ matrix.language }}
-          build-mode: ${{ matrix.build-mode }}
-
-      - name: Build
-        if: matrix.language == 'rust'
-        run: cargo build --locked
+          build-mode: none
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v4

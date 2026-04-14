@@ -359,16 +359,8 @@ impl JiraClient {
         let url = format!("{}/issue/{key}/archive", self.v3_base_url());
         debug!("PUT {url}");
         let resp = self.http.put(&url).send().await?;
-        let status = resp.status();
-        if status.is_success() {
-            Ok(())
-        } else {
-            let body = resp.text().await.unwrap_or_default();
-            Err(Error::Api {
-                status: status.as_u16(),
-                message: body,
-            })
-        }
+        handle_response_maybe_empty(resp).await?;
+        Ok(())
     }
 
     pub async fn archive_issues_bulk(&self, keys: &[String]) -> Result<Value, Error> {

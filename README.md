@@ -47,6 +47,16 @@ On macOS, ad-hoc sign the binary so it can access the login keychain without pas
 codesign -s - -f ~/.cargo/bin/atl
 ```
 
+### Verifying release artifacts
+
+Starting with the next release, every `atl-*.tar.gz` / `atl-*.zip` published to GitHub Releases is signed via [SLSA build provenance](https://slsa.dev/). Verify with the `gh` CLI:
+
+```sh
+gh attestation verify atl-2026.16.2-x86_64-unknown-linux-gnu.tar.gz --repo mazuninky/atl
+```
+
+The attestation proves the archive was built by this repo's `release.yml` workflow at a specific tag, signed by a Sigstore short-lived certificate tied to GitHub's OIDC identity.
+
 ### Self-update
 
 Once installed, `atl` can update itself from GitHub Releases:

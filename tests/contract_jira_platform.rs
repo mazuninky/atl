@@ -1,3 +1,9 @@
+//! Contract tests run against the Jira **Cloud** OpenAPI spec, but on a
+//! Prism server bound to `127.0.0.1`, which auto-detects as `JiraFlavor::DataCenter`.
+//! So these tests exercise the v2 (`/rest/api/2/*`) code branches. Cloud-flavor
+//! coverage (v3 `/search/jql`, v3 `/issue/bulk`, v3 archive) requires extending
+//! the OpenAPI spec with the v3 paths — tracked separately.
+
 mod common;
 
 use std::sync::LazyLock;

@@ -8,7 +8,7 @@ on:
       - "tests/**"
       - "Cargo.toml"
       - "Cargo.lock"
-      - ".github/workflows/codeql.yml"
+      - ".github/workflows/**"
   pull_request:
     branches: [master]
     paths:
@@ -16,7 +16,7 @@ on:
       - "tests/**"
       - "Cargo.toml"
       - "Cargo.lock"
-      - ".github/workflows/codeql.yml"
+      - ".github/workflows/**"
   schedule:
     # Run weekly on Monday at 06:00 UTC
     - cron: "0 6 * * 1"
@@ -27,37 +27,26 @@ concurrency:
 
 jobs:
   analyze:
-    name: Analyze (Rust)
+    name: Analyze (${{ matrix.language }})
     runs-on: ubuntu-latest
     permissions:
       security-events: write
       contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [rust, actions]
 
     steps:
       - uses: actions/checkout@v6
 
-      - name: Install stable toolchain
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install Linux system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libdbus-1-dev pkg-config
-
-      - name: Cache cargo registry and target
-        uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: codeql
-
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
         with:
-          languages: rust
-
-      - name: Build
-        run: cargo build --locked
+          languages: ${{ matrix.language }}
+          build-mode: none
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v4
         with:
-          category: "/language:rust"
+          category: "/language:${{ matrix.language }}"

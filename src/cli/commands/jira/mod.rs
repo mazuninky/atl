@@ -191,6 +191,7 @@ pub async fn run(
         crate::error::Error::Config("no Jira instance configured in profile".into())
     })?;
     let store = SystemKeyring;
+
     let client = JiraClient::new(instance, resolved_profile_name, &store, retries)?;
 
     dispatch(cmd, &client, format, io, transforms).await
@@ -698,6 +699,40 @@ async fn dispatch(
                 client.list_labels(args.limit).await?
             }
         }
+        JiraSubcommand::BulkCreate(args) => {
+            let raw = read_body_arg(&args.input)?;
+            let parsed: Value = serde_json::from_str(&raw)
+                .map_err(|e| anyhow::anyhow!("invalid JSON input: {e}"))?;
+
+            // Accept either a raw array of field objects or the full
+            // {"issueUpdates": [...]} envelope.
+            let payload = if parsed.is_array() {
+                let updates: Vec<Value> = parsed
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|fields| json!({"fields": fields}))
+                    .collect();
+                json!({"issueUpdates": updates})
+            } else if parsed.get("issueUpdates").is_some() {
+                parsed
+            } else {
+                anyhow::bail!(
+                    "expected a JSON array of field objects or an object with 'issueUpdates' key"
+                );
+            };
+
+            client.bulk_create_issues(&payload).await?
+        }
+        JiraSubcommand::Archive(args) => {
+            if args.keys.len() == 1 {
+                client.archive_issue(&args.keys[0]).await?;
+                Value::String(format!("Issue {} archived", args.keys[0]))
+            } else {
+                client.archive_issues_bulk(&args.keys).await?
+            }
+        }
+        JiraSubcommand::Unarchive(args) => client.unarchive_issues_bulk(&args.keys).await?,
     };
 
     // Start the pager before writing the (potentially long) response so the

@@ -130,10 +130,15 @@ fn bulk_create_cloud() {
 #[test]
 #[ignore]
 fn archive_bulk_cloud() {
-    // Two keys force the bulk path (`PUT /rest/api/3/issue/archive`). With a
-    // single key the dispatcher would call `archive_issue`, which hits
-    // `PUT /issue/{key}/archive` — that path is not in the patched spec.
+    // Multi-key archive routes through `PUT /rest/api/3/issue/archive`.
     runner_cloud().run_ok(&["jira", "archive", "TEST-1", "TEST-2"]);
+}
+
+#[test]
+#[ignore]
+fn archive_single_cloud() {
+    // Single-issue archive routes through the bulk endpoint with one key.
+    runner_cloud().run_ok(&["jira", "archive", "TEST-1"]);
 }
 
 #[test]

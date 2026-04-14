@@ -440,9 +440,13 @@ impl JiraClient {
     pub async fn archive_issue(&self, key: &str) -> Result<(), Error> {
         self.assert_archive_supported()?;
         self.assert_writable()?;
-        let url = format!("{}/issue/{key}/archive", self.v3_base_url());
+        // Jira Cloud has no single-issue archive endpoint; route through the
+        // bulk endpoint with a one-element array. Same shape as
+        // `archive_issues_bulk`, just with the response discarded.
+        let url = format!("{}/issue/archive", self.v3_base_url());
+        let payload = serde_json::json!({"issueIdsOrKeys": [key]});
         debug!("PUT {url}");
-        let resp = self.http.put(&url).send().await?;
+        let resp = self.http.put(&url).json(&payload).send().await?;
         handle_response_maybe_empty(resp).await?;
         Ok(())
     }

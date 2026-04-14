@@ -125,8 +125,10 @@ impl AtlassianInstance {
         }
         let d = self
             .domain
+            .trim()
             .trim_start_matches("https://")
-            .trim_start_matches("http://");
+            .trim_start_matches("http://")
+            .to_ascii_lowercase();
         if d.ends_with(".atlassian.net") || d.contains(".atlassian.net/") {
             JiraFlavor::Cloud
         } else {
@@ -267,6 +269,12 @@ mod tests {
     #[test]
     fn resolved_flavor_explicit_cloud_overrides_self_hosted() {
         let inst = make_flavor_instance("jira.company.com", Some(JiraFlavor::Cloud));
+        assert_eq!(inst.resolved_flavor(), JiraFlavor::Cloud);
+    }
+
+    #[test]
+    fn resolved_flavor_uppercase_atlassian_net_is_cloud() {
+        let inst = make_flavor_instance("ACME.ATLASSIAN.NET", None);
         assert_eq!(inst.resolved_flavor(), JiraFlavor::Cloud);
     }
 

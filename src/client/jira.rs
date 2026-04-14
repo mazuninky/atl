@@ -190,6 +190,7 @@ impl JiraClient {
                     ];
                     let resp = self.http.get(&url).query(&query).send().await?;
                     let page: Value = handle_response(resp).await?;
+                    let total = page.get("total").and_then(Value::as_u64);
                     let Some(issues) = page.get("issues").and_then(Value::as_array) else {
                         break;
                     };
@@ -198,10 +199,12 @@ impl JiraClient {
                         break;
                     }
                     all_issues.extend(issues.iter().cloned());
-                    if returned < page_size {
-                        break;
-                    }
                     start_at += returned;
+                    match total {
+                        Some(t) if u64::from(start_at) >= t => break,
+                        None if returned < page_size => break,
+                        _ => {}
+                    }
                 }
             }
         }

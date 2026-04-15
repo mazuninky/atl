@@ -144,7 +144,7 @@ jobs:
       - name: Install Node.js (for Prism mock server via npx)
         uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
         with:
-          node-version: "20"
+          node-version: "24"
 
       - name: Cache OpenAPI specs (downloaded + patched)
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4

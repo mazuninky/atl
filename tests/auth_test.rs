@@ -168,6 +168,7 @@ mod flow {
                     auth_type: AuthType::Basic,
                     api_path: None,
                     read_only: false,
+                    flavor: None,
                 }),
                 confluence: None,
                 ..Default::default()

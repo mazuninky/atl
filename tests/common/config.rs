@@ -14,6 +14,7 @@ pub struct TestConfig {
 /// Builder for constructing a [`TestConfig`] with per-service domains and settings.
 pub struct TestConfigBuilder {
     jira_domain: Option<String>,
+    jira_flavor: Option<String>,
     confluence_domain: Option<String>,
     confluence_api_path: Option<String>,
     read_only: bool,
@@ -25,6 +26,7 @@ impl TestConfigBuilder {
     pub fn new() -> Self {
         Self {
             jira_domain: None,
+            jira_flavor: None,
             confluence_domain: None,
             confluence_api_path: None,
             read_only: false,
@@ -35,6 +37,19 @@ impl TestConfigBuilder {
     #[must_use]
     pub fn jira(mut self, domain: &str) -> Self {
         self.jira_domain = Some(domain.to_string());
+        self
+    }
+
+    /// Set the explicit Jira flavor override (e.g. `"cloud"` or `"data_center"`).
+    ///
+    /// When unset, the flavor is auto-detected from the domain — `*.atlassian.net`
+    /// resolves to Cloud, everything else (including `127.0.0.1` used by the
+    /// contract test Prism mock) resolves to Data Center. Set this to `"cloud"`
+    /// to exercise the Jira Cloud code paths (v3 `/search/jql`, v3 `/issue/bulk`,
+    /// v3 archive) against a Prism mock bound to a non-Cloud host.
+    #[must_use]
+    pub fn jira_flavor(mut self, flavor: &str) -> Self {
+        self.jira_flavor = Some(flavor.to_string());
         self
     }
 
@@ -81,13 +96,19 @@ impl TestConfigBuilder {
             .jira_domain
             .as_ref()
             .map(|domain| {
+                let flavor_line = self
+                    .jira_flavor
+                    .as_ref()
+                    .map(|f| format!("flavor = \"{f}\"\n"))
+                    .unwrap_or_default();
+
                 format!(
                     r#"
 [profiles.test.jira]
 domain = "{domain}"
 email = "test@example.com"
 auth_type = "basic"
-read_only = {read_only}
+{flavor_line}read_only = {read_only}
 "#,
                     read_only = self.read_only,
                 )

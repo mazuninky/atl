@@ -214,6 +214,7 @@ async fn login(
                 auth_type: auth_type_from_cli(args.auth_type),
                 api_path: None,
                 read_only: false,
+                flavor: None,
             });
 
         // Update fields from the flags the user supplied this run.
@@ -694,6 +695,7 @@ mod tests {
                     auth_type: AuthType::Basic,
                     api_path: None,
                     read_only: false,
+                    flavor: None,
                 }),
                 ..Default::default()
             },
@@ -755,6 +757,7 @@ mod tests {
             auth_type: AuthType::Basic,
             api_path: None,
             read_only: false,
+            flavor: None,
         };
         assert_eq!(account_for_instance(&inst), "e@x.com");
     }
@@ -768,6 +771,7 @@ mod tests {
             auth_type: AuthType::Bearer,
             api_path: None,
             read_only: false,
+            flavor: None,
         };
         assert_eq!(account_for_instance(&inst), "default");
     }

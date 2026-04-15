@@ -2,7 +2,7 @@ use serde_json::Value;
 use tracing::debug;
 
 use crate::auth::SecretStore;
-use crate::config::AtlassianInstance;
+use crate::config::{AtlassianInstance, JiraFlavor};
 use crate::error::Error;
 
 use super::{
@@ -16,6 +16,10 @@ pub struct JiraClient {
     no_retry_http: HttpClient,
     base_url: String,
     read_only: bool,
+    /// Jira deployment flavor — Cloud has the v3 API (`/rest/api/3`),
+    /// Data Center / Server only has v2. Routing decisions for search,
+    /// bulk create, and archive/unarchive are made off this field.
+    flavor: JiraFlavor,
 }
 
 impl JiraClient {
@@ -42,6 +46,7 @@ impl JiraClient {
             no_retry_http,
             base_url,
             read_only: instance.read_only,
+            flavor: instance.resolved_flavor(),
         })
     }
 
@@ -72,77 +77,138 @@ impl JiraClient {
         &self.base_url
     }
 
+    /// Search for issues matching a JQL query.
+    ///
+    /// On Cloud this hits the v3 `/search/jql` endpoint (the v2 `/search`
+    /// route is being deprecated). On Data Center / Server — where v3 does
+    /// not exist — this hits the v2 `/search` endpoint. Both return a
+    /// `{startAt, maxResults, total, issues}` shape so downstream consumers
+    /// are unaffected.
     pub async fn search_issues(
         &self,
         jql: &str,
         max_results: u32,
         fields: &[&str],
     ) -> Result<Value, Error> {
-        let url = format!(
-            "{}/search/jql",
-            self.base_url.replace("/rest/api/2", "/rest/api/3")
-        );
         let fields_str = fields.join(",");
-        debug!("GET {url} jql={jql}");
-        let resp = self
-            .http
-            .get(&url)
-            .query(&[
-                ("jql", jql),
-                ("maxResults", &max_results.to_string()),
-                ("fields", &fields_str),
-            ])
-            .send()
-            .await?;
-        handle_response(resp).await
+        match self.flavor {
+            JiraFlavor::Cloud => {
+                let url = format!("{}/search/jql", self.v3_base_url());
+                debug!("GET {url} jql={jql}");
+                let resp = self
+                    .http
+                    .get(&url)
+                    .query(&[
+                        ("jql", jql),
+                        ("maxResults", &max_results.to_string()),
+                        ("fields", &fields_str),
+                    ])
+                    .send()
+                    .await?;
+                handle_response(resp).await
+            }
+            JiraFlavor::DataCenter => {
+                let url = format!("{}/search", self.base_url);
+                debug!("GET {url} jql={jql}");
+                let resp = self
+                    .http
+                    .get(&url)
+                    .query(&[
+                        ("jql", jql),
+                        ("maxResults", &max_results.to_string()),
+                        ("fields", &fields_str),
+                    ])
+                    .send()
+                    .await?;
+                handle_response(resp).await
+            }
+        }
     }
 
     /// Search with auto-pagination: fetch all matching issues.
     ///
-    /// Uses the v3 token-based pagination (`nextPageToken`) endpoint.
-    /// The returned JSON preserves the synthetic `startAt`/`maxResults`/`total`
-    /// shape so downstream consumers are unaffected.
+    /// On Cloud uses the v3 token-based pagination (`nextPageToken`). On
+    /// Data Center uses the classic v2 `startAt` / `maxResults` pagination.
+    /// In both cases the returned JSON is a synthetic
+    /// `{startAt, maxResults, total, issues}` object whose `issues` array
+    /// contains every matching issue, so downstream consumers see the same
+    /// shape regardless of flavor.
     pub async fn search_issues_all(
         &self,
         jql: &str,
         page_size: u32,
         fields: &[&str],
     ) -> Result<Value, Error> {
-        let mut all_issues = Vec::new();
-        let url = format!(
-            "{}/search/jql",
-            self.base_url.replace("/rest/api/2", "/rest/api/3")
-        );
         let fields_str = fields.join(",");
-        let mut next_page_token: Option<String> = None;
-        loop {
-            debug!("GET {url} jql={jql} maxResults={page_size} nextPageToken={next_page_token:?}");
-            let mut query: Vec<(&str, String)> = vec![
-                ("jql", jql.to_string()),
-                ("maxResults", page_size.to_string()),
-                ("fields", fields_str.clone()),
-            ];
-            if let Some(token) = &next_page_token {
-                query.push(("nextPageToken", token.clone()));
-            }
-            let resp = self.http.get(&url).query(&query).send().await?;
-            let page: Value = handle_response(resp).await?;
-            if let Some(issues) = page.get("issues").and_then(Value::as_array) {
-                if issues.is_empty() {
-                    break;
+        let mut all_issues: Vec<Value> = Vec::new();
+
+        match self.flavor {
+            JiraFlavor::Cloud => {
+                let url = format!("{}/search/jql", self.v3_base_url());
+                let mut next_page_token: Option<String> = None;
+                loop {
+                    debug!(
+                        "GET {url} jql={jql} maxResults={page_size} nextPageToken={next_page_token:?}"
+                    );
+                    let mut query: Vec<(&str, String)> = vec![
+                        ("jql", jql.to_string()),
+                        ("maxResults", page_size.to_string()),
+                        ("fields", fields_str.clone()),
+                    ];
+                    if let Some(token) = &next_page_token {
+                        query.push(("nextPageToken", token.clone()));
+                    }
+                    let resp = self.http.get(&url).query(&query).send().await?;
+                    let page: Value = handle_response(resp).await?;
+                    if let Some(issues) = page.get("issues").and_then(Value::as_array) {
+                        if issues.is_empty() {
+                            break;
+                        }
+                        all_issues.extend(issues.iter().cloned());
+                    } else {
+                        break;
+                    }
+                    // Token-based pagination: continue if nextPageToken is present and non-empty
+                    match page.get("nextPageToken").and_then(Value::as_str) {
+                        Some(token) if !token.is_empty() => {
+                            next_page_token = Some(token.to_string());
+                        }
+                        _ => break,
+                    }
                 }
-                all_issues.extend(issues.iter().cloned());
-            } else {
-                break;
             }
-            // Token-based pagination: continue if nextPageToken is present and non-empty
-            match page.get("nextPageToken").and_then(Value::as_str) {
-                Some(token) if !token.is_empty() => {
-                    next_page_token = Some(token.to_string());
+            JiraFlavor::DataCenter => {
+                let url = format!("{}/search", self.base_url);
+                let mut start_at: u32 = 0;
+                loop {
+                    debug!("GET {url} jql={jql} startAt={start_at} maxResults={page_size}");
+                    let query: Vec<(&str, String)> = vec![
+                        ("jql", jql.to_string()),
+                        ("startAt", start_at.to_string()),
+                        ("maxResults", page_size.to_string()),
+                        ("fields", fields_str.clone()),
+                    ];
+                    let resp = self.http.get(&url).query(&query).send().await?;
+                    let page: Value = handle_response(resp).await?;
+                    let total = page.get("total").and_then(Value::as_u64);
+                    let Some(issues) = page.get("issues").and_then(Value::as_array) else {
+                        break;
+                    };
+                    let returned = issues.len() as u32;
+                    if returned == 0 {
+                        break;
+                    }
+                    all_issues.extend(issues.iter().cloned());
+                    start_at += returned;
+                    match total {
+                        Some(t) if u64::from(start_at) >= t => break,
+                        None if returned < page_size => break,
+                        _ => {}
+                    }
                 }
-                _ => break,
             }
         }
+
         Ok(serde_json::json!({
             "startAt": 0,
             "maxResults": all_issues.len(),
@@ -177,7 +243,13 @@ impl JiraClient {
 
     pub async fn bulk_create_issues(&self, payload: &Value) -> Result<Value, Error> {
         self.assert_writable()?;
-        let url = format!("{}/issue/bulk", self.v3_base_url());
+        // The `{"issueUpdates": [...]}` payload shape is identical on v2 and
+        // v3. On Cloud we prefer v3 (v2 `/issue/bulk` is being deprecated);
+        // on Data Center we must use v2 because v3 does not exist there.
+        let url = match self.flavor {
+            JiraFlavor::Cloud => format!("{}/issue/bulk", self.v3_base_url()),
+            JiraFlavor::DataCenter => format!("{}/issue/bulk", self.base_url),
+        };
         debug!("POST {url}");
         let resp = self.http.post(&url).json(payload).send().await?;
         handle_response(resp).await
@@ -352,18 +424,38 @@ impl JiraClient {
         }
     }
 
-    // -- Issue archive/unarchive (v3 API) --
+    // -- Issue archive/unarchive (Jira Cloud Premium; v3 API) --
+
+    /// Short-circuits with [`Error::Config`] when the instance is Data
+    /// Center / Server. Issue archiving is a Jira Cloud Premium-only
+    /// operation and the REST endpoints do not exist on self-hosted
+    /// instances.
+    fn assert_archive_supported(&self) -> Result<(), Error> {
+        if self.flavor == JiraFlavor::DataCenter {
+            return Err(Error::Config(
+                "archive/unarchive is a Jira Cloud Premium operation; not available on Data Center"
+                    .into(),
+            ));
+        }
+        Ok(())
+    }
 
     pub async fn archive_issue(&self, key: &str) -> Result<(), Error> {
+        self.assert_archive_supported()?;
         self.assert_writable()?;
-        let url = format!("{}/issue/{key}/archive", self.v3_base_url());
+        // Jira Cloud has no single-issue archive endpoint; route through the
+        // bulk endpoint with a one-element array. Same shape as
+        // `archive_issues_bulk`, just with the response discarded.
+        let url = format!("{}/issue/archive", self.v3_base_url());
+        let payload = serde_json::json!({"issueIdsOrKeys": [key]});
         debug!("PUT {url}");
-        let resp = self.http.put(&url).send().await?;
+        let resp = self.http.put(&url).json(&payload).send().await?;
         handle_response_maybe_empty(resp).await?;
         Ok(())
     }
 
     pub async fn archive_issues_bulk(&self, keys: &[String]) -> Result<Value, Error> {
+        self.assert_archive_supported()?;
         self.assert_writable()?;
         let url = format!("{}/issue/archive", self.v3_base_url());
         let payload = serde_json::json!({"issueIdsOrKeys": keys});
@@ -373,6 +465,7 @@ impl JiraClient {
     }
 
     pub async fn unarchive_issues_bulk(&self, keys: &[String]) -> Result<Value, Error> {
+        self.assert_archive_supported()?;
         self.assert_writable()?;
         let url = format!("{}/issue/unarchive", self.v3_base_url());
         let payload = serde_json::json!({"issueIdsOrKeys": keys});
@@ -2064,5 +2157,79 @@ impl JiraClient {
             .send()
             .await?;
         handle_response(resp).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::auth::InMemoryStore;
+    use crate::config::AuthType;
+    use crate::test_util::env_lock;
+
+    /// Builds a [`JiraClient`] configured for Data Center with an in-memory
+    /// secret store so construction succeeds without a real keyring. The
+    /// archive short-circuit runs before any HTTP call, so no network is
+    /// involved.
+    fn make_dc_client() -> JiraClient {
+        let _g = env_lock();
+        // SAFETY: env access is serialized by env_lock() for the whole test.
+        unsafe { std::env::remove_var("ATL_API_TOKEN") };
+
+        let inst = AtlassianInstance {
+            domain: "jira.company.com".to_string(),
+            email: Some("alice@company.com".into()),
+            api_token: Some("irrelevant".into()),
+            auth_type: AuthType::Basic,
+            api_path: None,
+            read_only: false,
+            flavor: Some(JiraFlavor::DataCenter),
+        };
+        let store = InMemoryStore::new();
+        JiraClient::new(&inst, "default", &store, 0).expect("JiraClient should build")
+    }
+
+    #[tokio::test]
+    async fn archive_issue_short_circuits_on_data_center() {
+        let client = make_dc_client();
+        match client.archive_issue("PROJ-1").await {
+            Err(Error::Config(msg)) => {
+                assert!(
+                    msg.contains("Data Center"),
+                    "expected DC message, got: {msg}"
+                );
+            }
+            other => panic!("expected Error::Config on DC, got: {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn archive_issues_bulk_short_circuits_on_data_center() {
+        let client = make_dc_client();
+        let keys = vec!["PROJ-1".to_string(), "PROJ-2".to_string()];
+        match client.archive_issues_bulk(&keys).await {
+            Err(Error::Config(msg)) => {
+                assert!(
+                    msg.contains("Data Center"),
+                    "expected DC message, got: {msg}"
+                );
+            }
+            other => panic!("expected Error::Config on DC, got: {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn unarchive_issues_bulk_short_circuits_on_data_center() {
+        let client = make_dc_client();
+        let keys = vec!["PROJ-1".to_string()];
+        match client.unarchive_issues_bulk(&keys).await {
+            Err(Error::Config(msg)) => {
+                assert!(
+                    msg.contains("Data Center"),
+                    "expected DC message, got: {msg}"
+                );
+            }
+            other => panic!("expected Error::Config on DC, got: {other:?}"),
+        }
     }
 }

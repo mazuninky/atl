@@ -1,0 +1,28 @@
+coverage:
+  status:
+    project:
+      default:
+        # Don't drop project coverage compared to the PR base.
+        target: auto
+        # Small tolerance — avoids flaky failures on 0.1% noise.
+        threshold: 1%
+        informational: false
+        only_pulls: false
+    patch:
+      default:
+        # New/changed lines should be covered.
+        target: 70%
+        threshold: 1%
+
+comment:
+  layout: "reach, diff, flags, files"
+  behavior: default
+  require_changes: true
+
+ignore:
+  - "tests/**"
+  - "**/tests.rs"
+  - "src/main.rs"
+
+github_checks:
+  annotations: true

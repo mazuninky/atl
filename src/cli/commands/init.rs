@@ -80,6 +80,7 @@ pub fn run_init(io: &mut IoStreams, prompter: &dyn Prompter) -> anyhow::Result<(
         auth_type: AuthType::Basic,
         api_path: None,
         read_only: false,
+        flavor: None,
     };
     let confluence_instance = AtlassianInstance {
         domain: confluence_domain,
@@ -88,6 +89,7 @@ pub fn run_init(io: &mut IoStreams, prompter: &dyn Prompter) -> anyhow::Result<(
         auth_type: AuthType::Basic,
         api_path: None,
         read_only: false,
+        flavor: None,
     };
     let profile = Profile {
         confluence: Some(confluence_instance),
@@ -408,6 +410,7 @@ mod tests {
             auth_type: AuthType::Basic,
             api_path: None,
             read_only: false,
+            flavor: None,
         };
         let confluence_instance = AtlassianInstance {
             domain: confluence_domain,
@@ -416,6 +419,7 @@ mod tests {
             auth_type: AuthType::Basic,
             api_path: None,
             read_only: false,
+            flavor: None,
         };
         let profile = Profile {
             confluence: Some(confluence_instance),

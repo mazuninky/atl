@@ -4,9 +4,17 @@ paths:
   - "Cargo.toml"
 ---
 
-## MANDATORY: Rust code changes MUST go through skill + agent
+## Who this rule applies to
 
-**This is a BLOCKING REQUIREMENT, not a suggestion.** Any edit to `*.rs` files or `Cargo.toml` — no matter how small — MUST follow this workflow. There are NO exceptions for "simple changes", "one-line fixes", dependency bumps, or API migrations.
+**This rule applies to the main / orchestrator conversation only.** It tells the orchestrator to delegate Rust edits to the `rust-cli-writer` / `rust-cli-test-writer` subagents instead of editing directly.
+
+**If you ARE one of those subagents** (your system prompt identifies you as `rust-cli-writer` or `rust-cli-test-writer`), this rule does NOT apply to you. You ARE the delegated agent — make the edits with `Edit` / `Write` directly. Do not try to delegate further; there is no agent to delegate to. The orchestrator already picked you.
+
+If you can't tell whether you are the orchestrator or a subagent: you are the orchestrator. Subagents have explicit role identification in their system prompt.
+
+## MANDATORY (orchestrator only): Rust code changes MUST go through skill + agent
+
+**This is a BLOCKING REQUIREMENT for the orchestrator, not a suggestion.** Any edit to `*.rs` files or `Cargo.toml` — no matter how small — MUST follow this workflow. There are NO exceptions for "simple changes", "one-line fixes", dependency bumps, or API migrations.
 
 ### Workflow (every time, no exceptions):
 
@@ -32,6 +40,7 @@ paths:
 - Reading or exploring Rust code (no file modifications)
 - Answering questions about code without making changes
 
-### Self-check before ANY Rust file edit:
-> "Am I about to use the Edit/Write tool on a `.rs` file or `Cargo.toml`?"
+### Self-check before ANY Rust file edit (orchestrator):
+> "Am I the orchestrator, about to use the Edit/Write tool on a `.rs` file or `Cargo.toml`?"
 > If yes → STOP. Load skill (if not yet loaded this session), delegate to agent. No exceptions.
+> If you are `rust-cli-writer` / `rust-cli-test-writer`: edit directly, you ARE the agent.

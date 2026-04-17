@@ -52,6 +52,20 @@ impl PrismServer {
         // Prism's `--dynamic` mode uses json-schema-faker which crashes on deeply
         // recursive schemas (Confluence has many). Use static mode so Prism returns
         // examples from the spec instead of fabricating responses.
+        //
+        // When upstream @stoplight/prism-cli is republished on npm *with* the
+        // `dist/` directory (verify with
+        // `npm view @stoplight/prism-cli@<v> dist.tarball` and check the
+        // tarball contains `package/dist/index.js`), the previous invocation
+        // can be restored — drop `prism_bin` and use:
+        //
+        //     Command::new("npx").args([
+        //         "@stoplight/prism-cli", "mock", spec_path,
+        //         "--port", &port.to_string(), "--host", "127.0.0.1",
+        //     ])
+        //
+        // along with re-adding the `setup-node` step in
+        // `.github/workflows/ci.yml` and reverting the CONTRIBUTING docs.
         let mut process = Command::new(&prism_bin)
             .args([
                 "mock",

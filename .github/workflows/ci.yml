@@ -141,6 +141,18 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends libdbus-1-dev pkg-config
 
+      # When upstream @stoplight/prism-cli is fixed on npm (i.e. a version
+      # published with the `dist/` directory intact, verifiable via
+      # `npm view @stoplight/prism-cli@<v> dist.tarball` → the tarball contains
+      # `package/dist/index.js`), we can swap the standalone-binary step below
+      # back to this Node.js + npx setup. Until then, every version of
+      # @stoplight/prism-cli and its transitive @stoplight/prism-core (caret
+      # ranges in all published versions) resolves to a broken 5.15.7+ tarball.
+      #
+      # - name: Install Node.js (for Prism mock server via npx)
+      #   uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+      #   with:
+      #     node-version: "24"
       - name: Install Prism CLI (standalone binary)
         # Upstream `@stoplight/prism-cli` >= 5.15.7 is published on npm without
         # the `dist/` directory, so `npx @stoplight/prism-cli` no longer works.

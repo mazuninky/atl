@@ -4,7 +4,7 @@ Thanks for contributing to atl! A few pointers before you submit:
 - For non-trivial changes, please open an issue first so we can align on scope.
 - Keep the PR focused on one logical change.
 - CI must be green (`cargo fmt`, `cargo clippy -D warnings`, `cargo test` on
-  Linux/macOS/Windows + MSRV 1.94). See .github/workflows/ci.yml.
+  Linux/macOS/Windows + MSRV 1.95). See .github/workflows/ci.yml.
 -->
 
 ## Summary

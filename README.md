@@ -4,7 +4,7 @@
 [![codecov](https://codecov.io/gh/mazuninky/atl/branch/master/graph/badge.svg)](https://codecov.io/gh/mazuninky/atl)
 [![Release](https://github.com/mazuninky/atl/actions/workflows/release.yml/badge.svg)](https://github.com/mazuninky/atl/actions/workflows/release.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![MSRV](https://img.shields.io/badge/MSRV-1.94-blue)](Cargo.toml)
+[![MSRV](https://img.shields.io/badge/MSRV-1.95-blue)](Cargo.toml)
 ![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/mazuninky/atl?utm_source=oss&utm_medium=github&utm_campaign=mazuninky%2Fatl&labelColor=171717&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews)
 [![OpenSSF Baseline](https://www.bestpractices.dev/projects/12542/baseline)](https://www.bestpractices.dev/projects/12542)
 
@@ -35,7 +35,7 @@ Prebuilt binaries are available for Linux (x86_64), macOS (arm64), and Windows (
 
 ### From source
 
-Requires Rust stable **1.94 or newer**.
+Requires Rust stable **1.95 or newer**.
 
 ```sh
 git clone https://github.com/mazuninky/atl.git

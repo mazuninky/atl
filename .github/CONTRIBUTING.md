@@ -41,6 +41,24 @@ If you installed lefthook, every commit automatically runs `cargo fmt --check`, 
 
 End-to-end contract tests live under `tests/` and use [Prism](https://github.com/stoplightio/prism) to mock Atlassian APIs against the official OpenAPI specs. If you change a command that touches the wire protocol, add or update a contract test for it.
 
+These tests shell out to a `prism` binary on your `PATH`. Upstream's npm package (`@stoplight/prism-cli`) is currently broken — starting with `5.15.7` the tarball ships without `dist/` — so install the standalone binary from [GitHub Releases](https://github.com/stoplightio/prism/releases) instead:
+
+```bash
+# Linux
+sudo curl -fsSL -o /usr/local/bin/prism \
+  https://github.com/stoplightio/prism/releases/download/v5.15.9/prism-cli-linux
+sudo chmod +x /usr/local/bin/prism
+
+# macOS
+sudo curl -fsSL -o /usr/local/bin/prism \
+  https://github.com/stoplightio/prism/releases/download/v5.15.9/prism-cli-macos
+sudo chmod +x /usr/local/bin/prism
+
+prism --version
+```
+
+Or set `ATL_PRISM_BIN=/path/to/prism` if you want to point the tests at a custom binary (e.g. a Docker wrapper). Contract tests are `#[ignore]`d by default — run them with `cargo test -- --ignored`.
+
 ## Project layout
 
 See [`docs/project-layout.md`](../docs/project-layout.md) for a directory tour and a step-by-step walkthrough of adding a new Jira subcommand. The short version:

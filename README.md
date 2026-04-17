@@ -28,7 +28,7 @@ curl -sSfL https://raw.githubusercontent.com/mazuninky/atl/master/scripts/instal
 To install a specific version:
 
 ```sh
-curl -sSfL https://raw.githubusercontent.com/mazuninky/atl/master/scripts/install.sh | sh -s -- --version 2026.15.1
+curl -sSfL https://raw.githubusercontent.com/mazuninky/atl/master/scripts/install.sh | sh -s -- --version 2026.16.4
 ```
 
 Prebuilt binaries are available for Linux (x86_64), macOS (arm64), and Windows (x86_64). The script installs to `/usr/local/bin` by default; use `--install-dir DIR` to override. On Windows, download from the [releases page](https://github.com/mazuninky/atl/releases/latest) manually.
@@ -40,21 +40,21 @@ Requires Rust stable **1.95 or newer**.
 ```sh
 git clone https://github.com/mazuninky/atl.git
 cd atl
-cargo install --path .
+cargo install --path . --root ~/.local --force
 ```
 
-On macOS, ad-hoc sign the binary so it can access the login keychain without password prompts:
+Make sure `~/.local/bin` is on your `PATH`. On macOS, ad-hoc sign the binary so it can access the login keychain without password prompts:
 
 ```sh
-codesign -s - -f ~/.cargo/bin/atl
+codesign -s - -f ~/.local/bin/atl
 ```
 
 ### Verifying release artifacts
 
-Starting with the next release, every `atl-*.tar.gz` / `atl-*.zip` published to GitHub Releases is signed via [SLSA build provenance](https://slsa.dev/). Verify with the `gh` CLI:
+Every `atl-*.tar.gz` / `atl-*.zip` published to GitHub Releases is signed via [SLSA build provenance](https://slsa.dev/). Verify with the `gh` CLI:
 
 ```sh
-gh attestation verify atl-2026.16.2-x86_64-unknown-linux-gnu.tar.gz --repo mazuninky/atl
+gh attestation verify atl-2026.16.4-x86_64-unknown-linux-gnu.tar.gz --repo mazuninky/atl
 ```
 
 The attestation proves the archive was built by this repo's `release.yml` workflow at a specific tag, signed by a Sigstore short-lived certificate tied to GitHub's OIDC identity.
@@ -66,7 +66,7 @@ Once installed, `atl` can update itself from GitHub Releases:
 ```sh
 atl self check            # report whether a newer release exists
 atl self update            # download and replace the current binary
-atl self update --to 2026.16.2   # pin to a specific version
+atl self update --to 2026.16.4   # pin to a specific version
 ```
 
 ## Quick start

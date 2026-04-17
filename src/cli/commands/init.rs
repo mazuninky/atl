@@ -295,10 +295,7 @@ mod tests {
 
     #[test]
     fn normalize_domain_already_full() {
-        assert_eq!(
-            normalize_domain("acme.atlassian.net"),
-            "acme.atlassian.net"
-        );
+        assert_eq!(normalize_domain("acme.atlassian.net"), "acme.atlassian.net");
     }
 
     #[test]

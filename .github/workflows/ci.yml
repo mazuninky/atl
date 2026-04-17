@@ -101,15 +101,19 @@ jobs:
         run: cargo test --all-targets --locked
 
   msrv:
-    name: msrv (1.94)
+    name: msrv (1.95)
     runs-on: ubuntu-latest
+    # RUSTUP_TOOLCHAIN overrides rust-toolchain.toml so this job genuinely
+    # exercises the declared MSRV rather than the pinned toolchain.
+    env:
+      RUSTUP_TOOLCHAIN: "1.95"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Install MSRV toolchain
         uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
         with:
-          toolchain: "1.94"
+          toolchain: "1.95"
 
       - name: Install Linux system dependencies
         run: |

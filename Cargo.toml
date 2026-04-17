@@ -2,7 +2,7 @@
 name = "atl"
 version = "2026.16.3"
 edition = "2024"
-rust-version = "1.94"
+rust-version = "1.95"
 description = "Unified CLI for Atlassian Confluence and Jira"
 license = "MIT"
 

@@ -13,7 +13,7 @@ Before you open a pull request:
 
 ## Prerequisites
 
-- **Rust stable, MSRV 1.94** (see `rust-version` in `Cargo.toml`). Install via [rustup](https://rustup.rs/).
+- **Rust stable, MSRV 1.95** (see `rust-version` in `Cargo.toml`; the exact toolchain is pinned in `rust-toolchain.toml` and installed automatically by `rustup`). Install via [rustup](https://rustup.rs/).
 - A POSIX-like shell for the release helper scripts (`scripts/bump-version.sh`). On Windows, WSL or Git Bash is fine; the CLI itself builds and runs on native Windows.
 - Optional: [lefthook](https://github.com/evilmartians/lefthook) for pre-commit hooks. Install with `brew install lefthook` (or equivalent), then run `lefthook install` once inside the repo.
 

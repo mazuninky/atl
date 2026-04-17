@@ -11,7 +11,8 @@ If you just want to build and test, see [`.github/CONTRIBUTING.md`](../.github/C
 
 ```
 .
-├── Cargo.toml                  # package metadata, deps, MSRV 1.94, edition 2024
+├── Cargo.toml                  # package metadata, deps, MSRV 1.95, edition 2024
+├── rust-toolchain.toml         # rustup pin (channel 1.95.0) — applies locally and in CI
 ├── CLAUDE.md                   # instructions for AI coding assistants
 ├── README.md                   # user-facing entry point
 ├── LICENSE                     # MIT

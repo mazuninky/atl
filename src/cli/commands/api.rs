@@ -509,15 +509,12 @@ async fn paginate_confluence_links(
         .cloned()
         .unwrap_or_default();
 
-    loop {
-        let Some(next) = merged
-            .get("_links")
-            .and_then(Value::as_object)
-            .and_then(|l| l.get("next"))
-            .and_then(Value::as_str)
-        else {
-            break;
-        };
+    while let Some(next) = merged
+        .get("_links")
+        .and_then(Value::as_object)
+        .and_then(|l| l.get("next"))
+        .and_then(Value::as_str)
+    {
         let (next_endpoint, next_query) = split_next_url(next, &instance.domain);
         debug!(
             "Confluence _links.next → endpoint={next_endpoint} query_pairs={}",

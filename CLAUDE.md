@@ -10,13 +10,16 @@ For a deeper tour and a step-by-step "add a new subcommand" walkthrough, see [`d
 
 ## Build & test
 
+The toolchain is pinned in `rust-toolchain.toml` (currently `1.95.0`). `rustup` auto-installs and switches to it on any `cargo` invocation inside the repo — do **not** use `cargo +stable`, `cargo +1.95`, or other explicit channels; plain `cargo …` is correct. To override for a one-off (e.g. MSRV sanity check), set `RUSTUP_TOOLCHAIN=<channel>` in the environment.
+
 ```bash
 cargo check
 cargo build
 cargo build --release
-cargo test                          # all tests
+cargo test                          # all tests (except #[ignore]d contract tests)
 cargo test <substring>              # filter to matching tests
 cargo test -- --nocapture           # see stdout in tests
+cargo test -- --ignored             # run contract tests (requires Prism — see below)
 cargo fmt --all -- --check
 cargo clippy --all-targets -- -D warnings
 ```
@@ -41,6 +44,8 @@ Pre-commit hooks live in `lefthook.yml` (fmt-check, clippy, test). The deny rule
 **NEVER merge PRs without explicit user approval.** When branch protection blocks a merge, that is a signal to stop and let the user review — do NOT bypass it with `--admin`. Always create the PR, report the URL, and wait for the user to review and confirm before merging. This applies even if the user says "подлей" or "merge" — show them the PR first.
 
 `cargo test` runs both unit tests (in `src/`) and integration test binaries under `tests/`. The Atlassian contract tests (`tests/contract_*.rs`) are `#[ignore]` by default — they only run when a Prism mock server is up.
+
+**Prism caveat.** Upstream `@stoplight/prism-cli` on npm is currently broken (5.15.7+ is published without its `dist/` directory), so `npx @stoplight/prism-cli` no longer works. Install the standalone binary from [GitHub Releases](https://github.com/stoplightio/prism/releases) and put it on `PATH`, or point `ATL_PRISM_BIN` at it. Full install commands are in `.github/CONTRIBUTING.md`. The contract CI job downloads `prism-cli-linux` straight into `/usr/local/bin/prism` (see `.github/workflows/ci.yml`) for the same reason.
 
 ## Architecture (the parts that aren't obvious from `ls`)
 
@@ -198,7 +203,9 @@ All changes to `master` **must** go through a pull request — direct pushes are
 
 ## Versioning & releases
 
-`Cargo.toml` uses calendar versioning **`YYYY.WW.BUILD`** (e.g. `2026.15.1`). `scripts/bump-version.sh` handles the bump and tag. The release workflow (`.github/workflows/release.yml`) is tag-triggered, builds Linux/macOS/Windows artifacts, and ships `dist/_docs/{man,completions}/` alongside the binary. See `docs/releasing.md` for the operator checklist.
+`Cargo.toml` uses calendar versioning **`YYYY.WW.BUILD`** (e.g. `2026.16.4`). `scripts/bump-version.sh` computes the next version from git tags, rewrites `Cargo.toml`, commits, and tags — but does not push. The release workflow (`.github/workflows/release.yml`) is tag-triggered, builds Linux/macOS/Windows artifacts, and ships `dist/_docs/{man,completions}/` alongside the binary with SLSA build provenance attestations. See `docs/releasing.md` for the operator checklist.
+
+Known gotcha: `bump-version.sh` runs `git fetch --tags --quiet`, which `set -e`-aborts if local tags disagree with the remote (git returns non-zero on "would clobber existing tag" even in quiet mode). If the script exits silently with status 1, run `git fetch --tags --force` once manually and re-invoke.
 
 ## Reading order for new contributors
 

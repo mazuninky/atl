@@ -19,19 +19,39 @@ Unified command-line interface for Atlassian **Confluence** and **Jira**. Writte
 
 ## Installation
 
-### From GitHub Releases (recommended)
+### From GitHub Releases with attestation verification (recommended)
+
+Every `atl-*.tar.gz` / `atl-*.zip` published to GitHub Releases is signed via [SLSA build provenance](https://slsa.dev/). The attestation proves the archive was built by this repo's `release.yml` workflow at a specific tag, signed by a Sigstore short-lived certificate tied to GitHub's OIDC identity. Download and verify before installing:
 
 ```sh
+# Download the artifact for your platform from the latest release
+gh release download --repo mazuninky/atl --pattern 'atl-*-x86_64-unknown-linux-gnu.tar.gz'
+
+# Verify the SLSA provenance (fails if the archive was not built by this repo)
+gh attestation verify atl-*-x86_64-unknown-linux-gnu.tar.gz --repo mazuninky/atl
+
+# Extract and install
+tar -xzf atl-*-x86_64-unknown-linux-gnu.tar.gz
+sudo install -m 0755 atl /usr/local/bin/atl
+```
+
+Prebuilt artifacts are available for Linux (x86_64), macOS (arm64), and Windows (x86_64). On Windows, download from the [releases page](https://github.com/mazuninky/atl/releases/latest) manually and verify with `gh attestation verify` the same way.
+
+### Quick install via the install script
+
+For convenience on a trusted workstation, [`scripts/install.sh`](scripts/install.sh) automates download + checksum verification + extraction. **Note:** this pattern pipes a remote shell script into `sh` and executes it with your user's privileges. Pin to a specific version, or review the script first, before running on any machine that handles secrets:
+
+```sh
+# Recommended: pin to a specific release
+curl -sSfL https://raw.githubusercontent.com/mazuninky/atl/master/scripts/install.sh | sh -s -- --version 2026.18.1
+```
+
+```sh
+# Latest (unpinned)
 curl -sSfL https://raw.githubusercontent.com/mazuninky/atl/master/scripts/install.sh | sh
 ```
 
-To install a specific version:
-
-```sh
-curl -sSfL https://raw.githubusercontent.com/mazuninky/atl/master/scripts/install.sh | sh -s -- --version 2026.16.4
-```
-
-Prebuilt binaries are available for Linux (x86_64), macOS (arm64), and Windows (x86_64). The script installs to `/usr/local/bin` by default; use `--install-dir DIR` to override. On Windows, download from the [releases page](https://github.com/mazuninky/atl/releases/latest) manually.
+The script installs to `/usr/local/bin` by default; use `--install-dir DIR` to override. It does not run `gh attestation verify` — for full supply-chain assurance use the verified path above.
 
 ### From source
 
@@ -48,16 +68,6 @@ Make sure `~/.local/bin` is on your `PATH`. On macOS, ad-hoc sign the binary so 
 ```sh
 codesign -s - -f ~/.local/bin/atl
 ```
-
-### Verifying release artifacts
-
-Every `atl-*.tar.gz` / `atl-*.zip` published to GitHub Releases is signed via [SLSA build provenance](https://slsa.dev/). Verify with the `gh` CLI:
-
-```sh
-gh attestation verify atl-2026.16.4-x86_64-unknown-linux-gnu.tar.gz --repo mazuninky/atl
-```
-
-The attestation proves the archive was built by this repo's `release.yml` workflow at a specific tag, signed by a Sigstore short-lived certificate tied to GitHub's OIDC identity.
 
 ### Self-update
 

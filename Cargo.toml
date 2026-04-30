@@ -38,7 +38,7 @@ toon-format = { version = "0.4", default-features = false }
 
 # Auth
 base64 = "0.22"
-keyring = { version = "3", default-features = false, features = ["apple-native", "windows-native", "linux-native-sync-persistent"] }
+keyring-core = "1"
 inquire = { version = "0.9", default-features = false, features = ["crossterm"] }
 
 # Config
@@ -73,6 +73,15 @@ self_update = { version = "0.44", default-features = false, features = ["reqwest
 assert_cmd = "2"
 predicates = "3"
 tempfile = "3"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+apple-native-keyring-store = { version = "1", default-features = false, features = ["keychain"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-native-keyring-store = "1"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+linux-keyutils-keyring-store = "1"
 
 [profile.release]
 lto = true

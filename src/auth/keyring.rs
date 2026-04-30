@@ -2,7 +2,7 @@
 //! [`InMemoryStore`] for tests.
 
 use std::collections::HashMap;
-use std::sync::Mutex;
+use std::sync::{Mutex, Once};
 
 use anyhow::Result;
 use tracing::debug;
@@ -32,22 +32,73 @@ pub trait SecretStore: Send + Sync {
     fn delete(&self, service: &str, account: &str) -> Result<()>;
 }
 
-/// Production store backed by the platform keyring (`keyring` crate).
+/// Production store backed by the platform keyring (`keyring-core` crate
+/// plus a per-platform default store crate).
 ///
 /// Instances are zero-sized; construct via `SystemKeyring` literal.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct SystemKeyring;
 
+/// Installs the platform-appropriate default credential store on the first
+/// call. Subsequent calls are a single relaxed atomic load (`Once`).
+///
+/// On unsupported targets, or when the platform store fails to construct
+/// (e.g. headless Linux without `keyutils`, Docker without a kernel
+/// keyring), the function silently leaves no default installed. In that
+/// case `keyring_core::Entry::new` returns `Error::NoDefaultStore`, which
+/// `SystemKeyring::get` / `delete` translate into the graceful `Ok(None)`
+/// / `Ok(())` contract documented on [`SecretStore`].
+fn ensure_default_store() {
+    static ONCE: Once = Once::new();
+    ONCE.call_once(|| {
+        #[cfg(target_os = "macos")]
+        {
+            match apple_native_keyring_store::keychain::Store::new() {
+                Ok(store) => keyring_core::set_default_store(store),
+                Err(err) => debug!(
+                    "failed to construct macOS Keychain credential store: {err}; \
+                     keyring lookups will degrade to None"
+                ),
+            }
+        }
+        #[cfg(target_os = "windows")]
+        {
+            match windows_native_keyring_store::Store::new() {
+                Ok(store) => keyring_core::set_default_store(store),
+                Err(err) => debug!(
+                    "failed to construct Windows credential store: {err}; \
+                     keyring lookups will degrade to None"
+                ),
+            }
+        }
+        #[cfg(target_os = "linux")]
+        {
+            match linux_keyutils_keyring_store::Store::new() {
+                Ok(store) => keyring_core::set_default_store(store),
+                Err(err) => debug!(
+                    "failed to construct Linux keyutils credential store: {err}; \
+                     keyring lookups will degrade to None"
+                ),
+            }
+        }
+    });
+}
+
 impl SecretStore for SystemKeyring {
     fn get(&self, service: &str, account: &str) -> Result<Option<String>> {
-        let entry = match keyring::Entry::new(service, account) {
+        ensure_default_store();
+        let entry = match keyring_core::Entry::new(service, account) {
             Ok(e) => e,
-            Err(keyring::Error::NoStorageAccess(_)) => {
-                debug!("no keyring storage backend available (service={service})");
+            Err(keyring_core::Error::NoStorageAccess(err)) => {
+                debug!("no keyring storage access on Entry::new: {err}");
                 return Ok(None);
             }
-            Err(keyring::Error::PlatformFailure(err)) => {
+            Err(keyring_core::Error::PlatformFailure(err)) => {
                 debug!("keyring platform failure on Entry::new: {err}");
+                return Ok(None);
+            }
+            Err(keyring_core::Error::NoDefaultStore) => {
+                debug!("no default keyring store installed (service={service})");
                 return Ok(None);
             }
             Err(e) => return Err(e.into()),
@@ -55,13 +106,17 @@ impl SecretStore for SystemKeyring {
 
         match entry.get_password() {
             Ok(s) => Ok(Some(s)),
-            Err(keyring::Error::NoEntry) => Ok(None),
-            Err(keyring::Error::NoStorageAccess(err)) => {
+            Err(keyring_core::Error::NoEntry) => Ok(None),
+            Err(keyring_core::Error::NoStorageAccess(err)) => {
                 debug!("no keyring storage access on get_password: {err}");
                 Ok(None)
             }
-            Err(keyring::Error::PlatformFailure(err)) => {
+            Err(keyring_core::Error::PlatformFailure(err)) => {
                 debug!("keyring platform failure on get_password: {err}");
+                Ok(None)
+            }
+            Err(keyring_core::Error::NoDefaultStore) => {
+                debug!("no default keyring store installed on get_password");
                 Ok(None)
             }
             Err(e) => Err(e.into()),
@@ -69,23 +124,30 @@ impl SecretStore for SystemKeyring {
     }
 
     fn set(&self, service: &str, account: &str, secret: &str) -> Result<()> {
-        let entry = keyring::Entry::new(service, account)?;
+        ensure_default_store();
+        // Propagate every error here. Silently dropping a write would leave
+        // the user thinking their token was saved when it wasn't —
+        // including the `NoDefaultStore` case on unsupported platforms.
+        let entry = keyring_core::Entry::new(service, account)?;
         entry.set_password(secret)?;
         Ok(())
     }
 
     fn delete(&self, service: &str, account: &str) -> Result<()> {
-        let entry = match keyring::Entry::new(service, account) {
+        ensure_default_store();
+        let entry = match keyring_core::Entry::new(service, account) {
             Ok(e) => e,
-            Err(keyring::Error::NoStorageAccess(_)) => return Ok(()),
-            Err(keyring::Error::PlatformFailure(_)) => return Ok(()),
+            Err(keyring_core::Error::NoStorageAccess(_)) => return Ok(()),
+            Err(keyring_core::Error::PlatformFailure(_)) => return Ok(()),
+            Err(keyring_core::Error::NoDefaultStore) => return Ok(()),
             Err(e) => return Err(e.into()),
         };
         match entry.delete_credential() {
             Ok(()) => Ok(()),
-            Err(keyring::Error::NoEntry) => Ok(()),
-            Err(keyring::Error::NoStorageAccess(_)) => Ok(()),
-            Err(keyring::Error::PlatformFailure(_)) => Ok(()),
+            Err(keyring_core::Error::NoEntry) => Ok(()),
+            Err(keyring_core::Error::NoStorageAccess(_)) => Ok(()),
+            Err(keyring_core::Error::PlatformFailure(_)) => Ok(()),
+            Err(keyring_core::Error::NoDefaultStore) => Ok(()),
             Err(e) => Err(e.into()),
         }
     }

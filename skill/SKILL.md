@@ -42,6 +42,7 @@ For endpoints without a dedicated command, fall back to `atl api --service <svc>
 For the **full list** of every command and flag, see:
 - Confluence: `references/confluence-commands.md`
 - Jira: `references/jira-commands.md`
+- Body formats (markdown / Confluence storage / Jira wiki / ADF): `references/body-formats.md`
 
 ## Output formatting
 
@@ -271,6 +272,8 @@ atl j comment-delete PROJ-123 10042
 **Jira Cloud ADF note**: On Jira Cloud, comment `.body` is an Atlassian Document Format (ADF) object. When extracting text with `--jq`, use a deeper path like `.comments[].body.content[].content[].text`.
 
 ### Input formats — Jira vs Confluence are different
+
+> Full mapping tables (markdown → Confluence storage, markdown → Jira wiki) and read/write flag semantics live in `references/body-formats.md` — read it when in doubt about what format to send or what `--body-format` / `--input-format` actually do.
 
 This is a footgun worth memorising. Jira and Confluence accept different body formats by default, and the `--input-format` flag does **different** conversions on each side:
 
@@ -519,3 +522,6 @@ For the complete list of all commands and flags:
 
 - **Jira** — read `references/jira-commands.md`
   Covers: issues, projects, boards, sprints, epics, filters, worklogs, components, versions, dashboards, users, groups, fields, workflows, screens, roles, webhooks, schemes, admin
+
+- **Body formats** — read `references/body-formats.md`
+  Covers: Confluence storage (XHTML), Confluence view (rendered HTML), Jira wiki syntax, markdown, ADF; full markdown → storage and markdown → wiki mapping tables; `--body-format` (read) vs `--input-format` (write) semantics; common anti-patterns

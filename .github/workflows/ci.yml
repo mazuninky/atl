@@ -239,6 +239,32 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends libdbus-1-dev pkg-config
 
+      # Coverage runs both regular and contract tests in one pass via
+      # `--include-ignored`, so `client/{jira,confluence}.rs` (~3k LOC of
+      # HTTP code exercised only by Prism-backed contract tests) gets
+      # measured. Without this the project number understates coverage by
+      # ~30 percentage points.
+      - name: Install Prism CLI (standalone binary)
+        env:
+          PRISM_VERSION: v5.15.9
+        run: |
+          sudo curl -fsSL \
+            "https://github.com/stoplightio/prism/releases/download/${PRISM_VERSION}/prism-cli-linux" \
+            -o /usr/local/bin/prism
+          sudo chmod +x /usr/local/bin/prism
+          prism --version
+
+      - name: Cache OpenAPI specs (downloaded + patched)
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: tests/contract/specs
+          key: contract-specs-${{ hashFiles('tests/contract/download_specs.sh', 'tests/contract/patch_specs.py') }}
+
+      - name: Download and patch OpenAPI specs
+        run: |
+          bash tests/contract/download_specs.sh
+          python3 tests/contract/patch_specs.py
+
       - name: Cache cargo registry and target
         uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2.9.1
         with:
@@ -251,7 +277,7 @@ jobs:
           tool: cargo-llvm-cov
 
       - name: Generate coverage (lcov)
-        run: cargo llvm-cov --all-targets --locked --lcov --output-path lcov.info
+        run: cargo llvm-cov --all-targets --locked --lcov --output-path lcov.info -- --include-ignored
 
       - name: Upload coverage to Codecov
         if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork }}

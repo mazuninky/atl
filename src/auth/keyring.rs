@@ -275,4 +275,181 @@ mod tests {
         store.set("s", "a", "x").unwrap();
         assert!(!store.is_empty());
     }
+
+    // -------------------------------------------------------------------
+    // Defaults & construction
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn in_memory_default_is_equivalent_to_new() {
+        let from_default: InMemoryStore = Default::default();
+        let from_new = InMemoryStore::new();
+        assert_eq!(from_default.is_empty(), from_new.is_empty());
+        assert_eq!(from_default.len(), from_new.len());
+    }
+
+    #[test]
+    fn system_keyring_default_zero_sized() {
+        // SystemKeyring is `Default + Clone + Copy` so callers can use
+        // `SystemKeyring` as a literal anywhere a `&dyn SecretStore` is
+        // accepted. A non-default impl would force every command handler
+        // to `SystemKeyring::default()`.
+        let _: SystemKeyring = Default::default();
+        let _: SystemKeyring = SystemKeyring;
+    }
+
+    // -------------------------------------------------------------------
+    // SecretStore contract: empty service / account / secret strings.
+    // The trait does not specify validation — these are pure pass-through
+    // operations and test that the store doesn't reject them silently.
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn in_memory_accepts_empty_service_and_account() {
+        let store = InMemoryStore::new();
+        store.set("", "", "value").unwrap();
+        assert_eq!(store.get("", "").unwrap().as_deref(), Some("value"));
+    }
+
+    #[test]
+    fn in_memory_accepts_empty_secret() {
+        // Empty secret is a valid value — distinguishes "stored empty" from
+        // "missing" via the `Option<String>` return type.
+        let store = InMemoryStore::new();
+        store.set("svc", "acct", "").unwrap();
+        assert_eq!(store.get("svc", "acct").unwrap().as_deref(), Some(""));
+    }
+
+    #[test]
+    fn in_memory_overwrite_with_empty_secret_does_not_delete() {
+        // Setting "" must still leave the entry present.
+        let store = InMemoryStore::new();
+        store.set("svc", "acct", "old").unwrap();
+        store.set("svc", "acct", "").unwrap();
+        assert_eq!(store.get("svc", "acct").unwrap().as_deref(), Some(""));
+        assert_eq!(store.len(), 1);
+    }
+
+    // -------------------------------------------------------------------
+    // SecretStore contract: delete only removes the targeted entry.
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn in_memory_delete_only_removes_matching_entry() {
+        let store = InMemoryStore::new();
+        store.set("svc", "alice", "tok-a").unwrap();
+        store.set("svc", "bob", "tok-b").unwrap();
+        store.set("svc-other", "alice", "tok-c").unwrap();
+
+        store.delete("svc", "alice").unwrap();
+
+        assert!(store.get("svc", "alice").unwrap().is_none());
+        assert_eq!(store.get("svc", "bob").unwrap().as_deref(), Some("tok-b"));
+        assert_eq!(
+            store.get("svc-other", "alice").unwrap().as_deref(),
+            Some("tok-c")
+        );
+        assert_eq!(store.len(), 2);
+    }
+
+    // -------------------------------------------------------------------
+    // SecretStore + service_name composition: mirrors the production
+    // resolved_token path so a regression in either side surfaces here.
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn in_memory_with_service_name_keyring_layout() {
+        use crate::auth::service_name;
+        let store = InMemoryStore::new();
+
+        store
+            .set(&service_name("default", "jira"), "alice@acme.com", "j-tok")
+            .unwrap();
+        store
+            .set(
+                &service_name("default", "confluence"),
+                "alice@acme.com",
+                "c-tok",
+            )
+            .unwrap();
+        store
+            .set(&service_name("staging", "jira"), "alice@acme.com", "s-tok")
+            .unwrap();
+
+        assert_eq!(
+            store
+                .get(&service_name("default", "jira"), "alice@acme.com")
+                .unwrap()
+                .as_deref(),
+            Some("j-tok")
+        );
+        assert_eq!(
+            store
+                .get(&service_name("default", "confluence"), "alice@acme.com")
+                .unwrap()
+                .as_deref(),
+            Some("c-tok")
+        );
+        assert_eq!(
+            store
+                .get(&service_name("staging", "jira"), "alice@acme.com")
+                .unwrap()
+                .as_deref(),
+            Some("s-tok")
+        );
+        // Nonexistent profile must not surface another profile's token.
+        assert!(
+            store
+                .get(&service_name("missing", "jira"), "alice@acme.com")
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    // -------------------------------------------------------------------
+    // SecretStore is `Send + Sync` — atl shares one store across
+    // commands. This is a compile-time assertion: if the trait or the
+    // impls regress, the test fails to compile.
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn secret_store_is_send_sync() {
+        fn assert_send_sync<T: Send + Sync>() {}
+        assert_send_sync::<InMemoryStore>();
+        assert_send_sync::<SystemKeyring>();
+    }
+
+    // -------------------------------------------------------------------
+    // Cross-thread sharing through Arc<dyn SecretStore> — the production
+    // pattern. Verifies the Mutex inside InMemoryStore actually serializes
+    // concurrent writes (no lost updates).
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn in_memory_thread_safe_writes() {
+        use std::sync::Arc;
+        use std::thread;
+
+        let store: Arc<dyn SecretStore> = Arc::new(InMemoryStore::new());
+        let mut handles = Vec::new();
+        for i in 0..16 {
+            let s = Arc::clone(&store);
+            handles.push(thread::spawn(move || {
+                let svc = format!("svc-{i}");
+                s.set(&svc, "acct", &format!("v-{i}")).unwrap();
+            }));
+        }
+        for h in handles {
+            h.join().unwrap();
+        }
+        // We don't have InMemoryStore::len through &dyn SecretStore, but
+        // we can verify each entry made it back.
+        for i in 0..16 {
+            let svc = format!("svc-{i}");
+            assert_eq!(
+                store.get(&svc, "acct").unwrap().as_deref(),
+                Some(&*format!("v-{i}"))
+            );
+        }
+    }
 }

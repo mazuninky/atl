@@ -3,6 +3,53 @@ use serde_json::{Value, json};
 use crate::cli::args::*;
 use crate::client::JiraClient;
 
+/// Build the create payload for a generic CRUD scheme resource (workflow / permission /
+/// notification / issue-security scheme).
+fn build_scheme_create_payload(args: &JiraSchemeCreateArgs) -> Value {
+    let mut payload = json!({ "name": &args.name });
+    if let Some(desc) = &args.description {
+        payload["description"] = Value::String(desc.clone());
+    }
+    payload
+}
+
+/// Build the update payload for a generic CRUD scheme resource. Returns an error if no
+/// fields were supplied — callers must specify at least one of `--name` or `--description`.
+fn build_scheme_update_payload(args: &JiraSchemeUpdateArgs) -> anyhow::Result<Value> {
+    let mut fields = serde_json::Map::new();
+    if let Some(name) = &args.name {
+        fields.insert("name".into(), Value::String(name.clone()));
+    }
+    if let Some(desc) = &args.description {
+        fields.insert("description".into(), Value::String(desc.clone()));
+    }
+    if fields.is_empty() {
+        anyhow::bail!("no fields to update; specify at least one of --name, --description");
+    }
+    Ok(Value::Object(fields))
+}
+
+/// Build the create payload for a screen.
+fn build_screen_create_payload(args: &JiraScreenCreateArgs) -> Value {
+    let mut payload = json!({ "name": &args.name });
+    if let Some(desc) = &args.description {
+        payload["description"] = Value::String(desc.clone());
+    }
+    payload
+}
+
+/// Build the create payload for an issue type scheme. Includes optional default issue type.
+fn build_issue_type_scheme_create_payload(args: &JiraIssueTypeSchemeCreateArgs) -> Value {
+    let mut payload = json!({ "name": &args.name });
+    if let Some(desc) = &args.description {
+        payload["description"] = Value::String(desc.clone());
+    }
+    if let Some(dit) = &args.default_issue_type_id {
+        payload["defaultIssueTypeId"] = Value::String(dit.clone());
+    }
+    payload
+}
+
 pub(super) async fn dispatch_workflow(
     cmd: &JiraListGetSubcommand,
     client: &JiraClient,
@@ -21,25 +68,13 @@ pub(super) async fn dispatch_workflow_scheme(
         JiraCrudSubcommand::List => client.list_workflow_schemes().await?,
         JiraCrudSubcommand::Get(args) => client.get_workflow_scheme(&args.id).await?,
         JiraCrudSubcommand::Create(args) => {
-            let mut payload = json!({ "name": &args.name });
-            if let Some(desc) = &args.description {
-                payload["description"] = Value::String(desc.clone());
-            }
-            client.create_workflow_scheme(&payload).await?
+            client
+                .create_workflow_scheme(&build_scheme_create_payload(args))
+                .await?
         }
         JiraCrudSubcommand::Update(args) => {
-            let mut fields = serde_json::Map::new();
-            if let Some(name) = &args.name {
-                fields.insert("name".into(), Value::String(name.clone()));
-            }
-            if let Some(desc) = &args.description {
-                fields.insert("description".into(), Value::String(desc.clone()));
-            }
-            if fields.is_empty() {
-                anyhow::bail!("no fields to update; specify at least one of --name, --description");
-            }
             client
-                .update_workflow_scheme(&args.id, &Value::Object(fields))
+                .update_workflow_scheme(&args.id, &build_scheme_update_payload(args)?)
                 .await?
         }
         JiraCrudSubcommand::Delete(args) => {
@@ -57,11 +92,9 @@ pub(super) async fn dispatch_screen(
         JiraScreenSubcommand::List => client.list_screens().await?,
         JiraScreenSubcommand::Get(args) => client.get_screen(&args.id).await?,
         JiraScreenSubcommand::Create(args) => {
-            let mut payload = json!({ "name": &args.name });
-            if let Some(desc) = &args.description {
-                payload["description"] = Value::String(desc.clone());
-            }
-            client.create_screen(&payload).await?
+            client
+                .create_screen(&build_screen_create_payload(args))
+                .await?
         }
         JiraScreenSubcommand::Delete(args) => {
             client.delete_screen(&args.id).await?;
@@ -84,25 +117,13 @@ pub(super) async fn dispatch_permission_scheme(
         JiraCrudSubcommand::List => client.list_permission_schemes().await?,
         JiraCrudSubcommand::Get(args) => client.get_permission_scheme(&args.id).await?,
         JiraCrudSubcommand::Create(args) => {
-            let mut payload = json!({ "name": &args.name });
-            if let Some(desc) = &args.description {
-                payload["description"] = Value::String(desc.clone());
-            }
-            client.create_permission_scheme(&payload).await?
+            client
+                .create_permission_scheme(&build_scheme_create_payload(args))
+                .await?
         }
         JiraCrudSubcommand::Update(args) => {
-            let mut fields = serde_json::Map::new();
-            if let Some(name) = &args.name {
-                fields.insert("name".into(), Value::String(name.clone()));
-            }
-            if let Some(desc) = &args.description {
-                fields.insert("description".into(), Value::String(desc.clone()));
-            }
-            if fields.is_empty() {
-                anyhow::bail!("no fields to update; specify at least one of --name, --description");
-            }
             client
-                .update_permission_scheme(&args.id, &Value::Object(fields))
+                .update_permission_scheme(&args.id, &build_scheme_update_payload(args)?)
                 .await?
         }
         JiraCrudSubcommand::Delete(args) => {
@@ -120,25 +141,13 @@ pub(super) async fn dispatch_notification_scheme(
         JiraCrudSubcommand::List => client.list_notification_schemes().await?,
         JiraCrudSubcommand::Get(args) => client.get_notification_scheme(&args.id).await?,
         JiraCrudSubcommand::Create(args) => {
-            let mut payload = json!({ "name": &args.name });
-            if let Some(desc) = &args.description {
-                payload["description"] = Value::String(desc.clone());
-            }
-            client.create_notification_scheme(&payload).await?
+            client
+                .create_notification_scheme(&build_scheme_create_payload(args))
+                .await?
         }
         JiraCrudSubcommand::Update(args) => {
-            let mut fields = serde_json::Map::new();
-            if let Some(name) = &args.name {
-                fields.insert("name".into(), Value::String(name.clone()));
-            }
-            if let Some(desc) = &args.description {
-                fields.insert("description".into(), Value::String(desc.clone()));
-            }
-            if fields.is_empty() {
-                anyhow::bail!("no fields to update; specify at least one of --name, --description");
-            }
             client
-                .update_notification_scheme(&args.id, &Value::Object(fields))
+                .update_notification_scheme(&args.id, &build_scheme_update_payload(args)?)
                 .await?
         }
         JiraCrudSubcommand::Delete(args) => {
@@ -156,25 +165,13 @@ pub(super) async fn dispatch_issue_security_scheme(
         JiraCrudSubcommand::List => client.list_issue_security_schemes().await?,
         JiraCrudSubcommand::Get(args) => client.get_issue_security_scheme(&args.id).await?,
         JiraCrudSubcommand::Create(args) => {
-            let mut payload = json!({ "name": &args.name });
-            if let Some(desc) = &args.description {
-                payload["description"] = Value::String(desc.clone());
-            }
-            client.create_issue_security_scheme(&payload).await?
+            client
+                .create_issue_security_scheme(&build_scheme_create_payload(args))
+                .await?
         }
         JiraCrudSubcommand::Update(args) => {
-            let mut fields = serde_json::Map::new();
-            if let Some(name) = &args.name {
-                fields.insert("name".into(), Value::String(name.clone()));
-            }
-            if let Some(desc) = &args.description {
-                fields.insert("description".into(), Value::String(desc.clone()));
-            }
-            if fields.is_empty() {
-                anyhow::bail!("no fields to update; specify at least one of --name, --description");
-            }
             client
-                .update_issue_security_scheme(&args.id, &Value::Object(fields))
+                .update_issue_security_scheme(&args.id, &build_scheme_update_payload(args)?)
                 .await?
         }
         JiraCrudSubcommand::Delete(args) => {
@@ -192,11 +189,9 @@ pub(super) async fn dispatch_field_config(
         JiraFieldConfigSubcommand::List => client.list_field_configurations().await?,
         JiraFieldConfigSubcommand::Get(args) => client.get_field_configuration(&args.id).await?,
         JiraFieldConfigSubcommand::Create(args) => {
-            let mut payload = json!({ "name": &args.name });
-            if let Some(desc) = &args.description {
-                payload["description"] = Value::String(desc.clone());
-            }
-            client.create_field_configuration(&payload).await?
+            client
+                .create_field_configuration(&build_scheme_create_payload(args))
+                .await?
         }
         JiraFieldConfigSubcommand::Delete(args) => {
             client.delete_field_configuration(&args.id).await?;
@@ -213,28 +208,13 @@ pub(super) async fn dispatch_issue_type_scheme(
         JiraIssueTypeSchemeSubcommand::List => client.list_issue_type_schemes().await?,
         JiraIssueTypeSchemeSubcommand::Get(args) => client.get_issue_type_scheme(&args.id).await?,
         JiraIssueTypeSchemeSubcommand::Create(args) => {
-            let mut payload = json!({ "name": &args.name });
-            if let Some(desc) = &args.description {
-                payload["description"] = Value::String(desc.clone());
-            }
-            if let Some(dit) = &args.default_issue_type_id {
-                payload["defaultIssueTypeId"] = Value::String(dit.clone());
-            }
-            client.create_issue_type_scheme(&payload).await?
+            client
+                .create_issue_type_scheme(&build_issue_type_scheme_create_payload(args))
+                .await?
         }
         JiraIssueTypeSchemeSubcommand::Update(args) => {
-            let mut fields = serde_json::Map::new();
-            if let Some(name) = &args.name {
-                fields.insert("name".into(), Value::String(name.clone()));
-            }
-            if let Some(desc) = &args.description {
-                fields.insert("description".into(), Value::String(desc.clone()));
-            }
-            if fields.is_empty() {
-                anyhow::bail!("no fields to update; specify at least one of --name, --description");
-            }
             client
-                .update_issue_type_scheme(&args.id, &Value::Object(fields))
+                .update_issue_type_scheme(&args.id, &build_scheme_update_payload(args)?)
                 .await?
         }
         JiraIssueTypeSchemeSubcommand::Delete(args) => {
@@ -242,4 +222,164 @@ pub(super) async fn dispatch_issue_type_scheme(
             Value::String(format!("Issue type scheme {} deleted", args.id))
         }
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn scheme_create(name: &str, description: Option<&str>) -> JiraSchemeCreateArgs {
+        JiraSchemeCreateArgs {
+            name: name.to_string(),
+            description: description.map(str::to_string),
+        }
+    }
+
+    fn scheme_update(
+        id: &str,
+        name: Option<&str>,
+        description: Option<&str>,
+    ) -> JiraSchemeUpdateArgs {
+        JiraSchemeUpdateArgs {
+            id: id.to_string(),
+            name: name.map(str::to_string),
+            description: description.map(str::to_string),
+        }
+    }
+
+    // --- build_scheme_create_payload ------------------------------------------
+
+    #[test]
+    fn scheme_create_with_name_only() {
+        let payload = build_scheme_create_payload(&scheme_create("My scheme", None));
+        assert_eq!(payload, json!({ "name": "My scheme" }));
+    }
+
+    #[test]
+    fn scheme_create_with_description() {
+        let payload = build_scheme_create_payload(&scheme_create("My scheme", Some("Desc")));
+        assert_eq!(
+            payload,
+            json!({ "name": "My scheme", "description": "Desc" })
+        );
+    }
+
+    // --- build_scheme_update_payload ------------------------------------------
+
+    #[test]
+    fn scheme_update_with_name() {
+        let payload = build_scheme_update_payload(&scheme_update("42", Some("New"), None)).unwrap();
+        assert_eq!(payload, json!({ "name": "New" }));
+    }
+
+    #[test]
+    fn scheme_update_with_description() {
+        let payload =
+            build_scheme_update_payload(&scheme_update("42", None, Some("New desc"))).unwrap();
+        assert_eq!(payload, json!({ "description": "New desc" }));
+    }
+
+    #[test]
+    fn scheme_update_with_both_fields() {
+        let payload =
+            build_scheme_update_payload(&scheme_update("42", Some("N"), Some("D"))).unwrap();
+        assert_eq!(payload, json!({ "name": "N", "description": "D" }));
+    }
+
+    #[test]
+    fn scheme_update_with_no_fields_errors() {
+        let err = build_scheme_update_payload(&scheme_update("42", None, None)).unwrap_err();
+        assert!(
+            err.to_string().contains("no fields to update"),
+            "expected guard message, got: {err}"
+        );
+        assert!(
+            err.to_string().contains("--name"),
+            "error should mention --name, got: {err}"
+        );
+        assert!(
+            err.to_string().contains("--description"),
+            "error should mention --description, got: {err}"
+        );
+    }
+
+    // --- build_screen_create_payload ------------------------------------------
+
+    #[test]
+    fn screen_create_with_name_only() {
+        let args = JiraScreenCreateArgs {
+            name: "Screen 1".to_string(),
+            description: None,
+        };
+        assert_eq!(
+            build_screen_create_payload(&args),
+            json!({ "name": "Screen 1" })
+        );
+    }
+
+    #[test]
+    fn screen_create_with_description() {
+        let args = JiraScreenCreateArgs {
+            name: "Screen 1".to_string(),
+            description: Some("d".to_string()),
+        };
+        assert_eq!(
+            build_screen_create_payload(&args),
+            json!({ "name": "Screen 1", "description": "d" })
+        );
+    }
+
+    // --- build_issue_type_scheme_create_payload -------------------------------
+
+    #[test]
+    fn issue_type_scheme_create_minimal() {
+        let args = JiraIssueTypeSchemeCreateArgs {
+            name: "Scheme".to_string(),
+            description: None,
+            default_issue_type_id: None,
+        };
+        assert_eq!(
+            build_issue_type_scheme_create_payload(&args),
+            json!({ "name": "Scheme" })
+        );
+    }
+
+    #[test]
+    fn issue_type_scheme_create_with_description_only() {
+        let args = JiraIssueTypeSchemeCreateArgs {
+            name: "Scheme".to_string(),
+            description: Some("d".to_string()),
+            default_issue_type_id: None,
+        };
+        assert_eq!(
+            build_issue_type_scheme_create_payload(&args),
+            json!({ "name": "Scheme", "description": "d" })
+        );
+    }
+
+    #[test]
+    fn issue_type_scheme_create_with_default_issue_type_only() {
+        let args = JiraIssueTypeSchemeCreateArgs {
+            name: "Scheme".to_string(),
+            description: None,
+            default_issue_type_id: Some("10001".to_string()),
+        };
+        assert_eq!(
+            build_issue_type_scheme_create_payload(&args),
+            json!({ "name": "Scheme", "defaultIssueTypeId": "10001" })
+        );
+    }
+
+    #[test]
+    fn issue_type_scheme_create_with_all_fields() {
+        let args = JiraIssueTypeSchemeCreateArgs {
+            name: "Scheme".to_string(),
+            description: Some("d".to_string()),
+            default_issue_type_id: Some("10001".to_string()),
+        };
+        assert_eq!(
+            build_issue_type_scheme_create_payload(&args),
+            json!({ "name": "Scheme", "description": "d", "defaultIssueTypeId": "10001" })
+        );
+    }
 }

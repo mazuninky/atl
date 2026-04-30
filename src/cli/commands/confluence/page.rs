@@ -7,6 +7,57 @@ use crate::cli::args::*;
 use crate::cli::commands::markdown;
 use crate::client::ConfluenceClient;
 
+/// Extract the body content string out of a Confluence page response, given
+/// the requested body format. Returns `""` when the body is missing instead
+/// of erroring — the caller writes the result verbatim, and an empty body is
+/// a legal page state.
+fn extract_body_content(page: &Value, body_format: BodyFormat) -> &str {
+    let body_key = match body_format {
+        BodyFormat::Storage => "storage",
+        BodyFormat::View => "view",
+    };
+    page.pointer(&format!("/body/{body_key}/value"))
+        .and_then(Value::as_str)
+        .unwrap_or("")
+}
+
+/// Build the JSON summary returned by the `export` command. Pure so the test
+/// can assert on the exact shape without spinning up the HTTP layer.
+fn build_export_summary(
+    page_id: &str,
+    title: &str,
+    attachments_downloaded: u32,
+    output_dir: &str,
+) -> Value {
+    serde_json::json!({
+        "page_id": page_id,
+        "title": title,
+        "attachments_downloaded": attachments_downloaded,
+        "output_dir": output_dir,
+    })
+}
+
+/// Pick a safe, collision-free filename for a downloaded attachment.
+///
+/// Sanitises the attachment title and, if a file with that name already
+/// exists in `att_dir`, prepends the attachment ID to disambiguate.
+/// `exists` is injected so tests can drive both branches without touching
+/// the filesystem (production callers pass `|p| p.exists()`).
+fn pick_attachment_filename(
+    att_title: &str,
+    att_id: &str,
+    att_dir: &camino::Utf8Path,
+    exists: impl Fn(&camino::Utf8Path) -> bool,
+) -> String {
+    let safe_name = sanitize_filename(att_title);
+    let candidate = att_dir.join(&safe_name);
+    if exists(&candidate) {
+        format!("{att_id}_{safe_name}")
+    } else {
+        safe_name
+    }
+}
+
 pub(super) async fn export_page(
     client: &ConfluenceClient,
     args: &ConfluenceExportArgs,
@@ -21,14 +72,7 @@ pub(super) async fn export_page(
 
     std::fs::create_dir_all(args.output_dir.as_std_path())?;
 
-    let body_key = match args.body_format {
-        BodyFormat::Storage => "storage",
-        BodyFormat::View => "view",
-    };
-    let body_content = page
-        .pointer(&format!("/body/{body_key}/value"))
-        .and_then(Value::as_str)
-        .unwrap_or("");
+    let body_content = extract_body_content(&page, args.body_format);
     let page_file = args
         .output_dir
         .join(format!("{}.html", sanitize_filename(title)));
@@ -51,12 +95,9 @@ pub(super) async fn export_page(
                 .get("title")
                 .and_then(Value::as_str)
                 .unwrap_or("unknown");
-            let mut safe_name = sanitize_filename(att_title);
-            let mut target = att_dir.join(&safe_name);
-            if target.as_std_path().exists() {
-                safe_name = format!("{att_id}_{safe_name}");
-                target = att_dir.join(&safe_name);
-            }
+            let safe_name =
+                pick_attachment_filename(att_title, att_id, &att_dir, |p| p.as_std_path().exists());
+            let target = att_dir.join(&safe_name);
             info!("Downloading attachment: {att_title}");
             let bytes = client.download_attachment(&args.page_id, att_id).await?;
             std::fs::write(target.as_std_path(), &bytes)?;
@@ -64,12 +105,46 @@ pub(super) async fn export_page(
         }
     }
 
-    Ok(serde_json::json!({
-        "page_id": args.page_id,
-        "title": title,
-        "attachments_downloaded": count,
-        "output_dir": args.output_dir.as_str()
-    }))
+    Ok(build_export_summary(
+        &args.page_id,
+        title,
+        count,
+        args.output_dir.as_str(),
+    ))
+}
+
+/// Build the per-page record emitted by `copy_tree`. Pure so we can verify
+/// the exact shape (including `dry_run`/`new_id` branches) in unit tests.
+fn build_copy_record(
+    dry_run: bool,
+    source_page_id: &str,
+    title: &str,
+    depth: u32,
+    new_id: Option<&str>,
+) -> Value {
+    if dry_run {
+        serde_json::json!({
+            "action": "copy",
+            "source_id": source_page_id,
+            "title": title,
+            "depth": depth,
+            "dry_run": true,
+        })
+    } else {
+        serde_json::json!({
+            "action": "copied",
+            "source_id": source_page_id,
+            "new_id": new_id.unwrap_or(""),
+            "title": title,
+            "depth": depth,
+        })
+    }
+}
+
+/// Returns true if the given title matches the user's exclude glob. Centralised
+/// so the recursion body stays readable and the rule has a single test point.
+fn should_exclude(title: &str, exclude: Option<&glob::Pattern>) -> bool {
+    exclude.is_some_and(|pattern| pattern.matches(title))
 }
 
 pub(super) async fn copy_tree(
@@ -121,46 +196,31 @@ fn copy_tree_recursive<'a>(
             .and_then(Value::as_str)
             .unwrap_or("untitled");
 
-        if let Some(pattern) = exclude
-            && pattern.matches(title)
-        {
+        if should_exclude(title, exclude) {
             info!("Excluding page '{title}'");
             return Ok(vec![]);
         }
 
-        let body = page
-            .pointer("/body/storage/value")
-            .and_then(Value::as_str)
-            .unwrap_or("");
+        let body = extract_body_content(&page, BodyFormat::Storage);
 
         let mut results = Vec::new();
 
         if dry_run {
             info!("[dry-run] Would copy page '{title}' (depth {level})");
-            results.push(serde_json::json!({
-                "action": "copy",
-                "source_id": source_page_id,
-                "title": title,
-                "depth": level,
-                "dry_run": true,
-            }));
+            results.push(build_copy_record(true, source_page_id, title, level, None));
         } else {
             info!("Copying page '{title}' (depth {level})");
             let created = client
                 .create_page(target_space, title, body, target_parent, false)
                 .await?;
-            let new_id = created
-                .get("id")
-                .and_then(Value::as_str)
-                .unwrap_or("")
-                .to_string();
-            results.push(serde_json::json!({
-                "action": "copied",
-                "source_id": source_page_id,
-                "new_id": new_id,
-                "title": title,
-                "depth": level,
-            }));
+            let new_id = created.get("id").and_then(Value::as_str).unwrap_or("");
+            results.push(build_copy_record(
+                false,
+                source_page_id,
+                title,
+                level,
+                Some(new_id),
+            ));
         }
 
         if depth > 0 {
@@ -379,6 +439,235 @@ mod tests {
             "last child line should contain title and id, got: {:?}",
             lines[2]
         );
+    }
+
+    // ---- maybe_convert_markdown ----
+
+    #[test]
+    fn maybe_convert_markdown_storage_passthrough() {
+        // Storage-format input must be returned byte-for-byte so the user's
+        // hand-written XHTML reaches Confluence as-is.
+        let body = "<p>already storage</p>".to_string();
+        let result = maybe_convert_markdown(body.clone(), &InputFormat::Storage);
+        assert_eq!(
+            result, body,
+            "storage input must pass through unchanged, got: {result:?}"
+        );
+    }
+
+    #[test]
+    fn maybe_convert_markdown_markdown_converts_heading() {
+        // Markdown input must run through the converter — the cheapest signal
+        // that conversion happened is the presence of the storage `<h1>` tag.
+        let result = maybe_convert_markdown("# Hi".to_string(), &InputFormat::Markdown);
+        assert!(
+            result.contains("<h1>"),
+            "expected <h1> after markdown conversion, got: {result:?}"
+        );
+        assert!(
+            !result.starts_with("# "),
+            "markdown heading prefix must be replaced, got: {result:?}"
+        );
+    }
+
+    #[test]
+    fn maybe_convert_markdown_empty_body_is_safe() {
+        // Empty body is legal (e.g. user passes `--body ""` with `--input-format markdown`).
+        // Must not panic on either path.
+        let storage = maybe_convert_markdown(String::new(), &InputFormat::Storage);
+        assert_eq!(storage, "", "empty storage body should pass through");
+
+        // Markdown converter may emit nothing or trivial whitespace; just
+        // require it doesn't panic.
+        let _ = maybe_convert_markdown(String::new(), &InputFormat::Markdown);
+    }
+
+    // ---- extract_body_content ----
+
+    #[test]
+    fn extract_body_storage_path() {
+        let page = serde_json::json!({
+            "body": {"storage": {"value": "<p>x</p>", "representation": "storage"}}
+        });
+        assert_eq!(extract_body_content(&page, BodyFormat::Storage), "<p>x</p>");
+    }
+
+    #[test]
+    fn extract_body_view_path() {
+        let page = serde_json::json!({
+            "body": {"view": {"value": "<p>rendered</p>", "representation": "view"}}
+        });
+        assert_eq!(
+            extract_body_content(&page, BodyFormat::View),
+            "<p>rendered</p>"
+        );
+    }
+
+    #[test]
+    fn extract_body_missing_key_yields_empty_string() {
+        let page = serde_json::json!({"body": {"view": {"value": "x"}}});
+        // Asking for storage when only view exists must return "" rather than
+        // panicking; the caller writes the empty string to disk.
+        assert_eq!(extract_body_content(&page, BodyFormat::Storage), "");
+    }
+
+    #[test]
+    fn extract_body_missing_body_object_yields_empty_string() {
+        let page = serde_json::json!({"id": "1"});
+        assert_eq!(extract_body_content(&page, BodyFormat::Storage), "");
+    }
+
+    // ---- build_export_summary ----
+
+    #[test]
+    fn build_export_summary_shape() {
+        let v = build_export_summary("123", "My Page", 4, "/tmp/out");
+        assert_eq!(
+            v,
+            serde_json::json!({
+                "page_id": "123",
+                "title": "My Page",
+                "attachments_downloaded": 4,
+                "output_dir": "/tmp/out"
+            }),
+            "summary JSON must match the documented shape"
+        );
+    }
+
+    #[test]
+    fn build_export_summary_zero_attachments() {
+        let v = build_export_summary("1", "T", 0, ".");
+        assert_eq!(v["attachments_downloaded"], 0);
+    }
+
+    // ---- build_copy_record ----
+
+    #[test]
+    fn build_copy_record_dry_run_shape() {
+        let v = build_copy_record(true, "src1", "Title", 2, None);
+        assert_eq!(v["action"], "copy");
+        assert_eq!(v["source_id"], "src1");
+        assert_eq!(v["title"], "Title");
+        assert_eq!(v["depth"], 2);
+        assert_eq!(v["dry_run"], true);
+        assert!(
+            v.get("new_id").is_none(),
+            "dry-run record must not include new_id"
+        );
+    }
+
+    #[test]
+    fn build_copy_record_real_shape() {
+        let v = build_copy_record(false, "src1", "Title", 0, Some("dest42"));
+        assert_eq!(v["action"], "copied");
+        assert_eq!(v["new_id"], "dest42");
+        assert!(
+            v.get("dry_run").is_none(),
+            "real copy must not include dry_run flag"
+        );
+    }
+
+    #[test]
+    fn build_copy_record_real_with_missing_new_id_uses_empty() {
+        // The copy_tree caller passes Some("") rather than None when the
+        // server omits id; the helper still produces a well-formed record.
+        let v = build_copy_record(false, "src", "T", 1, None);
+        assert_eq!(v["new_id"], "");
+    }
+
+    // ---- should_exclude ----
+
+    #[test]
+    fn should_exclude_no_pattern_never_excludes() {
+        assert!(!should_exclude("anything", None));
+    }
+
+    #[test]
+    fn should_exclude_pattern_matches() {
+        let p = glob::Pattern::new("Archive*").unwrap();
+        assert!(should_exclude("Archive 2023", Some(&p)));
+    }
+
+    #[test]
+    fn should_exclude_pattern_does_not_match() {
+        let p = glob::Pattern::new("Archive*").unwrap();
+        assert!(!should_exclude("Active Project", Some(&p)));
+    }
+
+    #[test]
+    fn should_exclude_glob_question_mark() {
+        // Confirms standard glob semantics — `?` matches exactly one char.
+        let p = glob::Pattern::new("page-?").unwrap();
+        assert!(should_exclude("page-a", Some(&p)));
+        assert!(!should_exclude("page-ab", Some(&p)));
+    }
+
+    // ---- pick_attachment_filename ----
+
+    #[test]
+    fn pick_attachment_filename_no_collision_uses_sanitised_title() {
+        // Inject a probe that says nothing exists — the helper must return the
+        // bare sanitised title.
+        let dir = camino::Utf8PathBuf::from("/tmp/att");
+        let name = pick_attachment_filename("hello.png", "9999", &dir, |_| false);
+        assert_eq!(name, "hello.png");
+    }
+
+    #[test]
+    fn pick_attachment_filename_collision_prepends_id() {
+        // When the candidate already exists, the helper must prefix the
+        // attachment ID so the second download does not overwrite the first.
+        let dir = camino::Utf8PathBuf::from("/tmp/att");
+        let name = pick_attachment_filename("hello.png", "9999", &dir, |_| true);
+        assert_eq!(name, "9999_hello.png");
+    }
+
+    #[test]
+    fn pick_attachment_filename_sanitises_illegal_chars_first() {
+        // Sanitisation must happen before the existence check so the probe
+        // sees a path the OS could actually create.
+        let dir = camino::Utf8PathBuf::from("/tmp/att");
+        let name = pick_attachment_filename("a:b/c.png", "1", &dir, |_| false);
+        assert_eq!(name, "c.png", "path separator should reduce to basename");
+    }
+
+    #[test]
+    fn pick_attachment_filename_collision_check_uses_sanitised_path() {
+        // Confirm the probe is called with the sanitised candidate, not the
+        // raw title — otherwise the existence check would never fire on
+        // titles that contain illegal characters.
+        let dir = camino::Utf8PathBuf::from("/tmp/att");
+        let probed = std::cell::RefCell::new(Vec::new());
+        let _ = pick_attachment_filename("file<x>.png", "42", &dir, |p| {
+            probed.borrow_mut().push(p.to_string());
+            false
+        });
+        assert_eq!(probed.borrow().len(), 1);
+        // The path must contain the sanitised (`_` replacement) form.
+        assert!(
+            probed.borrow()[0].contains("file_x_.png"),
+            "probe path should be sanitised, got: {:?}",
+            probed.borrow()
+        );
+    }
+
+    #[test]
+    fn pick_attachment_filename_collision_with_real_filesystem() {
+        // End-to-end: create a real file in a tempdir and confirm the
+        // production-style probe (`p.as_std_path().exists()`) triggers the
+        // collision branch. Guards against drift between the helper and the
+        // closure the caller actually passes.
+        let td = tempfile::tempdir().expect("create tempdir");
+        let dir = camino::Utf8PathBuf::try_from(td.path().to_path_buf()).expect("UTF-8 temp path");
+        let existing = dir.join("doc.txt");
+        std::fs::write(existing.as_std_path(), "x").expect("seed file");
+
+        let name = pick_attachment_filename("doc.txt", "id7", &dir, |p| p.as_std_path().exists());
+        assert_eq!(name, "id7_doc.txt");
+
+        // And when the file is absent, it stays as just the sanitised name.
+        let name = pick_attachment_filename("other.txt", "id8", &dir, |p| p.as_std_path().exists());
+        assert_eq!(name, "other.txt");
     }
 
     #[test]

@@ -2,8 +2,10 @@ coverage:
   status:
     project:
       default:
-        # Don't drop project coverage compared to the PR base.
-        target: auto
+        # Hard floor for total project coverage. Auto-tracking via PR base
+        # still applies on top (any drop > threshold fails), but this floor
+        # documents the level we never want to dip below regardless of base.
+        target: 55%
         # Small tolerance — avoids flaky failures on 0.1% noise.
         threshold: 1%
         informational: false

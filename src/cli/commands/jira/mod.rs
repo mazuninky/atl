@@ -7,6 +7,7 @@ mod sprint;
 mod user;
 mod workflow;
 
+use anyhow::Context;
 use camino::Utf8Path;
 use serde_json::{Value, json};
 
@@ -421,7 +422,10 @@ async fn dispatch(
             });
             if let Some(map) = fields.as_object_mut() {
                 if let Some(desc) = &args.description {
-                    let body = maybe_convert_markdown(read_body_arg(desc)?, &args.input_format);
+                    let body = maybe_convert_markdown(
+                        read_body_arg(desc).context("failed to read --description body")?,
+                        &args.input_format,
+                    );
                     map.insert("description".into(), Value::String(body));
                 }
                 if let Some(assignee) = &args.assignee {
@@ -450,7 +454,10 @@ async fn dispatch(
                 fields.insert("summary".into(), Value::String(summary.clone()));
             }
             if let Some(desc) = &args.description {
-                let body = maybe_convert_markdown(read_body_arg(desc)?, &args.input_format);
+                let body = maybe_convert_markdown(
+                    read_body_arg(desc).context("failed to read --description body")?,
+                    &args.input_format,
+                );
                 fields.insert("description".into(), Value::String(body));
             }
             if let Some(assignee) = &args.assignee {
@@ -491,7 +498,10 @@ async fn dispatch(
             Value::String(format!("Issue {} assigned", args.key))
         }
         JiraSubcommand::Comment(args) => {
-            let body = maybe_convert_markdown(read_body_arg(&args.body)?, &args.input_format);
+            let body = maybe_convert_markdown(
+                read_body_arg(&args.body).context("failed to read comment body argument")?,
+                &args.input_format,
+            );
             client.add_comment(&args.key, &body).await?
         }
         JiraSubcommand::Comments(args) => client.list_comments(&args.key).await?,

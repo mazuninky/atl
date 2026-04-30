@@ -161,8 +161,19 @@ impl AtlRunner {
 ///
 /// Prism returns 500 with specific error codes when `json-schema-faker` can't
 /// synthesize a response body for deeply recursive Atlassian schemas. We also
-/// accept atl's JSON/parse errors because they imply a response *was*
-/// generated but was malformed (still means the request reached Prism).
+/// accept atl's JSON-shape errors (`JSON error: ...`, `missing field`,
+/// `invalid type`) because they imply a response *was* generated but had a
+/// shape that did not match atl's response struct — that's a known Prism
+/// static-mode limitation where partially-shaped fixtures don't satisfy
+/// every required field, not an atl bug.
+///
+/// Empty-body / decode-EOF errors are **NOT** masked: atl previously hid a
+/// real production bug behind `EOF while parsing` (atl#53 — `update_issue` /
+/// `transition_issue` called `handle_response` instead of
+/// `handle_response_maybe_empty` for endpoints that legitimately return 204
+/// No Content). The whole point of `*_positive` contract tests is to catch
+/// exactly that kind of `handle_response` vs `handle_response_maybe_empty`
+/// mismatch, so those errors must surface as failures.
 fn is_prism_response_generation_error(stderr: &str) -> bool {
     // A genuine request-validation failure from Prism looks like:
     //   `status":422 ... stoplight.io/prism/errors#UNPROCESSABLE_ENTITY`
@@ -193,16 +204,130 @@ fn is_prism_response_generation_error(stderr: &str) -> bool {
         "API error: 400",
         "API error: 401",
     ];
-    const ATL_PARSE_MARKERS: &[&str] = &[
-        "JSON error:",
-        "missing field",
-        "invalid type",
-        // atl tried to parse an empty body that Prism produced for a 2xx
-        // response with no example.
-        "EOF while parsing",
-        "error decoding response body",
-    ];
+    // Markers for "Prism produced a response, atl parsed it, but the JSON
+    // shape did not match atl's struct". These are tolerated because Prism's
+    // static mode (json-schema-faker) routinely produces partially-shaped
+    // example bodies that don't cover every required field in deeply nested
+    // Atlassian schemas — that is a Prism limitation, not an atl bug.
+    //
+    // Empty-body / decode-EOF errors are deliberately **not** included
+    // here: see the doc comment on this function.
+    const ATL_PARSE_MARKERS: &[&str] = &["JSON error:", "missing field", "invalid type"];
 
     PRISM_MARKERS.iter().any(|m| stderr.contains(m))
         || ATL_PARSE_MARKERS.iter().any(|m| stderr.contains(m))
+}
+
+#[cfg(test)]
+mod tests {
+    //! Pin the contract-test masking policy. These are *unit* tests for the
+    //! helper itself — they don't spawn any binary and don't need Prism. They
+    //! exist because `is_prism_response_generation_error` previously hid a
+    //! real production bug (atl#53) by whitelisting `EOF while parsing`, and
+    //! we want a regression guard so future edits to the marker list don't
+    //! silently re-introduce that hole.
+    use super::is_prism_response_generation_error;
+
+    #[test]
+    fn does_not_mask_empty_body_eof_errors() {
+        // Regression: atl#53. `update_issue` returned this stderr because it
+        // called `handle_response` on a 204 response. The contract test
+        // `update_issue_positive` must FAIL on this output, not pass it
+        // through `run_ok` as a "Prism artefact".
+        let stderr = "Error: HTTP error: error decoding response body: \
+                      EOF while parsing a value at line 1 column 0";
+        assert!(
+            !is_prism_response_generation_error(stderr),
+            "EOF-while-parsing must NOT be masked: that's the regression \
+             from atl#53 where `update_issue` hit `handle_response` \
+             instead of `handle_response_maybe_empty`. stderr: {stderr}"
+        );
+    }
+
+    #[test]
+    fn does_not_mask_reqwest_decode_errors() {
+        // The wrapping reqwest error string also previously slipped through.
+        let stderr = "Error: HTTP error: error decoding response body: \
+                      expected value at line 1 column 1";
+        assert!(
+            !is_prism_response_generation_error(stderr),
+            "`error decoding response body` must NOT be masked: it indicates \
+             atl tried to parse a response that real Atlassian endpoints \
+             return as 204 / empty. stderr: {stderr}"
+        );
+    }
+
+    #[test]
+    fn masks_json_shape_mismatch_from_prism_faker() {
+        // Prism's json-schema-faker routinely produces fixtures missing
+        // required fields. This is a known static-mode limitation, not an
+        // atl bug — keep masking it.
+        let stderr = "Error: JSON error: missing field `key` at line 1 column 42";
+        assert!(
+            is_prism_response_generation_error(stderr),
+            "`JSON error: missing field` must remain masked — Prism faker \
+             quirk, not a real atl bug. stderr: {stderr}"
+        );
+    }
+
+    #[test]
+    fn masks_invalid_type_from_prism_faker() {
+        let stderr = "Error: JSON error: invalid type: null, expected a string \
+                      at line 1 column 17";
+        assert!(
+            is_prism_response_generation_error(stderr),
+            "`invalid type` must remain masked — Prism faker quirk. \
+             stderr: {stderr}"
+        );
+    }
+
+    #[test]
+    fn masks_schema_too_complex() {
+        let stderr = "Error: HTTP error: API error: 500 \
+                      stoplight.io/prism/errors#SCHEMA_TOO_COMPLEX \
+                      The schema is too complex to be generated";
+        assert!(
+            is_prism_response_generation_error(stderr),
+            "SCHEMA_TOO_COMPLEX is a Prism artefact and must remain masked. \
+             stderr: {stderr}"
+        );
+    }
+
+    #[test]
+    fn does_not_mask_unprocessable_entity() {
+        // Genuine spec violation by atl — the request was malformed. This
+        // is exactly what contract tests are supposed to catch.
+        let stderr = "Error: HTTP error: API error: 422 \
+                      stoplight.io/prism/errors#UNPROCESSABLE_ENTITY \
+                      Request body validation failed";
+        assert!(
+            !is_prism_response_generation_error(stderr),
+            "UNPROCESSABLE_ENTITY must NOT be masked: the whole point of \
+             contract tests is to catch atl sending malformed requests. \
+             stderr: {stderr}"
+        );
+    }
+
+    #[test]
+    fn does_not_mask_no_path_matched() {
+        // atl hit a path/method that doesn't exist in the spec. Must fail.
+        let stderr = "Error: HTTP error: API error: 404 \
+                      stoplight.io/prism/errors#NO_PATH_MATCHED_ERROR";
+        assert!(
+            !is_prism_response_generation_error(stderr),
+            "NO_PATH_MATCHED_ERROR must NOT be masked: it means atl hit \
+             a path that's not in the spec. stderr: {stderr}"
+        );
+    }
+
+    #[test]
+    fn does_not_mask_no_method_matched() {
+        let stderr = "Error: HTTP error: API error: 405 \
+                      stoplight.io/prism/errors#NO_METHOD_MATCHED_ERROR";
+        assert!(
+            !is_prism_response_generation_error(stderr),
+            "NO_METHOD_MATCHED_ERROR must NOT be masked: it means atl used \
+             a method that's not in the spec. stderr: {stderr}"
+        );
+    }
 }

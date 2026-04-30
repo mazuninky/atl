@@ -145,3 +145,66 @@ fn no_color_flag_suppresses_ansi() {
         .success()
         .stdout(predicate::str::contains("\x1b[").not());
 }
+
+// ---------------------------------------------------------------------------
+// Jira `--input-format` flag presence
+//
+// Locks in that the markdown-conversion flag is wired on every command that
+// accepts a body. A help dump is the cheapest contract check — no network or
+// auth required — and catches accidental removal of the `#[arg]` attribute.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn jira_create_help_advertises_input_format_flag() {
+    atl()
+        .args(["--config", null_config_path(), "jira", "create", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("--input-format"));
+}
+
+#[test]
+fn jira_update_help_advertises_input_format_flag() {
+    atl()
+        .args(["--config", null_config_path(), "jira", "update", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("--input-format"));
+}
+
+#[test]
+fn jira_comment_help_advertises_input_format_flag() {
+    atl()
+        .args(["--config", null_config_path(), "jira", "comment", "--help"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("--input-format"));
+}
+
+#[test]
+fn jira_create_rejects_invalid_input_format() {
+    // Clap should reject an unknown enum value with exit code 2 (usage error).
+    // This guards the `value_enum` constraint on `--input-format` so removing
+    // it would fail this test.
+    atl()
+        .args([
+            "--config",
+            null_config_path(),
+            "jira",
+            "create",
+            "--project",
+            "X",
+            "-t",
+            "Task",
+            "-s",
+            "summary",
+            "--input-format",
+            "bogus",
+        ])
+        .assert()
+        .failure()
+        .stderr(
+            predicate::str::contains("invalid value")
+                .or(predicate::str::contains("possible values")),
+        );
+}

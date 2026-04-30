@@ -235,4 +235,194 @@ mod tests {
         let prompter = MockPrompter::new(vec![]);
         assert!(prompter.text("domain?", None).is_err());
     }
+
+    // -------------------------------------------------------------------
+    // MockPrompter type-mismatch errors — every wrong combination must
+    // produce a distinguishable error so a miswritten test fails loudly
+    // rather than silently consuming an unrelated response.
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn mock_password_errors_on_wrong_type() {
+        let prompter = MockPrompter::new(vec![MockResponse::Text("nope".into())]);
+        assert!(prompter.password("token?").is_err());
+    }
+
+    #[test]
+    fn mock_select_errors_on_wrong_type() {
+        let prompter = MockPrompter::new(vec![MockResponse::Text("nope".into())]);
+        assert!(prompter.select("pick?", &["a", "b"]).is_err());
+    }
+
+    #[test]
+    fn mock_confirm_errors_on_wrong_type() {
+        let prompter = MockPrompter::new(vec![MockResponse::Text("yes".into())]);
+        assert!(prompter.confirm("sure?", false).is_err());
+    }
+
+    #[test]
+    fn mock_confirm_errors_on_empty_queue() {
+        let prompter = MockPrompter::new(vec![]);
+        assert!(prompter.confirm("sure?", false).is_err());
+    }
+
+    #[test]
+    fn mock_select_errors_on_empty_queue() {
+        let prompter = MockPrompter::new(vec![]);
+        assert!(prompter.select("pick?", &["a"]).is_err());
+    }
+
+    #[test]
+    fn mock_password_errors_on_empty_queue() {
+        let prompter = MockPrompter::new(vec![]);
+        assert!(prompter.password("token?").is_err());
+    }
+
+    // -------------------------------------------------------------------
+    // MockPrompter::text contract: the `default` parameter is informational
+    // — the script always wins. Documents the contract so future changes
+    // that start consuming `default` make this test fail.
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn mock_text_ignores_default_argument() {
+        let prompter = MockPrompter::new(vec![MockResponse::Text("scripted".into())]);
+        let value = prompter.text("domain?", Some("default-value")).unwrap();
+        assert_eq!(value, "scripted", "scripted answer must override default");
+    }
+
+    // -------------------------------------------------------------------
+    // MockPrompter consumes responses FIFO — order matters.
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn mock_consumes_responses_in_fifo_order() {
+        let prompter = MockPrompter::new(vec![
+            MockResponse::Text("first".into()),
+            MockResponse::Text("second".into()),
+            MockResponse::Text("third".into()),
+        ]);
+        assert_eq!(prompter.text("a", None).unwrap(), "first");
+        assert_eq!(prompter.text("b", None).unwrap(), "second");
+        assert_eq!(prompter.text("c", None).unwrap(), "third");
+        assert_eq!(prompter.remaining(), 0);
+    }
+
+    #[test]
+    fn mock_remaining_decrements_on_each_pop() {
+        let prompter = MockPrompter::new(vec![
+            MockResponse::Text("a".into()),
+            MockResponse::Text("b".into()),
+        ]);
+        assert_eq!(prompter.remaining(), 2);
+        prompter.text("?", None).unwrap();
+        assert_eq!(prompter.remaining(), 1);
+        prompter.text("?", None).unwrap();
+        assert_eq!(prompter.remaining(), 0);
+    }
+
+    // -------------------------------------------------------------------
+    // MockPrompter remaining count: failed pops also consume.
+    // (Documents current behaviour — pop() runs before the type-check, so
+    // a wrong-type call still drains the queue.)
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn mock_wrong_type_call_still_consumes_response() {
+        let prompter = MockPrompter::new(vec![MockResponse::Text("scripted".into())]);
+        let _ = prompter.password("token?"); // wrong type
+        assert_eq!(
+            prompter.remaining(),
+            0,
+            "pop() runs before the variant check, so the response is consumed"
+        );
+    }
+
+    // -------------------------------------------------------------------
+    // Mixed-type scripts: drive a realistic login flow end-to-end.
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn mock_handles_mixed_type_script_in_order() {
+        let prompter = MockPrompter::new(vec![
+            MockResponse::Select(0),
+            MockResponse::Text("alice@acme.com".into()),
+            MockResponse::Password("secret-token".into()),
+            MockResponse::Confirm(true),
+        ]);
+        assert_eq!(prompter.select("kind", &["a", "b"]).unwrap(), 0);
+        assert_eq!(prompter.text("email", None).unwrap(), "alice@acme.com");
+        assert_eq!(prompter.password("token").unwrap(), "secret-token");
+        assert!(prompter.confirm("save?", false).unwrap());
+        assert_eq!(prompter.remaining(), 0);
+    }
+
+    // -------------------------------------------------------------------
+    // map_inquire_err — error mapping contract from production prompter.
+    // We construct each variant directly rather than spawning inquire.
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn map_inquire_err_not_tty_message() {
+        let mapped = map_inquire_err(inquire::InquireError::NotTTY);
+        let msg = mapped.to_string();
+        assert!(
+            msg.contains("requires a TTY"),
+            "NotTTY must surface a TTY-aware message, got: {msg}"
+        );
+        assert!(
+            msg.contains("--with-token"),
+            "NotTTY message must point at the scripted alternative, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn map_inquire_err_cancelled_message() {
+        let mapped = map_inquire_err(inquire::InquireError::OperationCanceled);
+        assert_eq!(mapped.to_string(), "login cancelled");
+    }
+
+    #[test]
+    fn map_inquire_err_interrupted_message() {
+        let mapped = map_inquire_err(inquire::InquireError::OperationInterrupted);
+        assert_eq!(mapped.to_string(), "login cancelled");
+    }
+
+    // -------------------------------------------------------------------
+    // InquirePrompter::select rejects empty options up-front so a buggy
+    // caller doesn't end up driving inquire with an empty list (which
+    // would print a confusing "no options to display" prompt).
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn inquire_select_with_no_options_errors() {
+        let p = InquirePrompter;
+        let err = p.select("pick?", &[]).unwrap_err();
+        assert!(
+            err.to_string().contains("at least one option"),
+            "got: {err}"
+        );
+    }
+
+    // -------------------------------------------------------------------
+    // Prompter trait + Default + Clone + Copy — production code uses
+    // `InquirePrompter` as a value (not Box<dyn>). Compile-time guarantee.
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn inquire_prompter_default_clone_copy() {
+        let p1: InquirePrompter = Default::default();
+        let p2 = p1;
+        // Use p1 again to confirm it's `Copy`, not moved.
+        let _: &dyn Prompter = &p1;
+        let _: &dyn Prompter = &p2;
+    }
+
+    #[test]
+    fn mock_prompter_default_is_empty_queue() {
+        let prompter: MockPrompter = Default::default();
+        assert_eq!(prompter.remaining(), 0);
+        // Calling any method on an empty MockPrompter must error, not panic.
+        assert!(prompter.text("?", None).is_err());
+    }
 }

@@ -69,6 +69,11 @@ minijinja = { version = "2", default-features = false, features = ["builtins", "
 # Self-update
 self_update = { version = "0.44", default-features = false, features = ["reqwest", "rustls", "compression-flate2", "archive-tar", "archive-zip"] }
 
+[target.'cfg(unix)'.dependencies]
+# Used in `main.rs` to restore the default SIGPIPE disposition so piping
+# `atl` output into `head` (etc.) exits cleanly instead of panicking.
+libc = "0.2"
+
 [dev-dependencies]
 assert_cmd = "2"
 predicates = "3"

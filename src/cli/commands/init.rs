@@ -364,6 +364,221 @@ mod tests {
         );
     }
 
+    // -------------------------------------------------------------------
+    // run_init — the user-facing entry point. We can only verify the
+    // non-TTY refusal here without driving a real terminal, but that path
+    // is the contract: pipes / CI must fail loudly instead of hanging.
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn run_init_rejects_non_tty_environment() {
+        // IoStreams::test() reports stdin/stdout/stderr as non-TTY. The
+        // wizard must refuse rather than block waiting for input.
+        let mut io = IoStreams::test();
+        let prompter = MockPrompter::new(vec![]);
+        let err = run_init(&mut io, &prompter).expect_err("should refuse non-TTY");
+        assert!(
+            err.to_string().contains("interactive terminal"),
+            "got: {err}"
+        );
+    }
+
+    // -------------------------------------------------------------------
+    // prompt_non_empty — happy path + trim behaviour.
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn prompt_non_empty_returns_trimmed_value() {
+        let prompter = MockPrompter::new(vec![MockResponse::Text("  alice@acme.com  ".into())]);
+        let value = prompt_non_empty(&prompter, "Email:").unwrap();
+        assert_eq!(value, "alice@acme.com");
+    }
+
+    #[test]
+    fn prompt_non_empty_rejects_pure_tabs_and_newlines() {
+        let prompter = MockPrompter::new(vec![MockResponse::Text("\t\n  ".into())]);
+        let err = prompt_non_empty(&prompter, "Email:").unwrap_err();
+        assert!(err.to_string().contains("cannot be empty"), "got: {err}");
+    }
+
+    #[test]
+    fn prompt_non_empty_propagates_prompter_error() {
+        let prompter = MockPrompter::new(vec![]); // empty queue
+        let result = prompt_non_empty(&prompter, "Email:");
+        assert!(result.is_err(), "must surface prompter error");
+    }
+
+    // -------------------------------------------------------------------
+    // Wizard: empty email is rejected mid-flow.
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn wizard_rejects_empty_email_after_valid_domain() {
+        let prompter = MockPrompter::new(vec![
+            MockResponse::Text("acme".into()),
+            MockResponse::Text("   ".into()), // empty email
+        ]);
+        let err = build_config_from_prompts(&prompter).unwrap_err();
+        assert!(err.to_string().contains("cannot be empty"), "got: {err}");
+    }
+
+    // -------------------------------------------------------------------
+    // Wizard: full https:// input is normalized before write.
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn wizard_strips_https_scheme_from_input() {
+        let prompter = MockPrompter::new(vec![
+            MockResponse::Text("https://acme.atlassian.net/".into()),
+            MockResponse::Text("alice@acme.com".into()),
+            MockResponse::Select(0), // keyring
+            MockResponse::Select(0), // same domain
+        ]);
+        let cfg = build_config_from_prompts(&prompter).unwrap();
+        let profile = cfg.profiles.get("default").expect("default profile");
+        assert_eq!(
+            profile.jira.as_ref().unwrap().domain,
+            "acme.atlassian.net",
+            "scheme + trailing slash must be stripped"
+        );
+        assert_eq!(
+            profile.confluence.as_ref().unwrap().domain,
+            "acme.atlassian.net"
+        );
+    }
+
+    // -------------------------------------------------------------------
+    // Wizard: bare subdomain shorthand expands to .atlassian.net for both
+    // services even when the user picks "different domains" and types a
+    // shorthand for the second one too.
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn wizard_expands_bare_subdomain_for_both_services() {
+        let prompter = MockPrompter::new(vec![
+            MockResponse::Text("jira-acme".into()),
+            MockResponse::Text("alice@acme.com".into()),
+            MockResponse::Select(0),
+            MockResponse::Select(1), // different domains
+            MockResponse::Text("conf-acme".into()),
+        ]);
+        let cfg = build_config_from_prompts(&prompter).unwrap();
+        let profile = cfg.profiles.get("default").unwrap();
+        assert_eq!(
+            profile.jira.as_ref().unwrap().domain,
+            "jira-acme.atlassian.net"
+        );
+        assert_eq!(
+            profile.confluence.as_ref().unwrap().domain,
+            "conf-acme.atlassian.net"
+        );
+    }
+
+    // -------------------------------------------------------------------
+    // Wizard: token storage default (Keyring) is what you get when the
+    // user just presses enter on the first option.
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn wizard_default_token_storage_is_keyring() {
+        let prompter = MockPrompter::new(vec![
+            MockResponse::Text("acme.atlassian.net".into()),
+            MockResponse::Text("alice@acme.com".into()),
+            MockResponse::Select(0),
+            MockResponse::Select(0),
+        ]);
+        let cfg = build_config_from_prompts(&prompter).unwrap();
+        let profile = cfg.profiles.get("default").unwrap();
+        assert!(
+            matches!(profile.token_storage, TokenStorage::Keyring),
+            "first option must map to Keyring"
+        );
+    }
+
+    // -------------------------------------------------------------------
+    // Wizard: api_token is never set by init — only `atl auth login` does
+    // that. This is a critical security/UX invariant: typing the wizard
+    // does NOT persist a token to disk.
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn wizard_never_sets_api_token() {
+        let prompter = MockPrompter::new(vec![
+            MockResponse::Text("acme.atlassian.net".into()),
+            MockResponse::Text("alice@acme.com".into()),
+            MockResponse::Select(1), // even with config-file storage selected
+            MockResponse::Select(0),
+        ]);
+        let cfg = build_config_from_prompts(&prompter).unwrap();
+        let profile = cfg.profiles.get("default").unwrap();
+        assert!(
+            profile.jira.as_ref().unwrap().api_token.is_none(),
+            "init must never write a token directly"
+        );
+        assert!(
+            profile.confluence.as_ref().unwrap().api_token.is_none(),
+            "init must never write a token directly"
+        );
+    }
+
+    // -------------------------------------------------------------------
+    // normalize_domain: extra edge cases.
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn normalize_domain_empty_input_does_not_panic() {
+        // Defensive: caller is supposed to have rejected empty input with
+        // prompt_non_empty, but the normalizer must not panic. Documents
+        // current behaviour: empty input is treated as a bare subdomain
+        // and gets the .atlassian.net suffix. The wizard never reaches
+        // this path in practice — prompt_non_empty rejects it first.
+        assert_eq!(normalize_domain(""), ".atlassian.net");
+    }
+
+    #[test]
+    fn normalize_domain_only_whitespace_does_not_panic() {
+        // Same defensive contract as the empty-input case — trim makes
+        // the input empty, which then takes the bare-subdomain path.
+        assert_eq!(normalize_domain("   "), ".atlassian.net");
+    }
+
+    #[test]
+    fn normalize_domain_internal_slash_preserved() {
+        // Multiple path segments after the host stay intact.
+        assert_eq!(
+            normalize_domain("https://acme.atlassian.net/wiki/spaces/X"),
+            "acme.atlassian.net/wiki/spaces/X"
+        );
+    }
+
+    #[test]
+    fn normalize_domain_strips_scheme_but_keeps_query_in_path() {
+        // The normalizer is intentionally lossy — anything after the host
+        // including query-like strings is preserved verbatim as "path".
+        let normalized = normalize_domain("https://acme.atlassian.net/wiki?x=1");
+        assert_eq!(normalized, "acme.atlassian.net/wiki?x=1");
+    }
+
+    #[test]
+    fn normalize_domain_uppercase_scheme_passthrough() {
+        // Only lowercase `https://` / `http://` are stripped — uppercase
+        // is preserved as-is to surface the typo to the user.
+        let normalized = normalize_domain("HTTPS://acme.atlassian.net");
+        assert_eq!(
+            normalized, "HTTPS://acme.atlassian.net",
+            "uppercase scheme is preserved (caller can re-normalize)"
+        );
+    }
+
+    #[test]
+    fn normalize_domain_two_consecutive_trailing_slashes_strips_one() {
+        // Documents current behaviour — only a single trailing `/` is
+        // removed; double-slash inputs leave a residual `/` for the user
+        // to notice.
+        let normalized = normalize_domain("https://acme.atlassian.net//");
+        assert_eq!(normalized, "acme.atlassian.net/");
+    }
+
     /// Helper that runs the prompt sequence and builds a Config — extracted so
     /// tests can exercise the logic without depending on
     /// `ConfigLoader::default_config_path()`.

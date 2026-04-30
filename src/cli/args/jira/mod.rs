@@ -1,4 +1,4 @@
-use clap::{Args, Subcommand};
+use clap::{Args, Subcommand, ValueEnum};
 
 mod admin;
 mod board;
@@ -21,6 +21,15 @@ pub use user::*;
 pub use workflow::*;
 
 // -- Jira --
+
+#[derive(Debug, Clone, Copy, Default, ValueEnum)]
+pub enum JiraInputFormat {
+    /// Jira wiki syntax (sent as-is)
+    #[default]
+    Wiki,
+    /// Markdown (converted to Jira wiki syntax)
+    Markdown,
+}
 
 #[derive(Debug, Args)]
 pub struct JiraCommand {

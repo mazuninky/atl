@@ -42,6 +42,7 @@ For endpoints without a dedicated command, fall back to `atl api --service <svc>
 For the **full list** of every command and flag, see:
 - Confluence: `references/confluence-commands.md`
 - Jira: `references/jira-commands.md`
+- Body formats (markdown / Confluence storage / Jira wiki / ADF): `references/body-formats.md`
 
 ## Output formatting
 
@@ -239,6 +240,9 @@ atl j create --project PROJ --issue-type Story \
 atl j update PROJ-123 --summary "New title" --priority Medium
 atl j update PROJ-123 --labels "done,reviewed" --fix-version "v2.0"
 
+# Update description from a markdown file (see "Input formats" below)
+atl j update PROJ-123 --description @new-description.md --input-format markdown
+
 # Transition: ALWAYS use numeric transition ID, not status name
 atl j transitions PROJ-123                 # list available transitions + IDs
 atl j move PROJ-123 --transition 31        # use the numeric ID
@@ -266,6 +270,42 @@ atl j comment-delete PROJ-123 10042
 ```
 
 **Jira Cloud ADF note**: On Jira Cloud, comment `.body` is an Atlassian Document Format (ADF) object. When extracting text with `--jq`, use a deeper path like `.comments[].body.content[].content[].text`.
+
+### Input formats — Jira vs Confluence are different
+
+> Full mapping tables (markdown → Confluence storage, markdown → Jira wiki) and read/write flag semantics live in `references/body-formats.md` — read it when in doubt about what format to send or what `--body-format` / `--input-format` actually do.
+
+This is a footgun worth memorising. Jira and Confluence accept different body formats by default, and the `--input-format` flag does **different** conversions on each side:
+
+| Service | Default format | What `--input-format markdown` converts to |
+|---|---|---|
+| **Confluence** (`c create`, `c update`, `c blog create/update`) | `storage` (XHTML) | Confluence storage XHTML (via `comrak::markdown_to_html`) |
+| **Jira** (`j create`, `j update`, `j comment`) | `wiki` (Jira wiki syntax) | Jira wiki syntax (markdown AST → wiki text) |
+
+The Confluence storage format and Jira wiki syntax are **completely different markup languages** — same flag name, different conversions, different outputs. You cannot mix them.
+
+**Rule**: when the body is markdown, always pass `--input-format markdown`. Without it, Jira will silently interpret your markdown as wiki syntax and produce mangled output (headings become nested numbered lists, `**bold**` renders as literal `**`, code fences become paragraphs, pipe tables don't render, `[text](url)` stays literal). The API call returns 201 success, but the rendered description is garbage — only visible in the UI.
+
+```bash
+# Jira — markdown description
+atl j create --project PROJ --issue-type Task \
+  --summary "Bug report" \
+  --description @body.md \
+  --input-format markdown
+
+# Jira — markdown comment
+atl j comment PROJ-123 @comment.md --input-format markdown
+
+# Jira — markdown in update
+atl j update PROJ-123 --description @new-desc.md --input-format markdown
+
+# Jira — explicit wiki syntax (default; flag optional)
+atl j comment PROJ-123 'h2. Heading\n*bold* and _italic_'
+```
+
+Markdown → Jira wiki mapping (lossy, best-effort): headings `# H1`/`## H2` → `h1.`/`h2.`, `**bold**` → `*bold*`, `*italic*` → `_italic_`, `` `code` `` → `{{code}}`, fenced code blocks → `{code:lang}...{code}` (or `{noformat}` if the body contains `{code}` itself), `[text](url)` → `[text|url]`, `![alt](url)` → `!url!` (alt dropped), pipe tables → `||h1||h2||` headers + `|c|c|` rows, `- item` → `* item` (nested = `**`/`***`), `1. item` → `# item`, `> quote` → `{quote}...{quote}`, `~~strike~~` → `-strike-`, `---` → `----`.
+
+Out of scope: ADF (v3 API) input. If you need rich Jira features beyond wiki syntax (panels, mentions, expanding sections), construct ADF JSON and POST via `atl api -X POST` directly.
 
 ### Boards, sprints, epics
 
@@ -445,6 +485,19 @@ atl c create --space DEV --title "X" --body @doc.md --input-format markdown
 atl c read 123456 --body-format view
 ```
 
+**Sending markdown to Jira without `--input-format markdown`**
+```bash
+# WRONG: Jira interprets the body as wiki syntax — markdown renders as garbage
+# (## becomes nested 1.a.i. lists, **bold** stays literal, tables don't render)
+atl j create --project PROJ --issue-type Task --summary "X" \
+  --description @body.md
+# RIGHT: tell Jira the input is markdown — it converts to wiki syntax
+atl j create --project PROJ --issue-type Task --summary "X" \
+  --description @body.md --input-format markdown
+# Same applies to comments and updates
+atl j comment PROJ-123 @comment.md --input-format markdown
+```
+
 **Using -F json when you (Claude) read the output**
 ```bash
 # WASTEFUL: JSON uses many tokens in your context
@@ -469,3 +522,6 @@ For the complete list of all commands and flags:
 
 - **Jira** — read `references/jira-commands.md`
   Covers: issues, projects, boards, sprints, epics, filters, worklogs, components, versions, dashboards, users, groups, fields, workflows, screens, roles, webhooks, schemes, admin
+
+- **Body formats** — read `references/body-formats.md`
+  Covers: Confluence storage (XHTML), Confluence view (rendered HTML), Jira wiki syntax, markdown, ADF; full markdown → storage and markdown → wiki mapping tables; `--body-format` (read) vs `--input-format` (write) semantics; common anti-patterns

@@ -1,6 +1,8 @@
 use camino::Utf8PathBuf;
 use clap::Args;
 
+use super::JiraInputFormat;
+
 #[derive(Debug, Args)]
 pub struct JiraSearchArgs {
     /// JQL query (combined with filter flags via AND)
@@ -150,6 +152,10 @@ pub struct JiraCreateArgs {
     /// Custom field (repeatable), e.g. --custom customfield_10001=value
     #[arg(long = "custom", value_name = "KEY=VALUE")]
     pub custom_fields: Vec<String>,
+
+    /// Input format for the body
+    #[arg(long, default_value = "wiki", value_enum)]
+    pub input_format: JiraInputFormat,
 }
 
 #[derive(Debug, Args)]
@@ -188,6 +194,10 @@ pub struct JiraUpdateArgs {
     /// Custom field (repeatable), e.g. --custom customfield_10001=value
     #[arg(long = "custom", value_name = "KEY=VALUE")]
     pub custom_fields: Vec<String>,
+
+    /// Input format for the body
+    #[arg(long, default_value = "wiki", value_enum)]
+    pub input_format: JiraInputFormat,
 }
 
 #[derive(Debug, Args)]
@@ -216,6 +226,10 @@ pub struct JiraCommentArgs {
 
     /// Comment body. Use @file to read from file, or - for stdin
     pub body: String,
+
+    /// Input format for the body
+    #[arg(long, default_value = "wiki", value_enum)]
+    pub input_format: JiraInputFormat,
 }
 
 #[derive(Debug, Args)]

@@ -7,6 +7,7 @@ mod sprint;
 mod user;
 mod workflow;
 
+use anyhow::Context;
 use camino::Utf8Path;
 use serde_json::{Value, json};
 
@@ -18,6 +19,13 @@ use crate::io::IoStreams;
 use crate::output::{OutputFormat, Transforms, write_output};
 
 use super::read_body_arg;
+
+fn maybe_convert_markdown(body: String, input_format: &JiraInputFormat) -> String {
+    match input_format {
+        JiraInputFormat::Markdown => super::markdown::markdown_to_wiki(&body),
+        JiraInputFormat::Wiki => body,
+    }
+}
 
 pub(super) fn today_date() -> String {
     let now = std::time::SystemTime::now()
@@ -414,7 +422,10 @@ async fn dispatch(
             });
             if let Some(map) = fields.as_object_mut() {
                 if let Some(desc) = &args.description {
-                    let body = read_body_arg(desc)?;
+                    let body = maybe_convert_markdown(
+                        read_body_arg(desc).context("failed to read --description body")?,
+                        &args.input_format,
+                    );
                     map.insert("description".into(), Value::String(body));
                 }
                 if let Some(assignee) = &args.assignee {
@@ -443,7 +454,10 @@ async fn dispatch(
                 fields.insert("summary".into(), Value::String(summary.clone()));
             }
             if let Some(desc) = &args.description {
-                let body = read_body_arg(desc)?;
+                let body = maybe_convert_markdown(
+                    read_body_arg(desc).context("failed to read --description body")?,
+                    &args.input_format,
+                );
                 fields.insert("description".into(), Value::String(body));
             }
             if let Some(assignee) = &args.assignee {
@@ -484,7 +498,10 @@ async fn dispatch(
             Value::String(format!("Issue {} assigned", args.key))
         }
         JiraSubcommand::Comment(args) => {
-            let body = read_body_arg(&args.body)?;
+            let body = maybe_convert_markdown(
+                read_body_arg(&args.body).context("failed to read comment body argument")?,
+                &args.input_format,
+            );
             client.add_comment(&args.key, &body).await?
         }
         JiraSubcommand::Comments(args) => client.list_comments(&args.key).await?,
@@ -1071,6 +1088,64 @@ mod tests {
             map.get("cf_plain").expect("cf_plain missing"),
             &json!("plain"),
             "non-JSON value should become a JSON string"
+        );
+    }
+
+    // ---- maybe_convert_markdown ----
+
+    #[test]
+    fn maybe_convert_markdown_wiki_passthrough() {
+        // Wiki-format input must be returned byte-for-byte unchanged so the
+        // user's hand-written wiki syntax (which contains characters like `*`
+        // and `{` that the markdown converter would interpret) reaches Jira
+        // as-is.
+        let body = "h1. Hello\n\n*already bold*".to_string();
+        let result = maybe_convert_markdown(body.clone(), &JiraInputFormat::Wiki);
+        assert_eq!(
+            result, body,
+            "Wiki input must pass through unchanged, got: {result:?}"
+        );
+    }
+
+    #[test]
+    fn maybe_convert_markdown_markdown_converts_heading() {
+        // Markdown input must run through the converter — the cheapest signal
+        // that conversion happened is the presence of the wiki heading token.
+        let result = maybe_convert_markdown("# Hi".to_string(), &JiraInputFormat::Markdown);
+        assert!(
+            result.contains("h1. Hi"),
+            "expected wiki heading `h1. Hi` after markdown conversion, got: {result:?}"
+        );
+        assert!(
+            !result.starts_with("# "),
+            "markdown heading prefix must be replaced, got: {result:?}"
+        );
+    }
+
+    #[test]
+    fn maybe_convert_markdown_markdown_converts_bold() {
+        // Locks in that bold conversion runs (`**x**` → `*x*`) when the input
+        // format is Markdown. The wiki path would leave `**x**` literally.
+        let result = maybe_convert_markdown("**x**".to_string(), &JiraInputFormat::Markdown);
+        assert!(
+            result.contains("*x*") && !result.contains("**x**"),
+            "expected `**x**` to convert to `*x*`, got: {result:?}"
+        );
+    }
+
+    #[test]
+    fn maybe_convert_markdown_empty_body_does_not_panic() {
+        // Edge case: empty body is legal (e.g. user passes `--description ""`).
+        // Must not panic on either path.
+        let wiki = maybe_convert_markdown(String::new(), &JiraInputFormat::Wiki);
+        assert_eq!(wiki, "", "empty wiki body should pass through");
+
+        let md = maybe_convert_markdown(String::new(), &JiraInputFormat::Markdown);
+        // Markdown converter may emit a trailing newline for an empty doc;
+        // accept either to keep the test resilient to converter trims.
+        assert!(
+            md.is_empty() || md == "\n",
+            "empty markdown body should produce empty or single newline, got: {md:?}"
         );
     }
 }

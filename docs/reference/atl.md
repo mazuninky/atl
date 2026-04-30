@@ -6197,6 +6197,7 @@ Usage: atl jira create [OPTIONS] --project <PROJECT> --issue-type <ISSUE_TYPE> -
 - `--fix-version` — Fix version(s), comma-separated
 - `--component` — Component(s), comma-separated
 - `--custom` — Custom field (repeatable), e.g. --custom customfield_10001=value
+- `--input-format` — Input format for the body
 - `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
 - `--quiet, -q` — Suppress all output except errors
 - `--config` — Path to configuration file
@@ -6229,6 +6230,7 @@ Usage: atl jira update [OPTIONS] <KEY>
 - `--fix-version` — Fix version(s), comma-separated
 - `--component` — Component(s), comma-separated
 - `--custom` — Custom field (repeatable), e.g. --custom customfield_10001=value
+- `--input-format` — Input format for the body
 - `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
 - `--quiet, -q` — Suppress all output except errors
 - `--config` — Path to configuration file
@@ -6329,6 +6331,7 @@ Usage: atl jira comment [OPTIONS] <KEY> <BODY>
 
 - `<KEY>` — Issue key
 - `<BODY>` — Comment body. Use @file to read from file, or - for stdin
+- `--input-format` — Input format for the body
 - `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
 - `--quiet, -q` — Suppress all output except errors
 - `--config` — Path to configuration file

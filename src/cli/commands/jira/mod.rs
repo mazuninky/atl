@@ -486,13 +486,17 @@ async fn dispatch(
             }
             client
                 .update_issue(&args.key, &json!({ "fields": fields }))
-                .await?
+                .await?;
+            Value::String(format!("Issue {} updated", args.key))
         }
         JiraSubcommand::Delete(args) => {
             client.delete_issue(&args.key, args.delete_subtasks).await?;
             Value::String(format!("Issue {} deleted", args.key))
         }
-        JiraSubcommand::Move(args) => client.transition_issue(&args.key, &args.transition).await?,
+        JiraSubcommand::Move(args) => {
+            client.transition_issue(&args.key, &args.transition).await?;
+            Value::String(format!("Issue {} transitioned", args.key))
+        }
         JiraSubcommand::Assign(args) => {
             client.assign_issue(&args.key, &args.account_id).await?;
             Value::String(format!("Issue {} assigned", args.key))

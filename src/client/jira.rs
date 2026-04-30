@@ -255,19 +255,20 @@ impl JiraClient {
         handle_response(resp).await
     }
 
-    pub async fn update_issue(&self, issue_key: &str, payload: &Value) -> Result<Value, Error> {
+    pub async fn update_issue(&self, issue_key: &str, payload: &Value) -> Result<(), Error> {
         self.assert_writable()?;
         let url = format!("{}/issue/{issue_key}", self.base_url);
         debug!("PUT {url}");
         let resp = self.http.put(&url).json(payload).send().await?;
-        handle_response(resp).await
+        handle_response_maybe_empty(resp).await?;
+        Ok(())
     }
 
     pub async fn transition_issue(
         &self,
         issue_key: &str,
         transition_id: &str,
-    ) -> Result<Value, Error> {
+    ) -> Result<(), Error> {
         self.assert_writable()?;
         let url = format!("{}/issue/{issue_key}/transitions", self.base_url);
         let payload = serde_json::json!({
@@ -275,7 +276,8 @@ impl JiraClient {
         });
         debug!("POST {url}");
         let resp = self.http.post(&url).json(&payload).send().await?;
-        handle_response(resp).await
+        handle_response_maybe_empty(resp).await?;
+        Ok(())
     }
 
     pub async fn get_transitions(&self, issue_key: &str) -> Result<Value, Error> {

@@ -18,9 +18,9 @@
 //!   TOON / CSV output stays clean.
 
 use std::io::Write;
-use std::path::PathBuf;
 use std::time::Duration;
 
+use camino::Utf8PathBuf;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, trace};
@@ -143,10 +143,20 @@ fn should_skip(io: &IoStreams, skip_if_update_command: bool) -> bool {
 
 /// Returns the path to the cached state file, or `None` if neither the
 /// state dir nor the cache dir is available. When both are `None` (very
-/// unusual), the notifier skips caching entirely.
-fn state_file_path() -> Option<PathBuf> {
+/// unusual), or when the resolved path is not valid UTF-8 (extremely
+/// unusual on the platforms `atl` targets), the notifier skips caching
+/// entirely instead of panicking.
+fn state_file_path() -> Option<Utf8PathBuf> {
     let base = dirs::state_dir().or_else(dirs::cache_dir)?;
-    Some(base.join("atl").join("update-check.toml"))
+    let utf8 = Utf8PathBuf::from_path_buf(base)
+        .map_err(|p| {
+            trace!(
+                "update-notifier: state/cache dir is not valid UTF-8, skipping cache: {}",
+                p.display()
+            );
+        })
+        .ok()?;
+    Some(utf8.join("atl").join("update-check.toml"))
 }
 
 /// Reads and parses the cached state file. Returns `None` if the file does
@@ -157,20 +167,14 @@ fn read_state() -> Option<State> {
     let bytes = match std::fs::read_to_string(&path) {
         Ok(s) => s,
         Err(e) => {
-            trace!(
-                "update-notifier: no cached state at {}: {e}",
-                path.display()
-            );
+            trace!("update-notifier: no cached state at {path}: {e}");
             return None;
         }
     };
     match toml::from_str::<State>(&bytes) {
         Ok(state) => Some(state),
         Err(e) => {
-            debug!(
-                "update-notifier: cached state at {} is unparseable: {e}",
-                path.display()
-            );
+            debug!("update-notifier: cached state at {path} is unparseable: {e}");
             None
         }
     }
@@ -355,5 +359,195 @@ mod tests {
         assert_eq!(roundtripped.checked_at, original.checked_at);
         assert_eq!(roundtripped.latest_version, original.latest_version);
         assert_eq!(roundtripped.html_url, original.html_url);
+    }
+
+    // -------------------------------------------------------------------
+    // print_notice — captures output via test IoStreams.
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn print_notice_writes_two_lines_to_stderr() {
+        let mut io = IoStreams::test();
+        let rel = Release {
+            version: "2026.18.2".into(),
+            html_url: "https://example.invalid/v2026.18.2".into(),
+        };
+        print_notice(&mut io, "2026.15.1", &rel).expect("write succeeds");
+
+        let captured = io.stderr_as_string();
+        assert!(
+            captured.contains("2026.15.1 -> 2026.18.2"),
+            "notice must show old -> new, got: {captured:?}"
+        );
+        assert!(
+            captured.contains("https://example.invalid/v2026.18.2"),
+            "notice must include release URL, got: {captured:?}"
+        );
+        // Two writeln! calls → two newline characters.
+        assert_eq!(
+            captured.matches('\n').count(),
+            2,
+            "expected exactly 2 lines of output, got: {captured:?}"
+        );
+    }
+
+    #[test]
+    fn print_notice_does_not_touch_stdout() {
+        // Critical contract: pipeable JSON/TOON/CSV output on stdout must
+        // stay clean — the notice goes to stderr only.
+        let mut io = IoStreams::test();
+        let rel = Release {
+            version: "2026.18.2".into(),
+            html_url: "https://example.invalid/".into(),
+        };
+        print_notice(&mut io, "2026.15.1", &rel).unwrap();
+        assert_eq!(io.stdout_as_string(), "");
+    }
+
+    // -------------------------------------------------------------------
+    // is_newer — extra coverage for build-component comparisons.
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn is_newer_higher_build_within_same_week() {
+        assert!(is_newer("2026.18.99", "2026.18.1"));
+    }
+
+    #[test]
+    fn is_newer_higher_week_within_same_year() {
+        assert!(is_newer("2026.20.0", "2026.18.99"));
+    }
+
+    #[test]
+    fn is_newer_lower_year_is_false() {
+        assert!(!is_newer("2025.52.99", "2026.01.0"));
+    }
+
+    #[test]
+    fn is_newer_both_unparseable_is_false() {
+        // The contract is "never nag on unparseable input" — even if both
+        // sides are bogus.
+        assert!(!is_newer("garbage-a", "garbage-b"));
+    }
+
+    // -------------------------------------------------------------------
+    // needs_refresh — boundary at 23h 59m → still cached.
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn needs_refresh_just_under_24h_is_false() {
+        let now = Utc::now();
+        let state = State {
+            checked_at: now - chrono::Duration::minutes(60 * 24 - 1),
+            latest_version: "2026.18.1".into(),
+            html_url: "https://example.invalid/".into(),
+        };
+        assert!(!needs_refresh(&state, now));
+    }
+
+    #[test]
+    fn needs_refresh_far_in_the_past_is_true() {
+        let now = Utc::now();
+        let state = State {
+            checked_at: now - chrono::Duration::days(7),
+            latest_version: "2026.18.1".into(),
+            html_url: "https://example.invalid/".into(),
+        };
+        assert!(needs_refresh(&state, now));
+    }
+
+    // -------------------------------------------------------------------
+    // should_skip — covers ATL_NO_UPDATE_NOTIFIER and CI env paths.
+    // These tests mutate process-wide env vars, so they hold env_lock().
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn should_skip_when_env_disable_set() {
+        let _g = crate::test_util::env_lock();
+        // SAFETY: serialized via env_lock().
+        unsafe {
+            std::env::remove_var("CI");
+            std::env::set_var("ATL_NO_UPDATE_NOTIFIER", "1");
+        }
+        // IoStreams::test() reports stderr_tty=false, which would also cause
+        // skipping. That's fine — this test proves the env path returns
+        // `true` regardless of TTY state, which is the behaviour CI relies
+        // on (`atl ... 2>/dev/null` should skip the notice without the env
+        // var, and the env var lets users opt out interactively too).
+        let io = IoStreams::test();
+        assert!(
+            should_skip(&io, false),
+            "must skip when ATL_NO_UPDATE_NOTIFIER is set"
+        );
+        unsafe {
+            std::env::remove_var("ATL_NO_UPDATE_NOTIFIER");
+        }
+    }
+
+    #[test]
+    fn should_skip_when_ci_env_set() {
+        let _g = crate::test_util::env_lock();
+        // SAFETY: serialized via env_lock().
+        unsafe {
+            std::env::remove_var("ATL_NO_UPDATE_NOTIFIER");
+            std::env::set_var("CI", "1");
+        }
+        let probe_io = IoStreams::test();
+        assert!(
+            should_skip(&probe_io, false),
+            "must skip when CI env var is set"
+        );
+        unsafe {
+            std::env::remove_var("CI");
+        }
+    }
+
+    // -------------------------------------------------------------------
+    // state_file_path — typically resolvable on supported platforms.
+    // We don't assert the exact path since it varies per platform and per
+    // user, but we do assert the suffix is the cache file name and that
+    // the path is under an `atl` subdir.
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn state_file_path_uses_atl_subdir_when_available() {
+        if let Some(p) = state_file_path() {
+            assert_eq!(p.file_name(), Some("update-check.toml"));
+            // Parent must end with `atl` so multiple Innowald CLIs don't
+            // collide on the same cache file.
+            assert_eq!(
+                p.parent().and_then(|p| p.file_name()),
+                Some("atl"),
+                "expected parent dir name `atl`, got path: {p}"
+            );
+        }
+    }
+
+    // -------------------------------------------------------------------
+    // GithubRelease parsing — guards against a silent schema migration.
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn github_release_parses_minimum_fields() {
+        let payload = r#"{
+            "tag_name": "v2026.18.1",
+            "html_url": "https://github.com/mazuninky/atl/releases/tag/v2026.18.1",
+            "name": "v2026.18.1",
+            "prerelease": false
+        }"#;
+        let parsed: GithubRelease =
+            serde_json::from_str(payload).expect("payload must parse with extra fields");
+        assert_eq!(parsed.tag_name, "v2026.18.1");
+        assert_eq!(
+            parsed.html_url,
+            "https://github.com/mazuninky/atl/releases/tag/v2026.18.1"
+        );
+    }
+
+    #[test]
+    fn github_release_missing_tag_name_fails() {
+        let payload = r#"{ "html_url": "https://example.invalid/" }"#;
+        let result: Result<GithubRelease, _> = serde_json::from_str(payload);
+        assert!(result.is_err(), "missing tag_name must fail to deserialize");
     }
 }

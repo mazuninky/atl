@@ -10,11 +10,27 @@ use atl::io::IoStreams;
 use atl::output::Transforms;
 
 fn main() {
+    reset_sigpipe();
     if let Err(e) = run() {
         eprintln!("Error: {e:#}");
         std::process::exit(exit_code_for_error(&e));
     }
 }
+
+/// Restore the default `SIGPIPE` disposition on Unix so that piping `atl`
+/// output into commands like `head` results in a clean exit on broken pipe
+/// rather than a Rust panic.
+#[cfg(unix)]
+fn reset_sigpipe() {
+    // SAFETY: setting a signal disposition before any threads are spawned
+    // is sound; we run this as the very first thing in `main()`.
+    unsafe {
+        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+    }
+}
+
+#[cfg(not(unix))]
+fn reset_sigpipe() {}
 
 fn run() -> Result<()> {
     // Expand user-defined aliases (if any) before clap parses argv. This
@@ -24,11 +40,6 @@ fn run() -> Result<()> {
     let raw_args: Vec<String> = std::env::args().collect();
     let args = commands::alias::expand_aliases(raw_args);
     let cli = Cli::parse_from(args);
-
-    if cli.no_color {
-        // SAFETY: called early in main before any threads are spawned.
-        unsafe { std::env::set_var("NO_COLOR", "1") };
-    }
 
     init_logging(&cli);
 
@@ -167,9 +178,11 @@ fn init_logging(cli: &Cli) {
 
     let filter = EnvFilter::from_default_env().add_directive(level.into());
 
-    tracing_subscriber::fmt()
+    // Use try_init so callers (e.g. integration tests that invoke `run`
+    // multiple times in-process) don't panic on second initialization.
+    let _ = tracing_subscriber::fmt()
         .with_env_filter(filter)
         .with_target(false)
         .with_ansi(!cli.no_color)
-        .init();
+        .try_init();
 }

@@ -85,6 +85,171 @@ fn escape_jql(value: &str) -> String {
     value.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
+/// Build the `fields` JSON object for an issue create request.
+///
+/// `body` is the already-resolved (and possibly markdown-converted) description.
+/// HTTP I/O and stdin/file resolution happen at the caller; this helper is pure
+/// so it can be unit-tested.
+fn build_create_fields(
+    args: &JiraCreateArgs,
+    description_body: Option<String>,
+) -> anyhow::Result<Value> {
+    let mut fields = json!({
+        "project": { "key": &args.project },
+        "issuetype": { "name": &args.issue_type },
+        "summary": &args.summary,
+    });
+    if let Some(map) = fields.as_object_mut() {
+        if let Some(body) = description_body {
+            map.insert("description".into(), Value::String(body));
+        }
+        if let Some(assignee) = &args.assignee {
+            map.insert("assignee".into(), json!({ "accountId": assignee }));
+        }
+        if let Some(priority) = &args.priority {
+            map.insert("priority".into(), json!({ "name": priority }));
+        }
+        if let Some(labels) = &args.labels {
+            let label_list: Vec<Value> = labels
+                .split(',')
+                .map(|l| Value::String(l.trim().to_string()))
+                .collect();
+            map.insert("labels".into(), Value::Array(label_list));
+        }
+        if let Some(parent) = &args.parent {
+            map.insert("parent".into(), json!({ "key": parent }));
+        }
+        insert_extra_fields(map, &args.fix_version, &args.component, &args.custom_fields)?;
+    }
+    Ok(fields)
+}
+
+/// Build the `fields` map for an issue update request.
+///
+/// `description_body` is the already-resolved (and possibly markdown-converted)
+/// description; pass `None` to leave description unchanged. Returns an error if
+/// the resulting map is empty (the user passed `update` with no field flags).
+fn build_update_fields(
+    args: &JiraUpdateArgs,
+    description_body: Option<String>,
+) -> anyhow::Result<serde_json::Map<String, Value>> {
+    let mut fields = serde_json::Map::new();
+    if let Some(summary) = &args.summary {
+        fields.insert("summary".into(), Value::String(summary.clone()));
+    }
+    if let Some(body) = description_body {
+        fields.insert("description".into(), Value::String(body));
+    }
+    if let Some(assignee) = &args.assignee {
+        fields.insert("assignee".into(), json!({ "accountId": assignee }));
+    }
+    if let Some(priority) = &args.priority {
+        fields.insert("priority".into(), json!({ "name": priority }));
+    }
+    if let Some(labels) = &args.labels {
+        let label_list: Vec<Value> = labels
+            .split(',')
+            .map(|l| Value::String(l.trim().to_string()))
+            .collect();
+        fields.insert("labels".into(), Value::Array(label_list));
+    }
+    insert_extra_fields(
+        &mut fields,
+        &args.fix_version,
+        &args.component,
+        &args.custom_fields,
+    )?;
+    if fields.is_empty() {
+        anyhow::bail!(
+            "no fields to update; specify at least one of --summary, --description, --assignee, --priority, --labels, --fix-version, --component, --custom"
+        );
+    }
+    Ok(fields)
+}
+
+/// Build a clone payload by copying selected fields from a source issue and
+/// overriding the summary.
+///
+/// Pure: takes the source issue JSON (as returned by `client.get_issue`) and
+/// optionally an override summary, returns the new `fields` map ready to wrap
+/// in `{"fields": ...}`.
+fn build_clone_fields(
+    source: &Value,
+    override_summary: Option<&str>,
+) -> anyhow::Result<serde_json::Map<String, Value>> {
+    let source_fields = source
+        .get("fields")
+        .and_then(|f| f.as_object())
+        .ok_or_else(|| anyhow::anyhow!("could not read fields from source issue"))?;
+
+    let mut new_fields = serde_json::Map::new();
+
+    for key in [
+        "project",
+        "issuetype",
+        "description",
+        "priority",
+        "labels",
+        "components",
+        "fixVersions",
+    ] {
+        if let Some(val) = source_fields.get(key)
+            && !val.is_null()
+        {
+            new_fields.insert(key.to_string(), val.clone());
+        }
+    }
+
+    let summary = if let Some(s) = override_summary {
+        s.to_string()
+    } else {
+        let original = source_fields
+            .get("summary")
+            .and_then(|s| s.as_str())
+            .unwrap_or("(no summary)");
+        format!("[Clone] {original}")
+    };
+    new_fields.insert("summary".into(), Value::String(summary));
+
+    Ok(new_fields)
+}
+
+/// Build the JSON payload for the `notify` endpoint.
+///
+/// `body` is already-resolved (no @file / `-` handling here).
+fn build_notify_payload(subject: &str, body: &str, to: &[String]) -> Value {
+    let mut payload = json!({
+        "subject": subject,
+        "textBody": body,
+    });
+    if !to.is_empty() {
+        let users: Vec<Value> = to.iter().map(|id| json!({ "accountId": id })).collect();
+        payload["to"] = json!({ "users": users });
+    }
+    payload
+}
+
+/// Parse the user-supplied JSON body for `bulk-create`. Accepts either a raw
+/// array of field objects or the full `{"issueUpdates": [...]}` envelope and
+/// always returns the envelope shape that the API expects.
+fn parse_bulk_create_payload(raw: &str) -> anyhow::Result<Value> {
+    let parsed: Value =
+        serde_json::from_str(raw).map_err(|e| anyhow::anyhow!("invalid JSON input: {e}"))?;
+    if parsed.is_array() {
+        let updates: Vec<Value> = parsed
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|fields| json!({ "fields": fields }))
+            .collect();
+        Ok(json!({ "issueUpdates": updates }))
+    } else if parsed.get("issueUpdates").is_some() {
+        Ok(parsed)
+    } else {
+        anyhow::bail!("expected a JSON array of field objects or an object with 'issueUpdates' key")
+    }
+}
+
 fn build_jql(args: &JiraSearchArgs) -> anyhow::Result<String> {
     let mut clauses = Vec::new();
     let mut raw_order_by: Option<String> = None;
@@ -415,75 +580,27 @@ async fn dispatch(
             }
         }
         JiraSubcommand::Create(args) => {
-            let mut fields = json!({
-                "project": { "key": &args.project },
-                "issuetype": { "name": &args.issue_type },
-                "summary": &args.summary,
-            });
-            if let Some(map) = fields.as_object_mut() {
-                if let Some(desc) = &args.description {
-                    let body = maybe_convert_markdown(
-                        read_body_arg(desc).context("failed to read --description body")?,
-                        &args.input_format,
-                    );
-                    map.insert("description".into(), Value::String(body));
-                }
-                if let Some(assignee) = &args.assignee {
-                    map.insert("assignee".into(), json!({ "accountId": assignee }));
-                }
-                if let Some(priority) = &args.priority {
-                    map.insert("priority".into(), json!({ "name": priority }));
-                }
-                if let Some(labels) = &args.labels {
-                    let label_list: Vec<Value> = labels
-                        .split(',')
-                        .map(|l| Value::String(l.trim().to_string()))
-                        .collect();
-                    map.insert("labels".into(), Value::Array(label_list));
-                }
-                if let Some(parent) = &args.parent {
-                    map.insert("parent".into(), json!({ "key": parent }));
-                }
-                insert_extra_fields(map, &args.fix_version, &args.component, &args.custom_fields)?;
-            }
+            let description_body = if let Some(desc) = &args.description {
+                Some(maybe_convert_markdown(
+                    read_body_arg(desc).context("failed to read --description body")?,
+                    &args.input_format,
+                ))
+            } else {
+                None
+            };
+            let fields = build_create_fields(args, description_body)?;
             client.create_issue(&json!({ "fields": fields })).await?
         }
         JiraSubcommand::Update(args) => {
-            let mut fields = serde_json::Map::new();
-            if let Some(summary) = &args.summary {
-                fields.insert("summary".into(), Value::String(summary.clone()));
-            }
-            if let Some(desc) = &args.description {
-                let body = maybe_convert_markdown(
+            let description_body = if let Some(desc) = &args.description {
+                Some(maybe_convert_markdown(
                     read_body_arg(desc).context("failed to read --description body")?,
                     &args.input_format,
-                );
-                fields.insert("description".into(), Value::String(body));
-            }
-            if let Some(assignee) = &args.assignee {
-                fields.insert("assignee".into(), json!({ "accountId": assignee }));
-            }
-            if let Some(priority) = &args.priority {
-                fields.insert("priority".into(), json!({ "name": priority }));
-            }
-            if let Some(labels) = &args.labels {
-                let label_list: Vec<Value> = labels
-                    .split(',')
-                    .map(|l| Value::String(l.trim().to_string()))
-                    .collect();
-                fields.insert("labels".into(), Value::Array(label_list));
-            }
-            insert_extra_fields(
-                &mut fields,
-                &args.fix_version,
-                &args.component,
-                &args.custom_fields,
-            )?;
-            if fields.is_empty() {
-                anyhow::bail!(
-                    "no fields to update; specify at least one of --summary, --description, --assignee, --priority, --labels, --fix-version, --component, --custom"
-                );
-            }
+                ))
+            } else {
+                None
+            };
+            let fields = build_update_fields(args, description_body)?;
             client
                 .update_issue(&args.key, &json!({ "fields": fields }))
                 .await?;
@@ -556,40 +673,7 @@ async fn dispatch(
         }
         JiraSubcommand::Clone(args) => {
             let source = client.get_issue(&args.key, &[]).await?;
-            let source_fields = source
-                .get("fields")
-                .and_then(|f| f.as_object())
-                .ok_or_else(|| anyhow::anyhow!("could not read fields from source issue"))?;
-
-            let mut new_fields = serde_json::Map::new();
-
-            for key in [
-                "project",
-                "issuetype",
-                "description",
-                "priority",
-                "labels",
-                "components",
-                "fixVersions",
-            ] {
-                if let Some(val) = source_fields.get(key)
-                    && !val.is_null()
-                {
-                    new_fields.insert(key.to_string(), val.clone());
-                }
-            }
-
-            let summary = if let Some(s) = &args.summary {
-                s.clone()
-            } else {
-                let original = source_fields
-                    .get("summary")
-                    .and_then(|s| s.as_str())
-                    .unwrap_or("(no summary)");
-                format!("[Clone] {original}")
-            };
-            new_fields.insert("summary".into(), Value::String(summary));
-
+            let new_fields = build_clone_fields(&source, args.summary.as_deref())?;
             client
                 .create_issue(&json!({ "fields": new_fields }))
                 .await?
@@ -640,18 +724,7 @@ async fn dispatch(
         JiraSubcommand::Watchers(args) => client.get_watchers(&args.key).await?,
         JiraSubcommand::Notify(args) => {
             let body = read_body_arg(&args.body)?;
-            let mut payload = json!({
-                "subject": &args.subject,
-                "textBody": body,
-            });
-            if !args.to.is_empty() {
-                let users: Vec<Value> = args
-                    .to
-                    .iter()
-                    .map(|id| json!({ "accountId": id }))
-                    .collect();
-                payload["to"] = json!({ "users": users });
-            }
+            let payload = build_notify_payload(&args.subject, &body, &args.to);
             client.notify_issue(&args.key, &payload).await?;
             Value::String(format!("Notification sent for {}", args.key))
         }
@@ -722,27 +795,7 @@ async fn dispatch(
         }
         JiraSubcommand::BulkCreate(args) => {
             let raw = read_body_arg(&args.input)?;
-            let parsed: Value = serde_json::from_str(&raw)
-                .map_err(|e| anyhow::anyhow!("invalid JSON input: {e}"))?;
-
-            // Accept either a raw array of field objects or the full
-            // {"issueUpdates": [...]} envelope.
-            let payload = if parsed.is_array() {
-                let updates: Vec<Value> = parsed
-                    .as_array()
-                    .unwrap()
-                    .iter()
-                    .map(|fields| json!({"fields": fields}))
-                    .collect();
-                json!({"issueUpdates": updates})
-            } else if parsed.get("issueUpdates").is_some() {
-                parsed
-            } else {
-                anyhow::bail!(
-                    "expected a JSON array of field objects or an object with 'issueUpdates' key"
-                );
-            };
-
+            let payload = parse_bulk_create_payload(&raw)?;
             client.bulk_create_issues(&payload).await?
         }
         JiraSubcommand::Archive(args) => {
@@ -1150,6 +1203,718 @@ mod tests {
         assert!(
             md.is_empty() || md == "\n",
             "empty markdown body should produce empty or single newline, got: {md:?}"
+        );
+    }
+
+    // ---- build_jql: filter flag coverage ----
+
+    #[test]
+    fn build_jql_assignee_current_user_unquoted() {
+        let mut args = default_search_args();
+        args.assignee = Some("currentUser()".to_string());
+        let result = build_jql(&args).unwrap();
+        // currentUser() is a JQL function — must not be wrapped in quotes
+        // or the server treats it as a literal user name.
+        assert_eq!(result, "assignee = currentUser()");
+    }
+
+    #[test]
+    fn build_jql_assignee_account_id_quoted() {
+        let mut args = default_search_args();
+        args.assignee = Some("712020:abc".to_string());
+        let result = build_jql(&args).unwrap();
+        assert_eq!(result, "assignee = \"712020:abc\"");
+    }
+
+    #[test]
+    fn build_jql_reporter_current_user_unquoted() {
+        let mut args = default_search_args();
+        args.reporter = Some("currentUser()".to_string());
+        let result = build_jql(&args).unwrap();
+        assert_eq!(result, "reporter = currentUser()");
+    }
+
+    #[test]
+    fn build_jql_reporter_account_id_quoted() {
+        let mut args = default_search_args();
+        args.reporter = Some("alice".to_string());
+        let result = build_jql(&args).unwrap();
+        assert_eq!(result, "reporter = \"alice\"");
+    }
+
+    #[test]
+    fn build_jql_priority_filter() {
+        let mut args = default_search_args();
+        args.priority = Some("High".to_string());
+        let result = build_jql(&args).unwrap();
+        assert_eq!(result, "priority = \"High\"");
+    }
+
+    #[test]
+    fn build_jql_type_filter() {
+        let mut args = default_search_args();
+        args.r#type = Some("Bug".to_string());
+        let result = build_jql(&args).unwrap();
+        assert_eq!(result, "type = \"Bug\"");
+    }
+
+    #[test]
+    fn build_jql_label_component_resolution_filters() {
+        let mut args = default_search_args();
+        args.label = Some("hot".to_string());
+        args.component = Some("backend".to_string());
+        args.resolution = Some("Done".to_string());
+        let result = build_jql(&args).unwrap();
+        assert_eq!(
+            result,
+            "labels = \"hot\" AND component = \"backend\" AND resolution = \"Done\""
+        );
+    }
+
+    #[test]
+    fn build_jql_date_filters_use_correct_operators() {
+        let mut args = default_search_args();
+        args.created = Some("2025-01-01".to_string());
+        args.created_after = Some("2025-01-02".to_string());
+        args.updated = Some("2025-01-03".to_string());
+        args.updated_after = Some("2025-01-04".to_string());
+        let result = build_jql(&args).unwrap();
+        // `created`/`updated` are inclusive (>=), `*_after` are exclusive (>)
+        assert!(
+            result.contains("created >= \"2025-01-01\""),
+            "missing inclusive created clause, got: {result}"
+        );
+        assert!(
+            result.contains("created > \"2025-01-02\""),
+            "missing exclusive created clause, got: {result}"
+        );
+        assert!(
+            result.contains("updated >= \"2025-01-03\""),
+            "missing inclusive updated clause, got: {result}"
+        );
+        assert!(
+            result.contains("updated > \"2025-01-04\""),
+            "missing exclusive updated clause, got: {result}"
+        );
+    }
+
+    #[test]
+    fn build_jql_watching_flag() {
+        let mut args = default_search_args();
+        args.watching = true;
+        let result = build_jql(&args).unwrap();
+        assert_eq!(result, "watcher = currentUser()");
+    }
+
+    #[test]
+    fn build_jql_order_by_flag_default_ascending() {
+        let mut args = default_search_args();
+        args.status = Some("Open".to_string());
+        args.order_by = Some("created".to_string());
+        let result = build_jql(&args).unwrap();
+        assert_eq!(result, "status = \"Open\" ORDER BY created ASC");
+    }
+
+    #[test]
+    fn build_jql_order_by_flag_descending_with_reverse() {
+        let mut args = default_search_args();
+        args.status = Some("Open".to_string());
+        args.order_by = Some("created".to_string());
+        args.reverse = true;
+        let result = build_jql(&args).unwrap();
+        assert_eq!(result, "status = \"Open\" ORDER BY created DESC");
+    }
+
+    #[test]
+    fn build_jql_escapes_user_input_in_quoted_fields() {
+        let mut args = default_search_args();
+        // Status values can contain backslashes/quotes if a user quotes them.
+        args.status = Some(r#"weird"name"#.to_string());
+        let result = build_jql(&args).unwrap();
+        assert_eq!(
+            result, r#"status = "weird\"name""#,
+            "status value must be escaped before interpolation"
+        );
+    }
+
+    // ---- cmd_uses_pager ----
+
+    #[test]
+    fn cmd_uses_pager_view_qualifies() {
+        let cmd = JiraSubcommand::View(JiraViewArgs {
+            key: "X-1".into(),
+            web: false,
+        });
+        assert!(cmd_uses_pager(&cmd));
+    }
+
+    #[test]
+    fn cmd_uses_pager_search_qualifies() {
+        let cmd = JiraSubcommand::Search(default_search_args());
+        assert!(cmd_uses_pager(&cmd));
+    }
+
+    #[test]
+    fn cmd_uses_pager_short_output_does_not_qualify() {
+        // Sanity: a mutating command should never engage the pager so error
+        // messages stay inline.
+        let cmd = JiraSubcommand::Move(JiraMoveArgs {
+            key: "X-1".into(),
+            transition: "31".into(),
+        });
+        assert!(!cmd_uses_pager(&cmd));
+    }
+
+    // ---- today_date ----
+
+    #[test]
+    fn today_date_has_iso_shape() {
+        let s = today_date();
+        // Must be exactly YYYY-MM-DD (10 chars, dashes at index 4 and 7).
+        assert_eq!(s.len(), 10, "expected 10-char date string, got {s:?}");
+        assert_eq!(s.as_bytes()[4], b'-', "dash missing at index 4: {s:?}");
+        assert_eq!(s.as_bytes()[7], b'-', "dash missing at index 7: {s:?}");
+        // All other positions must be ASCII digits.
+        for (i, b) in s.bytes().enumerate() {
+            if i == 4 || i == 7 {
+                continue;
+            }
+            assert!(b.is_ascii_digit(), "non-digit at index {i}: {s:?}");
+        }
+    }
+
+    // ---- flatten_issue (single) ----
+
+    #[test]
+    fn flatten_issue_extracts_all_known_fields() {
+        let input = json!({
+            "key": "ORB-9",
+            "fields": {
+                "summary": "Do thing",
+                "status": { "name": "In Progress" },
+                "priority": { "name": "Medium" },
+                "issuetype": { "name": "Story" },
+                "project": { "key": "ORB" },
+                "assignee": { "displayName": "Alice" },
+                "reporter": { "displayName": "Bob" },
+                "created": "2025-01-01T00:00:00Z",
+                "updated": "2025-01-02T00:00:00Z",
+                "description": "hello",
+                "resolution": { "name": "Fixed" },
+                "labels": ["a", "b"],
+                "components": [{"name": "be"}, {"name": "fe"}]
+            }
+        });
+        let out = flatten_issue(input);
+        let obj = out.as_object().expect("object");
+        assert_eq!(obj.get("key").and_then(Value::as_str), Some("ORB-9"));
+        assert_eq!(obj.get("summary").and_then(Value::as_str), Some("Do thing"));
+        assert_eq!(obj.get("type").and_then(Value::as_str), Some("Story"));
+        assert_eq!(
+            obj.get("status").and_then(Value::as_str),
+            Some("In Progress")
+        );
+        assert_eq!(obj.get("priority").and_then(Value::as_str), Some("Medium"));
+        assert_eq!(obj.get("assignee").and_then(Value::as_str), Some("Alice"));
+        assert_eq!(obj.get("reporter").and_then(Value::as_str), Some("Bob"));
+        assert_eq!(obj.get("project").and_then(Value::as_str), Some("ORB"));
+        assert_eq!(obj.get("labels").and_then(Value::as_str), Some("a, b"));
+        assert_eq!(
+            obj.get("components").and_then(Value::as_str),
+            Some("be, fe")
+        );
+        assert_eq!(obj.get("resolution").and_then(Value::as_str), Some("Fixed"));
+        assert_eq!(
+            obj.get("created").and_then(Value::as_str),
+            Some("2025-01-01T00:00:00Z")
+        );
+        assert_eq!(
+            obj.get("updated").and_then(Value::as_str),
+            Some("2025-01-02T00:00:00Z")
+        );
+        assert_eq!(
+            obj.get("description").and_then(Value::as_str),
+            Some("hello")
+        );
+    }
+
+    #[test]
+    fn flatten_issue_omits_empty_optional_fields() {
+        // labels/components/resolution/description are conditionally inserted.
+        let input = json!({
+            "key": "X-1",
+            "fields": {
+                "summary": "s",
+                "status": { "name": "Open" },
+                "priority": { "name": "Low" },
+                "issuetype": { "name": "Task" },
+                "project": { "key": "X" },
+                "assignee": null,
+                "reporter": { "displayName": "R" },
+                "created": "2025-01-01T00:00:00Z",
+                "updated": "2025-01-01T00:00:00Z"
+            }
+        });
+        let out = flatten_issue(input);
+        let obj = out.as_object().expect("object");
+        assert!(obj.get("labels").is_none(), "labels should be omitted");
+        assert!(
+            obj.get("components").is_none(),
+            "components should be omitted"
+        );
+        assert!(
+            obj.get("resolution").is_none(),
+            "resolution should be omitted"
+        );
+        assert!(
+            obj.get("description").is_none(),
+            "description should be omitted"
+        );
+        assert_eq!(
+            obj.get("assignee").and_then(Value::as_str),
+            Some(""),
+            "missing assignee should map to empty string"
+        );
+    }
+
+    // ---- build_create_fields ----
+
+    fn default_create_args() -> JiraCreateArgs {
+        JiraCreateArgs {
+            project: "PROJ".into(),
+            issue_type: "Task".into(),
+            summary: "S".into(),
+            description: None,
+            assignee: None,
+            priority: None,
+            labels: None,
+            parent: None,
+            fix_version: None,
+            component: None,
+            custom_fields: vec![],
+            input_format: JiraInputFormat::Wiki,
+        }
+    }
+
+    #[test]
+    fn build_create_fields_minimum_required() {
+        let args = default_create_args();
+        let v = build_create_fields(&args, None).unwrap();
+        assert_eq!(v["project"]["key"], "PROJ");
+        assert_eq!(v["issuetype"]["name"], "Task");
+        assert_eq!(v["summary"], "S");
+        // Optional fields must NOT be present when not provided.
+        assert!(v.get("description").is_none(), "description must be absent");
+        assert!(v.get("assignee").is_none(), "assignee must be absent");
+        assert!(v.get("labels").is_none(), "labels must be absent");
+        assert!(v.get("parent").is_none(), "parent must be absent");
+    }
+
+    #[test]
+    fn build_create_fields_with_description_uses_passed_body() {
+        // The caller is responsible for resolving --description (literal/file/stdin)
+        // and converting markdown if requested. The builder takes the result.
+        let args = default_create_args();
+        let v = build_create_fields(&args, Some("the body".into())).unwrap();
+        assert_eq!(v["description"], "the body");
+    }
+
+    #[test]
+    fn build_create_fields_with_full_optionals() {
+        let mut args = default_create_args();
+        args.assignee = Some("acct123".into());
+        args.priority = Some("High".into());
+        args.labels = Some("a, b , c".into());
+        args.parent = Some("PROJ-1".into());
+        let v = build_create_fields(&args, None).unwrap();
+        assert_eq!(v["assignee"], json!({"accountId": "acct123"}));
+        assert_eq!(v["priority"], json!({"name": "High"}));
+        // Comma-separated labels must be split AND trimmed.
+        assert_eq!(v["labels"], json!(["a", "b", "c"]));
+        assert_eq!(v["parent"], json!({"key": "PROJ-1"}));
+    }
+
+    #[test]
+    fn build_create_fields_propagates_extra_field_error() {
+        let mut args = default_create_args();
+        // Custom field without `=` must surface as an error.
+        args.custom_fields = vec!["malformed".into()];
+        let err = build_create_fields(&args, None).unwrap_err();
+        assert!(
+            err.to_string().contains("invalid --custom format"),
+            "expected --custom format error, got: {err}"
+        );
+    }
+
+    // ---- build_update_fields ----
+
+    fn default_update_args() -> JiraUpdateArgs {
+        JiraUpdateArgs {
+            key: "PROJ-1".into(),
+            summary: None,
+            description: None,
+            assignee: None,
+            priority: None,
+            labels: None,
+            fix_version: None,
+            component: None,
+            custom_fields: vec![],
+            input_format: JiraInputFormat::Wiki,
+        }
+    }
+
+    #[test]
+    fn build_update_fields_empty_returns_error() {
+        let args = default_update_args();
+        let err = build_update_fields(&args, None).unwrap_err();
+        assert!(
+            err.to_string().contains("no fields to update"),
+            "expected helpful 'no fields' message, got: {err}"
+        );
+    }
+
+    #[test]
+    fn build_update_fields_summary_only() {
+        let mut args = default_update_args();
+        args.summary = Some("new".into());
+        let map = build_update_fields(&args, None).unwrap();
+        assert_eq!(map.len(), 1, "only summary should be set: {map:?}");
+        assert_eq!(map.get("summary").and_then(Value::as_str), Some("new"));
+    }
+
+    #[test]
+    fn build_update_fields_description_uses_passed_body() {
+        let args = default_update_args();
+        let map = build_update_fields(&args, Some("body".into())).unwrap();
+        assert_eq!(map.get("description").and_then(Value::as_str), Some("body"));
+    }
+
+    #[test]
+    fn build_update_fields_full_optionals() {
+        let mut args = default_update_args();
+        args.assignee = Some("a".into());
+        args.priority = Some("Low".into());
+        args.labels = Some("x,y".into());
+        let map = build_update_fields(&args, Some("body".into())).unwrap();
+        assert_eq!(map.get("assignee").unwrap(), &json!({"accountId": "a"}));
+        assert_eq!(map.get("priority").unwrap(), &json!({"name": "Low"}));
+        assert_eq!(map.get("labels").unwrap(), &json!(["x", "y"]));
+    }
+
+    // ---- build_clone_fields ----
+
+    #[test]
+    fn build_clone_fields_default_summary_prefix() {
+        let source = json!({
+            "fields": {
+                "project": { "key": "P" },
+                "issuetype": { "name": "Bug" },
+                "summary": "Original",
+                "priority": { "name": "Low" }
+            }
+        });
+        let map = build_clone_fields(&source, None).unwrap();
+        // Default summary must prepend `[Clone] ` so the cloned issue is
+        // visually distinguishable in lists.
+        assert_eq!(
+            map.get("summary").and_then(Value::as_str),
+            Some("[Clone] Original")
+        );
+        assert_eq!(map.get("project").unwrap(), &json!({"key": "P"}));
+        assert_eq!(map.get("issuetype").unwrap(), &json!({"name": "Bug"}));
+        assert_eq!(map.get("priority").unwrap(), &json!({"name": "Low"}));
+    }
+
+    #[test]
+    fn build_clone_fields_summary_override() {
+        let source = json!({"fields": {"summary": "Original", "project": {"key": "P"}}});
+        let map = build_clone_fields(&source, Some("Custom")).unwrap();
+        assert_eq!(map.get("summary").and_then(Value::as_str), Some("Custom"));
+    }
+
+    #[test]
+    fn build_clone_fields_skips_null_fields() {
+        // Confirms the `&& !val.is_null()` guard — Jira issues frequently
+        // include explicit nulls for unset fields and copying them through
+        // produces invalid create payloads.
+        let source = json!({
+            "fields": {
+                "project": { "key": "P" },
+                "issuetype": { "name": "Task" },
+                "summary": "S",
+                "priority": null,
+                "labels": null
+            }
+        });
+        let map = build_clone_fields(&source, None).unwrap();
+        assert!(
+            map.get("priority").is_none(),
+            "null priority must be dropped"
+        );
+        assert!(map.get("labels").is_none(), "null labels must be dropped");
+    }
+
+    #[test]
+    fn build_clone_fields_only_clones_known_keys() {
+        // Internal/server-managed fields like `created`, `creator`, `status`
+        // must not be carried over — they'd be rejected on create.
+        let source = json!({
+            "fields": {
+                "project": { "key": "P" },
+                "issuetype": { "name": "Task" },
+                "summary": "S",
+                "created": "2025-01-01",
+                "creator": { "accountId": "x" },
+                "status": { "name": "Done" }
+            }
+        });
+        let map = build_clone_fields(&source, None).unwrap();
+        assert!(map.get("created").is_none());
+        assert!(map.get("creator").is_none());
+        assert!(map.get("status").is_none());
+    }
+
+    #[test]
+    fn build_clone_fields_missing_summary_uses_placeholder() {
+        let source = json!({"fields": {"project": {"key": "P"}}});
+        let map = build_clone_fields(&source, None).unwrap();
+        assert_eq!(
+            map.get("summary").and_then(Value::as_str),
+            Some("[Clone] (no summary)")
+        );
+    }
+
+    #[test]
+    fn build_clone_fields_no_fields_returns_error() {
+        let source = json!({"key": "X-1"});
+        let err = build_clone_fields(&source, None).unwrap_err();
+        assert!(
+            err.to_string().contains("could not read fields"),
+            "expected fields-missing error, got: {err}"
+        );
+    }
+
+    // ---- build_notify_payload ----
+
+    #[test]
+    fn build_notify_payload_no_recipients() {
+        let v = build_notify_payload("hi", "body", &[]);
+        assert_eq!(v["subject"], "hi");
+        assert_eq!(v["textBody"], "body");
+        assert!(
+            v.get("to").is_none(),
+            "to key must be absent when there are no recipients"
+        );
+    }
+
+    #[test]
+    fn build_notify_payload_with_recipients() {
+        let v = build_notify_payload("hi", "body", &["a".into(), "b".into()]);
+        assert_eq!(
+            v["to"],
+            json!({"users": [{"accountId": "a"}, {"accountId": "b"}]})
+        );
+    }
+
+    // ---- parse_bulk_create_payload ----
+
+    #[test]
+    fn parse_bulk_create_array_input_wraps_into_envelope() {
+        let raw = r#"[{"summary":"a"},{"summary":"b"}]"#;
+        let v = parse_bulk_create_payload(raw).unwrap();
+        assert_eq!(
+            v,
+            json!({
+                "issueUpdates": [
+                    {"fields": {"summary": "a"}},
+                    {"fields": {"summary": "b"}}
+                ]
+            })
+        );
+    }
+
+    #[test]
+    fn parse_bulk_create_envelope_input_passthrough() {
+        let raw = r#"{"issueUpdates":[{"fields":{"summary":"a"}}]}"#;
+        let v = parse_bulk_create_payload(raw).unwrap();
+        let parsed: Value = serde_json::from_str(raw).unwrap();
+        assert_eq!(v, parsed, "envelope input must pass through unchanged");
+    }
+
+    #[test]
+    fn parse_bulk_create_invalid_json_errors() {
+        let err = parse_bulk_create_payload("not json").unwrap_err();
+        assert!(
+            err.to_string().contains("invalid JSON input"),
+            "expected JSON parse error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn parse_bulk_create_unknown_object_shape_errors() {
+        // Object that is neither the envelope nor an array must surface an
+        // error so the user knows their input shape is wrong.
+        let err = parse_bulk_create_payload(r#"{"foo": []}"#).unwrap_err();
+        assert!(
+            err.to_string().contains("expected a JSON array"),
+            "expected shape error, got: {err}"
+        );
+    }
+
+    // ---- run() error paths ----
+    //
+    // The `run` entry point loads config, resolves the profile, and pulls the
+    // Jira instance before constructing any HTTP client. Each of those steps
+    // can fail with a distinct user-facing message — we cover all three pre-HTTP
+    // branches here so the messages stay stable and the exit-code mapping in
+    // `error.rs` continues to match `Error::Config`.
+
+    use crate::output::{OutputFormat, Transforms};
+    use camino::Utf8PathBuf;
+    use std::io::Write as _;
+
+    fn write_config(dir: &tempfile::TempDir, body: &str) -> Utf8PathBuf {
+        let path = dir.path().join("atl.toml");
+        let mut f = std::fs::File::create(&path).expect("create config file");
+        f.write_all(body.as_bytes()).expect("write config body");
+        Utf8PathBuf::try_from(path).expect("UTF-8 temp path")
+    }
+
+    #[tokio::test]
+    async fn run_errors_when_config_path_does_not_exist() {
+        // Explicit config path that doesn't resolve to a file is a hard
+        // error: it tells the user their --config flag is wrong rather than
+        // silently falling back to defaults.
+        let mut io = IoStreams::test();
+        let cmd = JiraSubcommand::Search(default_search_args());
+        let bogus = Utf8PathBuf::from("/definitely/does/not/exist/atl.toml");
+        let err = run(
+            &cmd,
+            Some(&bogus),
+            None,
+            0,
+            &OutputFormat::Json,
+            &mut io,
+            &Transforms::none(),
+        )
+        .await
+        .unwrap_err();
+        assert!(
+            err.to_string().contains("config file not found"),
+            "expected 'config file not found' error, got: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn run_errors_when_no_profile_in_config() {
+        // Config exists but is empty — no profiles at all. Must be rejected
+        // with the actionable "run `atl init` first" hint.
+        let dir = tempfile::tempdir().expect("create tempdir");
+        let cfg = write_config(&dir, "default_profile = \"work\"\n");
+        let mut io = IoStreams::test();
+        let cmd = JiraSubcommand::Search(default_search_args());
+        let err = run(
+            &cmd,
+            Some(&cfg),
+            None,
+            0,
+            &OutputFormat::Json,
+            &mut io,
+            &Transforms::none(),
+        )
+        .await
+        .unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("no profile found"),
+            "expected 'no profile found' message, got: {msg}"
+        );
+        // The hint must mention `atl init` so the user knows the recovery path.
+        assert!(
+            msg.contains("atl init"),
+            "error must mention `atl init` recovery path, got: {msg}"
+        );
+    }
+
+    #[tokio::test]
+    async fn run_view_web_short_circuits_to_browse() {
+        // `atl jira view PROJ-1 --web` must NOT touch the Jira REST API; it
+        // hands off to `browse::run` which constructs the URL from the
+        // configured domain. In test mode (non-TTY) browse prints the URL to
+        // stdout instead of launching a browser, so we can assert on it.
+        let dir = tempfile::tempdir().expect("create tempdir");
+        let cfg = write_config(
+            &dir,
+            r#"default_profile = "work"
+
+[profiles.work.jira]
+domain = "example.atlassian.net"
+"#,
+        );
+        let mut io = IoStreams::test();
+        let cmd = JiraSubcommand::View(JiraViewArgs {
+            key: "PROJ-1".into(),
+            web: true,
+        });
+        run(
+            &cmd,
+            Some(&cfg),
+            None,
+            0,
+            &OutputFormat::Console,
+            &mut io,
+            &Transforms::none(),
+        )
+        .await
+        .expect("--web path must succeed without HTTP");
+        let out = io.stdout_as_string();
+        assert!(
+            out.contains("example.atlassian.net"),
+            "expected the configured domain in the printed URL, got: {out:?}"
+        );
+        assert!(
+            out.contains("PROJ-1"),
+            "expected the issue key in the printed URL, got: {out:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn run_errors_when_profile_has_no_jira_instance() {
+        // Profile exists but has only a Confluence instance — calling jira
+        // commands on a Confluence-only profile must return a typed error so
+        // the exit code maps to Config (3), not the generic 1.
+        let dir = tempfile::tempdir().expect("create tempdir");
+        let cfg = write_config(
+            &dir,
+            r#"default_profile = "work"
+
+[profiles.work.confluence]
+domain = "x.atlassian.net"
+"#,
+        );
+        let mut io = IoStreams::test();
+        let cmd = JiraSubcommand::Search(default_search_args());
+        let err = run(
+            &cmd,
+            Some(&cfg),
+            None,
+            0,
+            &OutputFormat::Json,
+            &mut io,
+            &Transforms::none(),
+        )
+        .await
+        .unwrap_err();
+        assert!(
+            err.to_string().contains("no Jira instance configured"),
+            "expected 'no Jira instance configured', got: {err}"
+        );
+        // The error must downcast to Error::Config so the exit code lookup
+        // returns 3 instead of falling through to the generic 1.
+        let downcast = err.downcast_ref::<crate::error::Error>();
+        assert!(
+            matches!(downcast, Some(crate::error::Error::Config(_))),
+            "error must be Error::Config so exit code maps to 3, got: {downcast:?}"
         );
     }
 }

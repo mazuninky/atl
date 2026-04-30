@@ -150,3 +150,15 @@ pub(super) async fn dispatch_inline_comment(
         }
     })
 }
+
+#[cfg(test)]
+mod tests {
+    // Both `dispatch_footer_comment` and `dispatch_inline_comment` are pure
+    // HTTP delegation — every arm either calls a typed client method or
+    // returns a constant `"<X> deleted"` string. The body-resolution that
+    // lives in front of Create/Update is `read_body_arg` from
+    // src/cli/commands/mod.rs, which has its own tests.
+    //
+    // All branches here are covered by contract tests in
+    // tests/contract_confluence_v*.rs.
+}

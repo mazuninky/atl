@@ -76,6 +76,50 @@ fn cmd_uses_pager(cmd: &ConfluenceSubcommand) -> bool {
     )
 }
 
+/// Escape a value for safe interpolation into a CQL quoted string.
+///
+/// Mirrors the JQL-side escape used by the Jira dispatcher: backslashes first,
+/// then double quotes — order matters or the doubled backslashes from the
+/// quote replacement would themselves get re-escaped.
+fn escape_cql(value: &str) -> String {
+    value.replace('\\', "\\\\").replace('"', "\\\"")
+}
+
+/// Build the CQL string used by the legacy `confluence find` command.
+fn build_find_cql(title: &str, space: Option<&str>) -> String {
+    let mut cql = format!("title=\"{}\" AND type=page", escape_cql(title));
+    if let Some(sp) = space {
+        cql.push_str(&format!(" AND space=\"{}\"", escape_cql(sp)));
+    }
+    cql
+}
+
+/// Compute the list of `expand` parameters from the user's `--include-*` flags
+/// for `confluence read`. Returns `'static` slice references so the caller can
+/// own the resulting `Vec<&str>` without lifetime headaches.
+fn compute_read_expand(args: &ConfluenceReadArgs) -> Vec<&'static str> {
+    let mut expand = Vec::new();
+    if args.include_labels {
+        expand.push("metadata.labels");
+    }
+    if args.include_properties {
+        expand.push("metadata.properties");
+    }
+    if args.include_operations {
+        expand.push("operations");
+    }
+    if args.include_versions {
+        expand.push("version");
+    }
+    if args.include_collaborators {
+        expand.push("collaborators");
+    }
+    if args.include_favorited_by {
+        expand.push("metadata.currentuser.favourited");
+    }
+    expand
+}
+
 /// Flattens a Confluence search response for human-readable console display.
 ///
 /// Extracts the `results` array and maps each item to a flat object with
@@ -205,25 +249,7 @@ async fn dispatch(
 ) -> anyhow::Result<()> {
     let value = match cmd {
         ConfluenceSubcommand::Read(args) => {
-            let mut expand = Vec::new();
-            if args.include_labels {
-                expand.push("metadata.labels");
-            }
-            if args.include_properties {
-                expand.push("metadata.properties");
-            }
-            if args.include_operations {
-                expand.push("operations");
-            }
-            if args.include_versions {
-                expand.push("version");
-            }
-            if args.include_collaborators {
-                expand.push("collaborators");
-            }
-            if args.include_favorited_by {
-                expand.push("metadata.currentuser.favourited");
-            }
+            let expand = compute_read_expand(args);
             let value = client
                 .get_page(&args.page_id, args.body_format.as_str(), &expand)
                 .await?;
@@ -305,12 +331,7 @@ async fn dispatch(
             client.get_comments(&args.page_id, args.limit).await?
         }
         ConfluenceSubcommand::Find(args) => {
-            let escaped_title = args.title.replace('\\', "\\\\").replace('"', "\\\"");
-            let mut cql = format!("title=\"{escaped_title}\" AND type=page");
-            if let Some(space) = &args.space {
-                let escaped_space = space.replace('\\', "\\\\").replace('"', "\\\"");
-                cql.push_str(&format!(" AND space=\"{escaped_space}\""));
-            }
+            let cql = build_find_cql(&args.title, args.space.as_deref());
             let value = client.search(&cql, args.limit).await?;
             if matches!(format, OutputFormat::Console) {
                 flatten_confluence_search(value)
@@ -752,6 +773,379 @@ mod tests {
                 "id", "title", "status", "spaceId", "version", "created", "updated", "url", "body"
             ],
             "columns should appear in insertion order"
+        );
+    }
+
+    // ---- escape_cql ----
+
+    #[test]
+    fn escape_cql_no_special_chars_passthrough() {
+        assert_eq!(escape_cql("hello"), "hello");
+    }
+
+    #[test]
+    fn escape_cql_escapes_backslash_and_quote() {
+        assert_eq!(
+            escape_cql(r#"a\b"c"#),
+            r#"a\\b\"c"#,
+            "both backslash and double-quote must be escaped"
+        );
+    }
+
+    #[test]
+    fn escape_cql_empty_string() {
+        assert_eq!(escape_cql(""), "");
+    }
+
+    // ---- build_find_cql ----
+
+    #[test]
+    fn build_find_cql_title_only() {
+        let cql = build_find_cql("My Page", None);
+        assert_eq!(cql, "title=\"My Page\" AND type=page");
+    }
+
+    #[test]
+    fn build_find_cql_with_space_appends_clause() {
+        let cql = build_find_cql("My Page", Some("TEAM"));
+        assert_eq!(cql, "title=\"My Page\" AND type=page AND space=\"TEAM\"");
+    }
+
+    #[test]
+    fn build_find_cql_escapes_quote_in_title_and_space() {
+        // Hostile title containing a quote must be escaped to avoid CQL
+        // injection. The same applies to the space clause.
+        let cql = build_find_cql(r#"weird"name"#, Some(r#"space"x"#));
+        assert_eq!(
+            cql,
+            r#"title="weird\"name" AND type=page AND space="space\"x""#
+        );
+    }
+
+    #[test]
+    fn build_find_cql_escapes_backslash() {
+        let cql = build_find_cql(r"back\slash", None);
+        assert_eq!(cql, r#"title="back\\slash" AND type=page"#);
+    }
+
+    // ---- compute_read_expand ----
+
+    fn default_read_args() -> ConfluenceReadArgs {
+        ConfluenceReadArgs {
+            page_id: "1".into(),
+            body_format: BodyFormat::Storage,
+            include_labels: false,
+            include_properties: false,
+            include_operations: false,
+            include_versions: false,
+            include_collaborators: false,
+            include_favorited_by: false,
+            web: false,
+        }
+    }
+
+    #[test]
+    fn compute_read_expand_no_flags_yields_empty() {
+        let args = default_read_args();
+        assert!(
+            compute_read_expand(&args).is_empty(),
+            "expand list must start empty when no --include-* flag is set"
+        );
+    }
+
+    #[test]
+    fn compute_read_expand_each_flag_maps_to_correct_token() {
+        // One test per flag would balloon the file; this table-driven test
+        // pairs each flag with its expected expand token in a single pass.
+        let cases = [
+            (
+                "labels",
+                "metadata.labels",
+                ConfluenceReadArgs {
+                    include_labels: true,
+                    ..default_read_args()
+                },
+            ),
+            (
+                "properties",
+                "metadata.properties",
+                ConfluenceReadArgs {
+                    include_properties: true,
+                    ..default_read_args()
+                },
+            ),
+            (
+                "operations",
+                "operations",
+                ConfluenceReadArgs {
+                    include_operations: true,
+                    ..default_read_args()
+                },
+            ),
+            (
+                "versions",
+                "version",
+                ConfluenceReadArgs {
+                    include_versions: true,
+                    ..default_read_args()
+                },
+            ),
+            (
+                "collaborators",
+                "collaborators",
+                ConfluenceReadArgs {
+                    include_collaborators: true,
+                    ..default_read_args()
+                },
+            ),
+            (
+                "favorited_by",
+                "metadata.currentuser.favourited",
+                ConfluenceReadArgs {
+                    include_favorited_by: true,
+                    ..default_read_args()
+                },
+            ),
+        ];
+        for (label, expected_token, args) in cases {
+            let expand = compute_read_expand(&args);
+            assert_eq!(
+                expand,
+                vec![expected_token],
+                "case {label}: expected just [{expected_token:?}], got {expand:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn compute_read_expand_all_flags_in_documented_order() {
+        // The order matters: the same token order is what reaches the API,
+        // and we want it stable so the resulting URL is reproducible.
+        let args = ConfluenceReadArgs {
+            include_labels: true,
+            include_properties: true,
+            include_operations: true,
+            include_versions: true,
+            include_collaborators: true,
+            include_favorited_by: true,
+            ..default_read_args()
+        };
+        let expand = compute_read_expand(&args);
+        assert_eq!(
+            expand,
+            vec![
+                "metadata.labels",
+                "metadata.properties",
+                "operations",
+                "version",
+                "collaborators",
+                "metadata.currentuser.favourited",
+            ]
+        );
+    }
+
+    // ---- cmd_uses_pager ----
+
+    #[test]
+    fn cmd_uses_pager_read_qualifies() {
+        let cmd = ConfluenceSubcommand::Read(default_read_args());
+        assert!(cmd_uses_pager(&cmd));
+    }
+
+    #[test]
+    fn cmd_uses_pager_search_qualifies() {
+        let cmd = ConfluenceSubcommand::Search(ConfluenceSearchArgs {
+            cql: "type=page".into(),
+            limit: 25,
+            all: false,
+        });
+        assert!(cmd_uses_pager(&cmd));
+    }
+
+    #[test]
+    fn cmd_uses_pager_short_command_does_not_qualify() {
+        // A delete command produces single-line output and must not engage
+        // the pager — that would obscure the success/failure message.
+        let cmd = ConfluenceSubcommand::Delete(ConfluenceDeleteArgs {
+            page_id: "1".into(),
+            purge: false,
+            draft: false,
+        });
+        assert!(!cmd_uses_pager(&cmd));
+    }
+
+    // ---- flatten_confluence_search additional cases ----
+
+    #[test]
+    fn flatten_search_empty_results_array() {
+        // Empty results array must still flatten to an empty array, not
+        // pass through as the original wrapper object.
+        let input = json!({"results": [], "size": 0});
+        let result = flatten_confluence_search(input);
+        assert_eq!(
+            result,
+            json!([]),
+            "empty results should flatten to an empty array"
+        );
+    }
+
+    #[test]
+    fn flatten_search_results_not_array_passthrough() {
+        // If `results` is not an array (server schema drift), pass through
+        // the entire value rather than panicking.
+        let input = json!({"results": "broken"});
+        let result = flatten_confluence_search(input.clone());
+        assert_eq!(result, input);
+    }
+
+    #[test]
+    fn flatten_search_handles_missing_optional_fields() {
+        // status / _links may be absent on certain item kinds (e.g. attachments).
+        let input = json!({
+            "results": [{"id": "1", "title": "T", "type": "page"}]
+        });
+        let result = flatten_confluence_search(input);
+        let item = &result.as_array().unwrap()[0];
+        assert_eq!(item.get("status").and_then(Value::as_str), Some(""));
+        assert_eq!(item.get("url").and_then(Value::as_str), Some(""));
+    }
+
+    // ---- flatten_confluence_page additional cases ----
+
+    #[test]
+    fn flatten_page_extracts_view_body_when_storage_absent() {
+        // The body extractor reaches for the first representation under `body`.
+        // Confirming it tolerates `view` (not just `storage`) protects the
+        // `--body-format view` code path.
+        let input = json!({
+            "id": "1",
+            "title": "T",
+            "status": "current",
+            "body": {
+                "view": {"value": "<h1>rendered</h1>", "representation": "view"}
+            }
+        });
+        let result = flatten_confluence_page(input);
+        assert_eq!(
+            result.get("body").and_then(Value::as_str),
+            Some("<h1>rendered</h1>")
+        );
+    }
+
+    #[test]
+    fn flatten_page_missing_version_yields_empty_string() {
+        // The console reporter renders `version: ""` rather than dropping
+        // the field — confirms `unwrap_or_default` on the version path.
+        let input = json!({"id": "1", "title": "T", "status": "current"});
+        let result = flatten_confluence_page(input);
+        assert_eq!(result.get("version").and_then(Value::as_str), Some(""));
+    }
+
+    // ---- run() error paths ----
+    //
+    // Mirrors the Jira run() error coverage: each pre-HTTP branch has a
+    // dedicated test so the user-facing error message and the exit-code
+    // mapping (Error::Config → 3 in error.rs) stay locked in.
+
+    use crate::output::{OutputFormat, Transforms};
+    use camino::Utf8PathBuf;
+
+    fn write_config(dir: &tempfile::TempDir, body: &str) -> Utf8PathBuf {
+        let path = dir.path().join("atl.toml");
+        let mut f = std::fs::File::create(&path).expect("create config file");
+        // `Write` is already brought into scope at the top of the module.
+        f.write_all(body.as_bytes()).expect("write config body");
+        Utf8PathBuf::try_from(path).expect("UTF-8 temp path")
+    }
+
+    fn search_cmd() -> ConfluenceSubcommand {
+        ConfluenceSubcommand::Search(ConfluenceSearchArgs {
+            cql: "type=page".into(),
+            limit: 25,
+            all: false,
+        })
+    }
+
+    #[tokio::test]
+    async fn run_errors_when_config_path_does_not_exist() {
+        let mut io = IoStreams::test();
+        let cmd = search_cmd();
+        let bogus = Utf8PathBuf::from("/definitely/does/not/exist/atl.toml");
+        let err = run(
+            &cmd,
+            Some(&bogus),
+            None,
+            0,
+            &OutputFormat::Json,
+            &mut io,
+            &Transforms::none(),
+        )
+        .await
+        .unwrap_err();
+        assert!(
+            err.to_string().contains("config file not found"),
+            "expected 'config file not found' error, got: {err}"
+        );
+    }
+
+    #[tokio::test]
+    async fn run_errors_when_no_profile_in_config() {
+        let dir = tempfile::tempdir().expect("create tempdir");
+        let cfg = write_config(&dir, "default_profile = \"work\"\n");
+        let mut io = IoStreams::test();
+        let cmd = search_cmd();
+        let err = run(
+            &cmd,
+            Some(&cfg),
+            None,
+            0,
+            &OutputFormat::Json,
+            &mut io,
+            &Transforms::none(),
+        )
+        .await
+        .unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("no profile found"),
+            "expected 'no profile found' message, got: {msg}"
+        );
+        assert!(
+            msg.contains("atl init"),
+            "error must mention `atl init` recovery path, got: {msg}"
+        );
+    }
+
+    #[tokio::test]
+    async fn run_errors_when_profile_has_no_confluence_instance() {
+        // Profile has only a Jira instance; a `confluence` subcommand must
+        // surface a clear error so the user knows the profile is incomplete.
+        let dir = tempfile::tempdir().expect("create tempdir");
+        let cfg = write_config(
+            &dir,
+            r#"default_profile = "work"
+
+[profiles.work.jira]
+domain = "x.atlassian.net"
+"#,
+        );
+        let mut io = IoStreams::test();
+        let cmd = search_cmd();
+        let err = run(
+            &cmd,
+            Some(&cfg),
+            None,
+            0,
+            &OutputFormat::Json,
+            &mut io,
+            &Transforms::none(),
+        )
+        .await
+        .unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("no Confluence instance configured"),
+            "expected 'no Confluence instance configured', got: {err}"
         );
     }
 }

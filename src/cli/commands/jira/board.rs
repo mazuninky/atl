@@ -41,3 +41,9 @@ pub(super) async fn dispatch_board(
         }
     })
 }
+
+#[cfg(test)]
+mod tests {
+    // All branches are pure HTTP delegation (with a one-liner `split(',').map(trim).collect()`
+    // that's not worth its own helper); covered by contract tests in tests/contract_jira_*.rs.
+}

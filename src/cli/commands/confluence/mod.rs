@@ -169,12 +169,15 @@ fn flatten_confluence_search(value: Value) -> Value {
 /// key-value object that the console reporter renders as a readable list
 /// instead of a giant JSON blob.
 ///
-/// The emitted `url` field is built from the locally configured
-/// `instance.domain` and the server's `_links.webui` path, never from
-/// `_links.base` — see [`build_confluence_url`] for the rationale.
-/// A compromised or MITM-proxied Confluence instance would otherwise be
-/// able to inject an attacker-controlled origin into output that
-/// downstream tools or copy-paste would treat as trusted.
+/// The emitted `url` field is anchored to the locally configured
+/// `instance.domain` — never to the host of `_links.base`. The path
+/// component of `_links.base` is used as a context prefix only after its
+/// host is validated to match the configured domain (so the canonical
+/// Confluence Cloud `/wiki` prefix is preserved). See
+/// [`build_confluence_url`] for the rationale. A compromised or
+/// MITM-proxied Confluence instance would otherwise be able to inject
+/// an attacker-controlled origin into output that downstream tools or
+/// copy-paste would treat as trusted.
 fn flatten_confluence_page(value: Value, instance: &AtlassianInstance) -> Value {
     let id = value.get("id").and_then(Value::as_str).unwrap_or_default();
     let title = value
@@ -206,17 +209,21 @@ fn flatten_confluence_page(value: Value, instance: &AtlassianInstance) -> Value 
         .unwrap_or_default();
 
     // Build the full URL from the locally configured domain and the
-    // server-supplied `_links.webui`. `_links.base` is intentionally
-    // ignored — see the function-level doc comment.
-    let webui = value
-        .get("_links")
+    // server-supplied `_links.webui`. The host portion of `_links.base`
+    // is never trusted; only its path component is used as a context
+    // prefix (e.g. `/wiki` on Confluence Cloud) after its host is
+    // validated to match the configured domain. See the function-level
+    // doc comment on `build_confluence_url`.
+    let links = value.get("_links");
+    let webui = links
         .and_then(|l| l.get("webui"))
         .and_then(Value::as_str)
         .unwrap_or_default();
+    let base = links.and_then(|l| l.get("base")).and_then(Value::as_str);
     let url = if webui.is_empty() {
         String::new()
     } else {
-        match build_confluence_url(&instance.domain, webui) {
+        match build_confluence_url(&instance.domain, base, webui) {
             Ok(u) => u,
             Err(e) => {
                 // Output formatting must never fail the command — fall back
@@ -722,12 +729,13 @@ mod tests {
             obj.get("updated").and_then(Value::as_str),
             Some("2025-11-01T08:30:00Z")
         );
-        // The URL is built from the locally configured domain, NOT the
-        // server-supplied `_links.base`. Even though `_links.base` claims
-        // `/wiki`, the output uses the configured `example.atlassian.net`.
+        // The URL is anchored to the locally configured domain. The path
+        // component of `_links.base` (here `/wiki`) is used as a context
+        // prefix because its host matches the configured domain — this
+        // is the canonical Confluence Cloud shape.
         assert_eq!(
             obj.get("url").and_then(Value::as_str),
-            Some("https://example.atlassian.net/spaces/inno/overview")
+            Some("https://example.atlassian.net/wiki/spaces/inno/overview")
         );
         assert_eq!(
             obj.get("body").and_then(Value::as_str),
@@ -818,22 +826,48 @@ mod tests {
     #[test]
     fn flatten_page_ignores_attacker_controlled_base() {
         // A compromised / MITM-proxied Confluence server can return a
-        // hostile `_links.base`. The output must still point at the
-        // configured domain — the attacker's `base` is never trusted.
+        // hostile `_links.base`. When its host doesn't match the
+        // configured domain, both its host AND its path are discarded —
+        // the URL stays anchored to the configured domain with no
+        // context prefix.
         let input = json!({
             "id": "1",
             "title": "T",
             "status": "current",
             "_links": {
                 "webui": "/x",
-                "base": "https://attacker.example/"
+                "base": "https://attacker.example/wiki"
             }
         });
         let result = flatten_confluence_page(input, &test_instance("example.atlassian.net"));
         assert_eq!(
             result.get("url").and_then(Value::as_str),
             Some("https://example.atlassian.net/x"),
-            "url must use configured domain, not attacker-controlled `_links.base`"
+            "url must use configured domain and ignore attacker-controlled base entirely"
+        );
+    }
+
+    #[test]
+    fn flatten_page_preserves_legitimate_wiki_context_path() {
+        // Counterpart to `flatten_page_ignores_attacker_controlled_base`:
+        // when `_links.base` is from the same host as the configured
+        // domain, its path component IS preserved so Confluence Cloud
+        // URLs include the `/wiki` context. Without this, every URL we
+        // emit for Cloud 404s.
+        let input = json!({
+            "id": "1",
+            "title": "T",
+            "status": "current",
+            "_links": {
+                "webui": "/spaces/X/pages/123",
+                "base": "https://example.atlassian.net/wiki"
+            }
+        });
+        let result = flatten_confluence_page(input, &test_instance("example.atlassian.net"));
+        assert_eq!(
+            result.get("url").and_then(Value::as_str),
+            Some("https://example.atlassian.net/wiki/spaces/X/pages/123"),
+            "legitimate same-host base path must be used as context prefix"
         );
     }
 

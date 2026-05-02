@@ -444,6 +444,10 @@ pub fn run_update(
     let current = env!("CARGO_PKG_VERSION");
 
     if let Some(pinned) = &args.to {
+        // `parse_version` expects bare `YYYY.WW.BUILD` — strip a leading `v`
+        // so `--to v2026.18.3` doesn't fail the guard before
+        // `resolve_target_version` (which also tolerates the prefix) runs.
+        let pinned = pinned.trim_start_matches('v');
         check_downgrade_guard(current, pinned, args.allow_downgrade)?;
     }
 
@@ -859,6 +863,29 @@ mod tests {
         // even when versions can't be compared.
         check_downgrade_guard("dirty-current", "anything-pinned", true)
             .expect("--allow-downgrade should bypass version parsing too");
+    }
+
+    #[test]
+    fn downgrade_guard_rejects_v_prefixed_pinned_input() {
+        // Documents the contract that motivated the trim in `run_update`:
+        // `check_downgrade_guard` parses `YYYY.WW.BUILD` literally and does
+        // NOT tolerate a leading `v`. Callers must strip the prefix first.
+        let err = check_downgrade_guard("2026.15.1", "v2026.18.2", false)
+            .expect_err("v-prefixed pinned must fail parse_version");
+        assert!(
+            err.to_string().contains("cannot validate downgrade"),
+            "got: {err}"
+        );
+    }
+
+    #[test]
+    fn downgrade_guard_accepts_pinned_after_v_prefix_trim() {
+        // The `run_update` call site trims a leading `v` before calling
+        // through; the trimmed value must parse cleanly and the upgrade
+        // path must succeed.
+        let pinned = "v2026.18.2".trim_start_matches('v');
+        check_downgrade_guard("2026.15.1", pinned, false)
+            .expect("trimmed pinned should parse and allow upgrade");
     }
 
     // -------------------------------------------------------------------

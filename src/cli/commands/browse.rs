@@ -145,11 +145,14 @@ fn jira_url(instance: &AtlassianInstance, key: &str) -> String {
 
 /// Resolves a Confluence page ID to its human-facing web URL.
 ///
-/// The browser URL is **always** built from the profile's configured
-/// `instance.domain`, never from the server-supplied `_links.base`.
-/// Trusting `_links.base` would let a compromised or MITM-proxied
-/// Confluence instance redirect the user's browser to an arbitrary
-/// origin under the guise of "open Confluence page X". The
+/// The browser URL is **always** anchored to the profile's configured
+/// `instance.domain` — never to the host of the server-supplied
+/// `_links.base`. Trusting `_links.base`'s host would let a compromised
+/// or MITM-proxied Confluence instance redirect the user's browser to an
+/// arbitrary origin under the guise of "open Confluence page X". The
+/// path component of `_links.base` is used as a context prefix only
+/// after its host is validated against the configured domain (so the
+/// canonical Confluence Cloud `/wiki` prefix is preserved). The
 /// `_links.webui` value is validated to be a clean server-relative path
 /// before concatenation (see [`build_confluence_url`]).
 async fn confluence_url(
@@ -182,8 +185,9 @@ async fn confluence_url(
         .pointer("/_links/webui")
         .and_then(|v| v.as_str())
         .ok_or_else(|| anyhow!("Confluence response missing _links.webui for page {page_id}"))?;
+    let base = page.pointer("/_links/base").and_then(|v| v.as_str());
 
-    build_confluence_url(&instance.domain, webui)
+    build_confluence_url(&instance.domain, base, webui)
 }
 
 #[cfg(test)]

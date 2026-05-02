@@ -75,10 +75,14 @@ fn preflight_exe_location() -> anyhow::Result<()> {
 fn preflight_for_path(exe: &Utf8Path) -> anyhow::Result<()> {
     let exe_str = exe.as_str();
 
-    // Homebrew (Intel `/usr/local/Cellar` + Apple Silicon `/opt/homebrew/Cellar`).
-    // Match only the real Cellar prefixes so paths like `/srv/Cellar/atl` or
-    // `/Users/me/homebrew-tools/atl` aren't misclassified.
-    if exe_str.starts_with("/usr/local/Cellar/") || exe_str.starts_with("/opt/homebrew/Cellar/") {
+    // Homebrew (Intel `/usr/local/Cellar`, Apple Silicon `/opt/homebrew/Cellar`,
+    // Linuxbrew `/home/linuxbrew/.linuxbrew/Cellar`). Match only the real Cellar
+    // prefixes so paths like `/srv/Cellar/atl` or `/Users/me/homebrew-tools/atl`
+    // aren't misclassified.
+    if exe_str.starts_with("/usr/local/Cellar/")
+        || exe_str.starts_with("/opt/homebrew/Cellar/")
+        || exe_str.starts_with("/home/linuxbrew/.linuxbrew/Cellar/")
+    {
         anyhow::bail!("atl is managed by Homebrew at {exe_str}. Run `brew upgrade atl` instead.");
     }
 
@@ -302,6 +306,29 @@ mod tests {
             err.to_string().contains("Homebrew"),
             "expected Homebrew refusal, got: {err}"
         );
+    }
+
+    #[test]
+    fn preflight_refuses_homebrew_linux() {
+        let path = Utf8PathBuf::from("/home/linuxbrew/.linuxbrew/Cellar/atl/2026.18.3/bin/atl");
+        let err = preflight_for_path(&path).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("Homebrew"),
+            "expected Homebrew refusal, got: {msg}"
+        );
+        assert!(
+            msg.contains("brew upgrade atl"),
+            "Linuxbrew error must point at brew upgrade, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn preflight_accepts_linuxbrew_lookalike() {
+        // A user directory that merely contains "linuxbrew" in its name must
+        // not be misclassified as a Linuxbrew-managed install.
+        let path = Utf8PathBuf::from("/home/me/linuxbrew-tools/atl");
+        preflight_for_path(&path).expect("linuxbrew-lookalike path should be accepted");
     }
 
     #[test]

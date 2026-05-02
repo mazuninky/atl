@@ -13096,7 +13096,6 @@ Usage: atl jira automation delete [OPTIONS] <UUID>
 **Options**
 
 - `<UUID>` — Rule UUID
-- `--force` — Skip the confirmation prompt
 - `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
 - `--quiet, -q` — Suppress all output except errors
 - `--config` — Path to configuration file

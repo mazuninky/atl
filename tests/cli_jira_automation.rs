@@ -172,7 +172,7 @@ fn create_blocked_on_read_only_profile() {
 #[test]
 fn delete_blocked_on_read_only_profile() {
     let (_server, runner, _config) = setup_readonly();
-    let result = runner.run(&["jira", "automation", "delete", "uuid", "--force"]);
+    let result = runner.run(&["jira", "automation", "delete", "uuid"]);
     assert_eq!(result.exit_code, 3, "stderr:\n{}", result.stderr);
 }
 
@@ -184,11 +184,13 @@ fn delete_blocked_on_read_only_profile() {
 
 #[test]
 fn create_body_at_file_is_parsed_before_readonly_block() {
-    use std::fs::write;
+    use std::io::Write as _;
     use tempfile::NamedTempFile;
 
-    let tmp = NamedTempFile::new().expect("tempfile");
-    write(tmp.path(), r#"{"name": "rule from file"}"#).expect("write json");
+    let mut tmp = NamedTempFile::new().expect("tempfile");
+    tmp.as_file_mut()
+        .write_all(br#"{"name": "rule from file"}"#)
+        .expect("write json");
     let body_arg = format!("@{}", tmp.path().to_string_lossy());
 
     let (_server, runner, _config) = setup_readonly();

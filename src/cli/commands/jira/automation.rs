@@ -59,10 +59,6 @@ pub(super) async fn dispatch_automation(
             }
         }
         JiraAutomationSubcommand::Delete(args) => {
-            // `--force` is currently the only way to confirm; non-interactive
-            // by default. The flag is reserved for parity with future
-            // confirmation prompts (matching the existing `delete` handlers).
-            let _ = args.force;
             client.delete_automation_rule(&args.uuid).await?;
             Value::String(format!("Rule {} deleted", args.uuid))
         }

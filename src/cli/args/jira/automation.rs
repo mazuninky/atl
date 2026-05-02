@@ -75,8 +75,4 @@ pub struct JiraAutomationUpdateArgs {
 pub struct JiraAutomationDeleteArgs {
     /// Rule UUID
     pub uuid: String,
-
-    /// Skip the confirmation prompt
-    #[arg(long)]
-    pub force: bool,
 }

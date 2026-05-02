@@ -2513,6 +2513,11 @@ impl JiraClient {
     /// Returns [`Error::Config`] for non-Cloud sites (the `_edge/tenant_info`
     /// endpoint only exists on Atlassian Cloud).
     pub async fn get_cloud_id(&self) -> Result<String, Error> {
+        if self.flavor != JiraFlavor::Cloud {
+            return Err(Error::Config(
+                "automation API requires a Jira Cloud instance; this site does not expose tenant_info".into(),
+            ));
+        }
         self.cloud_id
             .get_or_try_init(|| async {
                 let url = format!("{}/_edge/tenant_info", self.site_base_url());

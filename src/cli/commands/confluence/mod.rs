@@ -14,7 +14,7 @@ use serde_json::Value;
 
 use crate::auth::SystemKeyring;
 use crate::cli::args::*;
-use crate::client::ConfluenceClient;
+use crate::client::{ConfluenceClient, RetryConfig};
 use crate::config::ConfigLoader;
 use crate::io::IoStreams;
 use crate::output::{OutputFormat, Transforms, write_output};
@@ -26,7 +26,7 @@ pub async fn run(
     cmd: &ConfluenceSubcommand,
     config_path: Option<&Utf8Path>,
     profile_name: Option<&str>,
-    retries: u32,
+    retry_cfg: RetryConfig,
     format: &OutputFormat,
     io: &mut IoStreams,
     transforms: &Transforms<'_>,
@@ -42,7 +42,7 @@ pub async fn run(
             target: args.page_id.clone(),
             service: crate::cli::args::BrowseService::Confluence,
         };
-        return super::browse::run(&browse_args, config_path, profile_name, retries, io).await;
+        return super::browse::run(&browse_args, config_path, profile_name, retry_cfg, io).await;
     }
 
     let config = ConfigLoader::load(config_path)?;
@@ -60,7 +60,7 @@ pub async fn run(
     let store = SystemKeyring;
 
     let client =
-        ConfluenceClient::connect(instance, resolved_profile_name, &store, retries).await?;
+        ConfluenceClient::connect(instance, resolved_profile_name, &store, retry_cfg).await?;
 
     dispatch(cmd, &client, format, io, transforms).await
 }
@@ -1075,7 +1075,7 @@ mod tests {
             &cmd,
             Some(&bogus),
             None,
-            0,
+            RetryConfig::off(),
             &OutputFormat::Json,
             &mut io,
             &Transforms::none(),
@@ -1098,7 +1098,7 @@ mod tests {
             &cmd,
             Some(&cfg),
             None,
-            0,
+            RetryConfig::off(),
             &OutputFormat::Json,
             &mut io,
             &Transforms::none(),
@@ -1135,7 +1135,7 @@ domain = "x.atlassian.net"
             &cmd,
             Some(&cfg),
             None,
-            0,
+            RetryConfig::off(),
             &OutputFormat::Json,
             &mut io,
             &Transforms::none(),

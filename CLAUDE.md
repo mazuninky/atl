@@ -100,7 +100,7 @@ Command handlers do **not** print directly. They build a `serde_json::Value` and
 ### CLI args: split by service
 
 `src/cli/args/`:
-- `mod.rs` — top-level `Cli` struct, `Command` enum, **all global flags** (`-v`, `-q`, `-F`, `-p`, `--config`, `--no-color`, `--no-pager`, `--jq`, `--template`, `--retries`)
+- `mod.rs` — top-level `Cli` struct, `Command` enum, **all global flags** (`-v`, `-q`, `-F`, `-p`, `--config`, `--no-color`, `--no-pager`, `--jq`, `--template`, `--retries`, `--retry-all-methods`)
 - `confluence/{mod,page,space,attachment,blog,comment,content,property,label,admin}.rs` — each subdomain in its own file
 - `jira/{mod,issue,board,sprint,project,user,filter,field,workflow,admin}.rs` — same pattern
 - `api.rs`, `auth.rs`, `browse.rs`, `alias.rs`, `updater.rs` — single-file commands
@@ -124,9 +124,9 @@ Adding a new flag to an existing subcommand: edit the right file under `cli/args
 ### HTTP clients: built per call site
 
 `src/client/{mod.rs,confluence.rs,jira.rs}` exposes:
-- `build_http_client(instance, retries) -> ClientWithMiddleware` — wraps a `reqwest::Client` in `reqwest_middleware` + `RetryTransientMiddleware` (exponential backoff, 200ms-10s, configurable via `--retries`). Retries apply to **all** methods including POST/PUT/DELETE — users worried about double-submission must pass `--retries 0`.
-- `ConfluenceClient::new(&instance, retries)` and `JiraClient::new(&instance, retries)` — typed clients used by the per-service handlers.
-- `raw_request(instance, method, endpoint, headers, query, body)` — used by `atl api`. Goes through the same auth + middleware stack.
+- `build_http_client(instance, RetryConfig)` — wraps a `reqwest::Client` in `reqwest_middleware` + `RetryTransientMiddleware` (exponential backoff, 200ms-10s, retry count configurable via `--retries`). The retry layer is method-scoped via a `MethodFilteredRetry` wrapper: by default only `GET`/`HEAD`/`OPTIONS` retry, so a 503 on `atl jira issue create` (POST) is **not** automatically replayed and cannot create the issue twice. Users who want the old "retry every method" behaviour pass `--retry-all-methods`. `RetryConfig { retries, retry_all_methods }` is built once in `main.rs::dispatch` and threaded through to every call site.
+- `ConfluenceClient::new(&instance, RetryConfig)` and `JiraClient::new(&instance, RetryConfig)` — typed clients used by the per-service handlers.
+- `raw_request(instance, method, endpoint, headers, query, body, RetryConfig)` — used by `atl api`. Goes through the same auth + middleware stack.
 - `detect_confluence_api_path` — auto-probes `/wiki/rest/api` vs `/rest/api`.
 
 `AtlassianInstance::read_only` causes write methods to be refused at the client layer — respect this in any new code path.

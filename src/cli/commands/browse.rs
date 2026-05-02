@@ -15,7 +15,7 @@ use camino::Utf8Path;
 
 use crate::auth::{SecretStore, SystemKeyring};
 use crate::cli::args::{BrowseArgs, BrowseService};
-use crate::client::raw_request;
+use crate::client::{RetryConfig, raw_request};
 use crate::config::{AtlassianInstance, ConfigLoader};
 use crate::io::IoStreams;
 
@@ -24,7 +24,7 @@ pub async fn run(
     args: &BrowseArgs,
     config_path: Option<&Utf8Path>,
     profile_name: Option<&str>,
-    retries: u32,
+    retry_cfg: RetryConfig,
     io: &mut IoStreams,
 ) -> Result<()> {
     let service = resolve_service(args.service, &args.target);
@@ -57,7 +57,7 @@ pub async fn run(
                 resolved_profile_name,
                 &store,
                 &args.target,
-                retries,
+                retry_cfg,
             )
             .await?
         }
@@ -152,7 +152,7 @@ async fn confluence_url(
     profile: &str,
     store: &dyn SecretStore,
     page_id: &str,
-    retries: u32,
+    retry_cfg: RetryConfig,
 ) -> Result<String> {
     // Prefer the v2 endpoint since the rest of the code base probes and
     // upgrades to it. The v2 shape is `{ "_links": { "webui": ..., "base": ... } }`
@@ -169,7 +169,7 @@ async fn confluence_url(
         reqwest::header::HeaderMap::new(),
         &[],
         None,
-        retries,
+        retry_cfg,
     )
     .await?;
 

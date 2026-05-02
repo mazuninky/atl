@@ -25,6 +25,8 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 reqwest = { version = "0.13", features = ["json", "rustls", "multipart", "query"], default-features = false }
 reqwest-middleware = { version = "0.5", features = ["json", "multipart", "query"] }
 reqwest-retry = "0.9"
+async-trait = "0.1"
+http = "1"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 
 # Browser launcher (P7 `atl browse`)

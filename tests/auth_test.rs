@@ -124,6 +124,7 @@ mod flow {
         AuthLogoutArgs, AuthService, AuthStatusArgs, AuthSubcommand, AuthTokenArgs, SingleService,
     };
     use atl::cli::commands::auth as auth_cmd;
+    use atl::client::RetryConfig;
     use atl::config::{AtlassianInstance, AuthType, Config, ConfigLoader, Profile};
     use atl::io::IoStreams;
     use camino::Utf8PathBuf;
@@ -204,7 +205,7 @@ mod flow {
             &mut io,
             &store,
             &prompter,
-            0,
+            RetryConfig::off(),
         )
         .await
         .unwrap();
@@ -240,7 +241,7 @@ mod flow {
             &mut io,
             &store,
             &prompter,
-            0,
+            RetryConfig::off(),
         )
         .await
         .unwrap_err();
@@ -284,7 +285,7 @@ mod flow {
             &mut io,
             &store,
             &prompter,
-            0,
+            RetryConfig::off(),
         )
         .await
         .unwrap();
@@ -340,7 +341,7 @@ mod flow {
             &mut io,
             &store,
             &prompter,
-            0,
+            RetryConfig::off(),
         )
         .await
         .unwrap();
@@ -382,7 +383,7 @@ mod flow {
             &mut io,
             &store,
             &prompter,
-            0,
+            RetryConfig::off(),
         )
         .await
         .unwrap();
@@ -393,7 +394,7 @@ mod flow {
             &mut io,
             &store,
             &prompter,
-            0,
+            RetryConfig::off(),
         )
         .await
         .unwrap();
@@ -422,7 +423,7 @@ mod flow {
             &mut io,
             &store,
             &prompter,
-            0,
+            RetryConfig::off(),
         )
         .await
         .unwrap();
@@ -465,7 +466,7 @@ mod flow {
             &mut io,
             &store,
             &prompter,
-            0,
+            RetryConfig::off(),
         )
         .await
         .unwrap();

@@ -5,6 +5,7 @@ use tracing_subscriber::EnvFilter;
 
 use atl::cli::args::{Cli, Command, SelfSubcommand};
 use atl::cli::commands;
+use atl::client::RetryConfig;
 use atl::error::exit_code_for_error;
 use atl::io::IoStreams;
 use atl::output::Transforms;
@@ -77,6 +78,10 @@ fn dispatch(cli: &Cli, io: &mut IoStreams) -> Result<()> {
         jq: cli.jq.as_deref(),
         template: cli.template.as_deref(),
     };
+    let retry_cfg = RetryConfig {
+        retries: cli.retries,
+        retry_all_methods: cli.retry_all_methods,
+    };
 
     match &cli.command {
         Command::Init => {
@@ -107,7 +112,7 @@ fn dispatch(cli: &Cli, io: &mut IoStreams) -> Result<()> {
             &cmd.command,
             cli.config.as_deref(),
             cli.profile.as_deref(),
-            cli.retries,
+            retry_cfg,
             &cli.format,
             io,
             &transforms,
@@ -116,7 +121,7 @@ fn dispatch(cli: &Cli, io: &mut IoStreams) -> Result<()> {
             &cmd.command,
             cli.config.as_deref(),
             cli.profile.as_deref(),
-            cli.retries,
+            retry_cfg,
             &cli.format,
             io,
             &transforms,
@@ -125,7 +130,7 @@ fn dispatch(cli: &Cli, io: &mut IoStreams) -> Result<()> {
             args,
             cli.config.as_deref(),
             cli.profile.as_deref(),
-            cli.retries,
+            retry_cfg,
             &cli.format,
             io,
             &transforms,
@@ -134,7 +139,7 @@ fn dispatch(cli: &Cli, io: &mut IoStreams) -> Result<()> {
             args,
             cli.config.as_deref(),
             cli.profile.as_deref(),
-            cli.retries,
+            retry_cfg,
             io,
         )),
         Command::Alias(cmd) => {
@@ -150,7 +155,7 @@ fn dispatch(cli: &Cli, io: &mut IoStreams) -> Result<()> {
                 io,
                 &store,
                 &prompter,
-                cli.retries,
+                retry_cfg,
             ))
         }
         Command::GenerateDocs(args) => commands::docs::run(args, io),

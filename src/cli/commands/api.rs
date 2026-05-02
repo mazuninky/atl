@@ -17,7 +17,7 @@ use tracing::debug;
 
 use crate::auth::{SecretStore, SystemKeyring};
 use crate::cli::args::{ApiArgs, ApiService};
-use crate::client::raw_request;
+use crate::client::{RetryConfig, raw_request};
 use crate::config::{AtlassianInstance, ConfigLoader};
 use crate::io::IoStreams;
 use crate::output::{OutputFormat, Transforms, write_output};
@@ -27,7 +27,7 @@ pub async fn run(
     args: &ApiArgs,
     config_path: Option<&Utf8Path>,
     profile_name: Option<&str>,
-    retries: u32,
+    retry_cfg: RetryConfig,
     format: &OutputFormat,
     io: &mut IoStreams,
     transforms: &Transforms<'_>,
@@ -88,7 +88,7 @@ pub async fn run(
             &headers,
             &query,
             body.as_ref(),
-            retries,
+            retry_cfg,
         )
         .await?
     } else {
@@ -102,7 +102,7 @@ pub async fn run(
             headers,
             &query,
             body,
-            retries,
+            retry_cfg,
         )
         .await?
     };
@@ -312,7 +312,7 @@ async fn paginate(
     headers: &HeaderMap,
     query: &[(String, String)],
     body: Option<&Value>,
-    retries: u32,
+    retry_cfg: RetryConfig,
 ) -> Result<Value> {
     // First page — shape drives the rest of the walk.
     let first = raw_request(
@@ -325,7 +325,7 @@ async fn paginate(
         headers.clone(),
         query,
         body.cloned(),
-        retries,
+        retry_cfg,
     )
     .await?;
 
@@ -333,20 +333,20 @@ async fn paginate(
         PaginationStyle::JiraSearch => {
             paginate_jira_search(
                 instance, profile, kind, store, method, endpoint, headers, query, body, first,
-                retries,
+                retry_cfg,
             )
             .await
         }
         PaginationStyle::JiraAgile => {
             paginate_jira_agile(
                 instance, profile, kind, store, method, endpoint, headers, query, body, first,
-                retries,
+                retry_cfg,
             )
             .await
         }
         PaginationStyle::ConfluenceLinksNext => {
             paginate_confluence_links(
-                instance, profile, kind, store, method, headers, body, first, retries,
+                instance, profile, kind, store, method, headers, body, first, retry_cfg,
             )
             .await
         }
@@ -368,7 +368,7 @@ async fn paginate_jira_search(
     query: &[(String, String)],
     body: Option<&Value>,
     first: Value,
-    retries: u32,
+    retry_cfg: RetryConfig,
 ) -> Result<Value> {
     let mut merged = first;
     let mut accumulated: Vec<Value> = merged
@@ -403,7 +403,7 @@ async fn paginate_jira_search(
             headers.clone(),
             &next_query,
             body.cloned(),
-            retries,
+            retry_cfg,
         )
         .await?;
 
@@ -436,7 +436,7 @@ async fn paginate_jira_agile(
     query: &[(String, String)],
     body: Option<&Value>,
     first: Value,
-    retries: u32,
+    retry_cfg: RetryConfig,
 ) -> Result<Value> {
     let mut merged = first;
     let mut accumulated: Vec<Value> = merged
@@ -467,7 +467,7 @@ async fn paginate_jira_agile(
             headers.clone(),
             &next_query,
             body.cloned(),
-            retries,
+            retry_cfg,
         )
         .await?;
 
@@ -500,7 +500,7 @@ async fn paginate_confluence_links(
     headers: &HeaderMap,
     body: Option<&Value>,
     first: Value,
-    retries: u32,
+    retry_cfg: RetryConfig,
 ) -> Result<Value> {
     let mut merged = first;
     let mut accumulated: Vec<Value> = merged
@@ -531,7 +531,7 @@ async fn paginate_confluence_links(
             headers.clone(),
             &next_query,
             body.cloned(),
-            retries,
+            retry_cfg,
         )
         .await?;
 

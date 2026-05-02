@@ -4,8 +4,13 @@ mod jira;
 pub use confluence::ConfluenceClient;
 pub use jira::JiraClient;
 
+use async_trait::async_trait;
+use http::Extensions;
+use reqwest::Method;
 use reqwest::header::{AUTHORIZATION, CONTENT_TYPE, HeaderMap, HeaderValue};
-use reqwest_middleware::{ClientBuilder as MwClientBuilder, ClientWithMiddleware};
+use reqwest_middleware::{
+    ClientBuilder as MwClientBuilder, ClientWithMiddleware, Middleware, Next,
+};
 use reqwest_retry::{RetryTransientMiddleware, policies::ExponentialBackoff};
 use tracing::debug;
 
@@ -18,20 +23,83 @@ use crate::error::Error;
 /// uniformly applied.
 pub(crate) type HttpClient = ClientWithMiddleware;
 
+/// Configuration for the HTTP retry layer.
+///
+/// `retries` is the maximum number of retry attempts on transient failures
+/// (5xx, 429, connection errors); `0` disables the retry layer entirely.
+///
+/// `retry_all_methods` controls which HTTP methods participate in the retry
+/// loop. When `false` (the default), only safe methods (`GET`, `HEAD`,
+/// `OPTIONS`) are retried — non-safe methods (`POST`, `PUT`, `PATCH`,
+/// `DELETE`) are sent exactly once. When `true`, all methods are retried;
+/// callers must accept that a transient failure on a write may produce
+/// duplicate side effects (e.g. a `POST` that creates a resource may run
+/// twice).
+#[derive(Debug, Clone, Copy)]
+pub struct RetryConfig {
+    pub retries: u32,
+    pub retry_all_methods: bool,
+}
+
+impl RetryConfig {
+    /// A retry config with the retry layer disabled. Useful for tests and
+    /// for code paths (multipart streaming uploads) that cannot tolerate
+    /// the retry middleware at all.
+    pub const fn off() -> Self {
+        Self {
+            retries: 0,
+            retry_all_methods: false,
+        }
+    }
+}
+
+/// Wraps an inner [`Middleware`] (typically [`RetryTransientMiddleware`]) so
+/// that retry decisions are skipped for non-safe HTTP methods.
+///
+/// The set of safe methods is `GET`, `HEAD`, `OPTIONS`. Although `PUT` and
+/// `DELETE` are nominally idempotent per RFC 7231, in practice many
+/// Atlassian endpoints mutate state on those verbs, so we err on the side
+/// of "do not retry" by default.
+///
+/// When `retry_all_methods` is `true`, the wrapper degenerates to a pure
+/// pass-through to the inner middleware, restoring the pre-fix behaviour
+/// for users who explicitly opt in.
+struct MethodFilteredRetry<M: Middleware> {
+    inner: M,
+    retry_all_methods: bool,
+}
+
+#[async_trait]
+impl<M: Middleware> Middleware for MethodFilteredRetry<M> {
+    async fn handle(
+        &self,
+        req: reqwest::Request,
+        ext: &mut Extensions,
+        next: Next<'_>,
+    ) -> reqwest_middleware::Result<reqwest::Response> {
+        let is_safe = matches!(*req.method(), Method::GET | Method::HEAD | Method::OPTIONS);
+        if self.retry_all_methods || is_safe {
+            self.inner.handle(req, ext, next).await
+        } else {
+            next.run(req, ext).await
+        }
+    }
+}
+
 /// Builds an authenticated HTTP client for an Atlassian instance with an
 /// optional retry layer.
 ///
-/// When `retries > 0`, wraps the underlying [`reqwest::Client`] with
+/// When `cfg.retries > 0`, wraps the underlying [`reqwest::Client`] with
 /// [`RetryTransientMiddleware`] which retries transient failures (5xx,
-/// 429, connection errors) using exponential backoff. When `retries == 0`
+/// 429, connection errors) using exponential backoff. When `cfg.retries == 0`
 /// the client is returned with no retry layer, still wrapped in a
 /// [`ClientWithMiddleware`] so the call sites have a uniform type.
 ///
-/// Note on idempotency: the default
-/// [`RetryTransientMiddleware`] retries on transient *status codes*
-/// regardless of HTTP method. That means a POST returning 503 will be
-/// retried, which could in theory double-submit a write. Callers who are
-/// concerned about double-submission should run with `--retries 0`.
+/// Method scoping: by default the retry layer only fires for safe methods
+/// (`GET`, `HEAD`, `OPTIONS`). Non-safe methods (`POST`, `PUT`, `PATCH`,
+/// `DELETE`) are sent exactly once, so a transient 503 on a write does not
+/// duplicate the side effect. Set `cfg.retry_all_methods` to `true` to
+/// opt back into retrying every method (the pre-2026.18 behaviour).
 ///
 /// Token resolution uses the full `env → TOML → keyring` chain via
 /// [`AtlassianInstance::resolved_token`], so callers do not need to
@@ -41,7 +109,7 @@ pub(crate) fn build_http_client(
     profile: &str,
     kind: &str,
     store: &dyn SecretStore,
-    retries: u32,
+    cfg: RetryConfig,
 ) -> Result<HttpClient, Error> {
     let mut headers = HeaderMap::new();
     headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
@@ -73,8 +141,8 @@ pub(crate) fn build_http_client(
     );
 
     debug!(
-        "Building HTTP client for {} (retries={retries})",
-        instance.domain
+        "Building HTTP client for {} (retries={}, retry_all_methods={})",
+        instance.domain, cfg.retries, cfg.retry_all_methods
     );
 
     let base = reqwest::Client::builder()
@@ -84,7 +152,7 @@ pub(crate) fn build_http_client(
         .build()
         .map_err(Error::Http)?;
 
-    let client = if retries == 0 {
+    let client = if cfg.retries == 0 {
         MwClientBuilder::new(base).build()
     } else {
         let policy = ExponentialBackoff::builder()
@@ -92,10 +160,13 @@ pub(crate) fn build_http_client(
                 std::time::Duration::from_millis(200),
                 std::time::Duration::from_secs(10),
             )
-            .build_with_max_retries(retries);
-        MwClientBuilder::new(base)
-            .with(RetryTransientMiddleware::new_with_policy(policy))
-            .build()
+            .build_with_max_retries(cfg.retries);
+        let inner = RetryTransientMiddleware::new_with_policy(policy);
+        let filtered = MethodFilteredRetry {
+            inner,
+            retry_all_methods: cfg.retry_all_methods,
+        };
+        MwClientBuilder::new(base).with(filtered).build()
     };
 
     Ok(client)
@@ -201,7 +272,7 @@ pub async fn raw_request(
     headers: HeaderMap,
     query: &[(String, String)],
     body: Option<serde_json::Value>,
-    retries: u32,
+    cfg: RetryConfig,
 ) -> Result<serde_json::Value, Error> {
     if instance.read_only
         && !matches!(
@@ -214,7 +285,7 @@ pub async fn raw_request(
         ));
     }
 
-    let http = build_http_client(instance, profile, kind, store, retries)?;
+    let http = build_http_client(instance, profile, kind, store, cfg)?;
 
     let domain = instance.domain.trim_end_matches('/');
     let scheme = if domain.starts_with("http://") || domain.starts_with("https://") {
@@ -386,7 +457,7 @@ mod tests {
         // just without the retry layer attached.
         let inst = make_authed_instance();
         let store = InMemoryStore::new();
-        let client = build_http_client(&inst, "default", "jira", &store, 0);
+        let client = build_http_client(&inst, "default", "jira", &store, RetryConfig::off());
         assert!(
             client.is_ok(),
             "build_http_client(_, 0) should succeed: {:?}",
@@ -401,7 +472,16 @@ mod tests {
         // verify the client was constructed.
         let inst = make_authed_instance();
         let store = InMemoryStore::new();
-        let client = build_http_client(&inst, "default", "jira", &store, 5);
+        let client = build_http_client(
+            &inst,
+            "default",
+            "jira",
+            &store,
+            RetryConfig {
+                retries: 5,
+                retry_all_methods: false,
+            },
+        );
         assert!(
             client.is_ok(),
             "build_http_client(_, 5) should succeed: {:?}",
@@ -420,7 +500,8 @@ mod tests {
         // SAFETY: serialized via env_lock() so no concurrent thread in
         // this crate can read or write ATL_API_TOKEN while we are here.
         unsafe { std::env::remove_var("ATL_API_TOKEN") };
-        let err = build_http_client(&inst, "default", "jira", &store, 0).unwrap_err();
+        let err =
+            build_http_client(&inst, "default", "jira", &store, RetryConfig::off()).unwrap_err();
         assert!(
             matches!(err, Error::Auth(_)),
             "expected Error::Auth, got {err:?}"
@@ -448,7 +529,7 @@ mod tests {
             .set("atl:default:jira", "test@example.com", "keyring-token")
             .unwrap();
 
-        let client = build_http_client(&inst, "default", "jira", &store, 0);
+        let client = build_http_client(&inst, "default", "jira", &store, RetryConfig::off());
         assert!(
             client.is_ok(),
             "build_http_client should resolve keyring token: {:?}",
@@ -494,7 +575,7 @@ mod tests {
             .set("atl:default:jira", "alice@acme.com", "jira-keyring-token")
             .unwrap();
 
-        let client = JiraClient::new(&inst, "default", &store, 0);
+        let client = JiraClient::new(&inst, "default", &store, RetryConfig::off());
         assert!(
             client.is_ok(),
             "JiraClient::new should resolve keyring token, got: {:?}",
@@ -511,7 +592,7 @@ mod tests {
         let inst = make_keyring_only_instance();
         let store = InMemoryStore::new();
 
-        match JiraClient::new(&inst, "default", &store, 0) {
+        match JiraClient::new(&inst, "default", &store, RetryConfig::off()) {
             Err(Error::Auth(_)) => {} // expected
             Err(other) => panic!("expected Error::Auth when no token exists, got: {other:?}"),
             Ok(_) => panic!("expected Error::Auth when no token exists, got Ok"),
@@ -532,7 +613,7 @@ mod tests {
             .set("atl:staging:jira", "alice@acme.com", "wrong-profile-token")
             .unwrap();
 
-        match JiraClient::new(&inst, "default", &store, 0) {
+        match JiraClient::new(&inst, "default", &store, RetryConfig::off()) {
             Err(Error::Auth(_)) => {} // expected
             Err(other) => panic!(
                 "expected Error::Auth when keyring entry is under wrong profile, got: {other:?}"
@@ -559,7 +640,7 @@ mod tests {
             )
             .unwrap();
 
-        let client = ConfluenceClient::new(&inst, "default", &store, 0);
+        let client = ConfluenceClient::new(&inst, "default", &store, RetryConfig::off());
         assert!(
             client.is_ok(),
             "ConfluenceClient::new should resolve keyring token, got: {:?}",
@@ -576,7 +657,7 @@ mod tests {
         let inst = make_keyring_only_instance();
         let store = InMemoryStore::new();
 
-        match ConfluenceClient::new(&inst, "default", &store, 0) {
+        match ConfluenceClient::new(&inst, "default", &store, RetryConfig::off()) {
             Err(Error::Auth(_)) => {} // expected
             Err(other) => panic!("expected Error::Auth when no token exists, got: {other:?}"),
             Ok(_) => panic!("expected Error::Auth when no token exists, got Ok"),
@@ -596,7 +677,7 @@ mod tests {
             .set("atl:default:jira", "alice@acme.com", "jira-only-token")
             .unwrap();
 
-        match ConfluenceClient::new(&inst, "default", &store, 0) {
+        match ConfluenceClient::new(&inst, "default", &store, RetryConfig::off()) {
             Err(Error::Auth(_)) => {} // expected
             Err(other) => panic!(
                 "ConfluenceClient must use kind=\"confluence\", not \"jira\"; got: {other:?}"
@@ -628,7 +709,7 @@ mod tests {
             HeaderMap::new(),
             &[],
             None,
-            0,
+            RetryConfig::off(),
         )
         .await;
 
@@ -669,7 +750,7 @@ mod tests {
             HeaderMap::new(),
             &[],
             Some(serde_json::json!({"fields": {}})),
-            0,
+            RetryConfig::off(),
         )
         .await
         .expect_err("POST on a read_only instance must error");
@@ -868,5 +949,198 @@ mod tests {
             }
             other => panic!("expected Error::Api, got: {other:?}"),
         }
+    }
+
+    // ----------------------------------------------------------------------
+    // MethodFilteredRetry — security regression tests for audit finding M2.
+    //
+    // The retry middleware must NOT retry non-safe HTTP methods by default.
+    // A 503 on `atl jira issue create` (POST) followed by a retry can create
+    // the issue twice; the filter wrapper guards against that. These tests
+    // exercise the wrapper directly against a TCP mock that always returns
+    // 503 and counts how many attempts the client makes per method.
+    // ----------------------------------------------------------------------
+
+    /// Mock that always responds 503, tracking how many connection attempts
+    /// it has accepted. The counter is shared with the test via `Arc`; the
+    /// spawned listener loop runs until `max_accepts` connections have been
+    /// served (so the test does not need to coordinate shutdown explicitly).
+    async fn spawn_counting_503_mock(max_accepts: usize) -> (String, std::sync::Arc<AtomicUsize>) {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let counter = std::sync::Arc::new(AtomicUsize::new(0));
+        let counter_clone = counter.clone();
+        tokio::spawn(async move {
+            for _ in 0..max_accepts {
+                let Ok((mut sock, _)) = listener.accept().await else {
+                    break;
+                };
+                counter_clone.fetch_add(1, Ordering::SeqCst);
+                // Drain the request headers.
+                let mut buf = [0u8; 4096];
+                loop {
+                    let n = sock.read(&mut buf).await.unwrap_or(0);
+                    if n == 0 {
+                        break;
+                    }
+                    if buf[..n].windows(4).any(|w| w == b"\r\n\r\n") {
+                        break;
+                    }
+                }
+                let body = b"transient";
+                let response = format!(
+                    "HTTP/1.1 503 Service Unavailable\r\nContent-Length: {}\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\n",
+                    body.len()
+                );
+                let mut bytes = response.into_bytes();
+                bytes.extend_from_slice(body);
+                let _ = sock.write_all(&bytes).await;
+                let _ = sock.shutdown().await;
+            }
+        });
+        (format!("http://{addr}/"), counter)
+    }
+
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    /// Build a `ClientWithMiddleware` that mirrors what `build_http_client`
+    /// produces (RetryTransientMiddleware wrapped in MethodFilteredRetry),
+    /// but without the auth plumbing — the test mock does not check headers.
+    fn make_filtered_retry_client(retries: u32, retry_all_methods: bool) -> ClientWithMiddleware {
+        let policy = ExponentialBackoff::builder()
+            // Tiny bounds keep the test fast; the bound values are not under
+            // test, only the attempt count.
+            .retry_bounds(
+                std::time::Duration::from_millis(1),
+                std::time::Duration::from_millis(10),
+            )
+            .build_with_max_retries(retries);
+        let inner = RetryTransientMiddleware::new_with_policy(policy);
+        let filtered = MethodFilteredRetry {
+            inner,
+            retry_all_methods,
+        };
+        MwClientBuilder::new(reqwest::Client::new())
+            .with(filtered)
+            .build()
+    }
+
+    #[tokio::test]
+    async fn retry_get_retries_n_times_by_default() {
+        // GET is a safe method — N retries means N+1 total attempts.
+        let retries: u32 = 2;
+        let (url, counter) = spawn_counting_503_mock((retries as usize) + 1 + /* slack */ 2).await;
+        let client = make_filtered_retry_client(retries, false);
+
+        let _ = client.get(&url).send().await; // body is 503; we only count attempts
+
+        let attempts = counter.load(Ordering::SeqCst);
+        assert_eq!(
+            attempts,
+            (retries as usize) + 1,
+            "GET should retry {retries} times → {expected} total attempts, got {attempts}",
+            expected = retries + 1
+        );
+    }
+
+    #[tokio::test]
+    async fn retry_post_does_not_retry_by_default() {
+        // POST is non-safe — the filter must short-circuit before the retry
+        // middleware, so the request is attempted exactly once.
+        let (url, counter) = spawn_counting_503_mock(4).await;
+        let client = make_filtered_retry_client(3, false);
+
+        let _ = client.post(&url).body("{}").send().await;
+
+        let attempts = counter.load(Ordering::SeqCst);
+        assert_eq!(
+            attempts, 1,
+            "POST must NOT retry by default (M2 fix); got {attempts} attempts"
+        );
+    }
+
+    #[tokio::test]
+    async fn retry_post_retries_when_retry_all_methods_is_on() {
+        // With the opt-in flag, POST goes through the retry layer and
+        // matches GET's attempt count.
+        let retries: u32 = 2;
+        let (url, counter) = spawn_counting_503_mock((retries as usize) + 1 + /* slack */ 2).await;
+        let client = make_filtered_retry_client(retries, true);
+
+        let _ = client.post(&url).body("{}").send().await;
+
+        let attempts = counter.load(Ordering::SeqCst);
+        assert_eq!(
+            attempts,
+            (retries as usize) + 1,
+            "POST with retry_all_methods=true should retry {retries} times \
+             → {expected} attempts, got {attempts}",
+            expected = retries + 1
+        );
+    }
+
+    #[tokio::test]
+    async fn retry_head_retries_like_get() {
+        // HEAD is in the safe-method set.
+        let retries: u32 = 2;
+        let (url, counter) = spawn_counting_503_mock((retries as usize) + 1 + /* slack */ 2).await;
+        let client = make_filtered_retry_client(retries, false);
+
+        let _ = client.head(&url).send().await;
+
+        let attempts = counter.load(Ordering::SeqCst);
+        assert_eq!(
+            attempts,
+            (retries as usize) + 1,
+            "HEAD should retry like GET; got {attempts} attempts"
+        );
+    }
+
+    #[tokio::test]
+    async fn retry_options_retries_like_get() {
+        // OPTIONS is in the safe-method set.
+        let retries: u32 = 2;
+        let (url, counter) = spawn_counting_503_mock((retries as usize) + 1 + /* slack */ 2).await;
+        let client = make_filtered_retry_client(retries, false);
+
+        let _ = client.request(reqwest::Method::OPTIONS, &url).send().await;
+
+        let attempts = counter.load(Ordering::SeqCst);
+        assert_eq!(
+            attempts,
+            (retries as usize) + 1,
+            "OPTIONS should retry like GET; got {attempts} attempts"
+        );
+    }
+
+    #[tokio::test]
+    async fn retry_put_does_not_retry_by_default() {
+        // PUT is nominally idempotent per RFC 7231 but Atlassian endpoints
+        // often have side effects on PUT, so the default policy excludes it.
+        let (url, counter) = spawn_counting_503_mock(4).await;
+        let client = make_filtered_retry_client(3, false);
+
+        let _ = client.put(&url).body("{}").send().await;
+
+        let attempts = counter.load(Ordering::SeqCst);
+        assert_eq!(
+            attempts, 1,
+            "PUT must NOT retry by default; got {attempts} attempts"
+        );
+    }
+
+    #[tokio::test]
+    async fn retry_delete_does_not_retry_by_default() {
+        let (url, counter) = spawn_counting_503_mock(4).await;
+        let client = make_filtered_retry_client(3, false);
+
+        let _ = client.delete(&url).send().await;
+
+        let attempts = counter.load(Ordering::SeqCst);
+        assert_eq!(
+            attempts, 1,
+            "DELETE must NOT retry by default; got {attempts} attempts"
+        );
     }
 }

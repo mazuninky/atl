@@ -6,8 +6,8 @@ use crate::config::{AtlassianInstance, JiraFlavor};
 use crate::error::Error;
 
 use super::{
-    HttpClient, build_base_url, build_http_client, handle_response, handle_response_maybe_empty,
-    read_sanitized_error_body,
+    HttpClient, RetryConfig, build_base_url, build_http_client, handle_response,
+    handle_response_maybe_empty, read_sanitized_error_body,
 };
 
 pub struct JiraClient {
@@ -28,18 +28,18 @@ impl JiraClient {
         instance: &AtlassianInstance,
         profile: &str,
         store: &dyn SecretStore,
-        retries: u32,
+        cfg: RetryConfig,
     ) -> Result<Self, Error> {
-        let http = build_http_client(instance, profile, "jira", store, retries)?;
+        let http = build_http_client(instance, profile, "jira", store, cfg)?;
         // Build a separate client without retry middleware for multipart
         // requests. Multipart bodies are streaming and cannot be cloned,
         // which the retry middleware requires.
-        let no_retry_http = if retries == 0 {
+        let no_retry_http = if cfg.retries == 0 {
             // When retries is already 0 the main client has no retry layer,
             // so we can reuse it via a cheap clone (both are Arc-backed).
             http.clone()
         } else {
-            build_http_client(instance, profile, "jira", store, 0)?
+            build_http_client(instance, profile, "jira", store, RetryConfig::off())?
         };
         let base_url = build_base_url(instance, "/rest/api/2");
         Ok(Self {
@@ -2189,7 +2189,8 @@ mod tests {
             flavor: Some(JiraFlavor::DataCenter),
         };
         let store = InMemoryStore::new();
-        JiraClient::new(&inst, "default", &store, 0).expect("JiraClient should build")
+        JiraClient::new(&inst, "default", &store, RetryConfig::off())
+            .expect("JiraClient should build")
     }
 
     #[tokio::test]

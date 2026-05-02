@@ -251,14 +251,14 @@ pub enum JiraFieldContextSubcommand {
     Delete(JiraFieldContextIdArgs),
 
     /// List projects mapped to a context
-    Projects(JiraFieldContextIdArgs),
+    Projects(JiraFieldContextMappingArgs),
     /// Add projects to a context
     AddProjects(JiraFieldContextProjectsArgs),
     /// Remove projects from a context
     RemoveProjects(JiraFieldContextProjectsArgs),
 
     /// List issue types mapped to a context
-    IssueTypes(JiraFieldContextIdArgs),
+    IssueTypes(JiraFieldContextMappingArgs),
     /// Add issue types to a context
     AddIssueTypes(JiraFieldContextIssueTypesArgs),
     /// Remove issue types from a context
@@ -313,6 +313,20 @@ pub struct JiraFieldContextUpdateArgs {
 pub struct JiraFieldContextIdArgs {
     /// Context ID
     pub context_id: String,
+}
+
+#[derive(Debug, Args)]
+pub struct JiraFieldContextMappingArgs {
+    /// Context ID
+    pub context_id: String,
+
+    /// Max results per page
+    #[arg(long, short, default_value = "50")]
+    pub limit: u32,
+
+    /// Fetch all results (auto-paginate)
+    #[arg(long)]
+    pub all: bool,
 }
 
 #[derive(Debug, Args)]

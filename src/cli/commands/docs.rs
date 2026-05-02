@@ -142,7 +142,7 @@ fn render_markdown(cmd: &Command, ancestors: &[&str], heading_level: usize, out:
     };
     if !usage.trim().is_empty() {
         out.push_str("**Usage**\n\n");
-        out.push_str("```\n");
+        out.push_str("```text\n");
         out.push_str(usage.trim_end());
         out.push_str("\n```\n\n");
     }

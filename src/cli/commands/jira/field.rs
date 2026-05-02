@@ -266,9 +266,15 @@ async fn dispatch_field_context(
             Value::String(format!("Context {} deleted", args.context_id))
         }
         JiraFieldContextSubcommand::Projects(args) => {
-            client
-                .field_context_project_mappings(field_id, &args.context_id)
-                .await?
+            if args.all {
+                client
+                    .field_context_project_mappings_all(field_id, &args.context_id)
+                    .await?
+            } else {
+                client
+                    .field_context_project_mappings(field_id, &args.context_id, args.limit, 0)
+                    .await?
+            }
         }
         JiraFieldContextSubcommand::AddProjects(args) => {
             let res = client
@@ -299,9 +305,15 @@ async fn dispatch_field_context(
             }
         }
         JiraFieldContextSubcommand::IssueTypes(args) => {
-            client
-                .field_context_issue_type_mappings(field_id, &args.context_id)
-                .await?
+            if args.all {
+                client
+                    .field_context_issue_type_mappings_all(field_id, &args.context_id)
+                    .await?
+            } else {
+                client
+                    .field_context_issue_type_mappings(field_id, &args.context_id, args.limit, 0)
+                    .await?
+            }
         }
         JiraFieldContextSubcommand::AddIssueTypes(args) => {
             let res = client
@@ -1025,6 +1037,62 @@ mod tests {
                     assert_eq!(args.project_ids, vec!["10000", "10001"]);
                 }
                 other => panic!("expected AddProjects, got {other:?}"),
+            },
+            other => panic!("expected Context, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn context_projects_parses_with_defaults() {
+        let parsed = parse_field(&["context", "customfield_10001", "projects", "10100"]).unwrap();
+        match parsed.command {
+            JiraFieldSubcommand::Context(c) => match c.command {
+                JiraFieldContextSubcommand::Projects(args) => {
+                    assert_eq!(args.context_id, "10100");
+                    assert_eq!(args.limit, 50);
+                    assert!(!args.all);
+                }
+                other => panic!("expected Projects, got {other:?}"),
+            },
+            other => panic!("expected Context, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn context_projects_parses_with_all_flag() {
+        let parsed =
+            parse_field(&["context", "customfield_10001", "projects", "10100", "--all"]).unwrap();
+        match parsed.command {
+            JiraFieldSubcommand::Context(c) => match c.command {
+                JiraFieldContextSubcommand::Projects(args) => {
+                    assert_eq!(args.context_id, "10100");
+                    assert!(args.all);
+                }
+                other => panic!("expected Projects, got {other:?}"),
+            },
+            other => panic!("expected Context, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn context_issue_types_parses_with_explicit_limit() {
+        let parsed = parse_field(&[
+            "context",
+            "customfield_10001",
+            "issue-types",
+            "10100",
+            "--limit",
+            "100",
+        ])
+        .unwrap();
+        match parsed.command {
+            JiraFieldSubcommand::Context(c) => match c.command {
+                JiraFieldContextSubcommand::IssueTypes(args) => {
+                    assert_eq!(args.context_id, "10100");
+                    assert_eq!(args.limit, 100);
+                    assert!(!args.all);
+                }
+                other => panic!("expected IssueTypes, got {other:?}"),
             },
             other => panic!("expected Context, got {other:?}"),
         }

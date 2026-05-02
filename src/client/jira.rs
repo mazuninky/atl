@@ -2082,16 +2082,32 @@ impl JiraClient {
         &self,
         field_id: &str,
         context_id: &str,
+        max_results: u32,
+        start_at: u32,
     ) -> Result<Value, Error> {
         let url = format!("{}/field/{field_id}/context/projectmapping", self.base_url);
         debug!("GET {url} contextId={context_id}");
         let resp = self
             .http
             .get(&url)
-            .query(&[("contextId", context_id)])
+            .query(&[
+                ("startAt", &start_at.to_string()),
+                ("maxResults", &max_results.to_string()),
+                ("contextId", &context_id.to_string()),
+            ])
             .send()
             .await?;
         handle_response(resp).await
+    }
+
+    pub async fn field_context_project_mappings_all(
+        &self,
+        field_id: &str,
+        context_id: &str,
+    ) -> Result<Value, Error> {
+        let url = format!("{}/field/{field_id}/context/projectmapping", self.base_url);
+        self.paginate_offset(&url, 50, "values", &[("contextId", context_id)])
+            .await
     }
 
     pub async fn field_context_assign_projects(
@@ -2140,6 +2156,8 @@ impl JiraClient {
         &self,
         field_id: &str,
         context_id: &str,
+        max_results: u32,
+        start_at: u32,
     ) -> Result<Value, Error> {
         let url = format!(
             "{}/field/{field_id}/context/issuetypemapping",
@@ -2149,10 +2167,27 @@ impl JiraClient {
         let resp = self
             .http
             .get(&url)
-            .query(&[("contextId", context_id)])
+            .query(&[
+                ("startAt", &start_at.to_string()),
+                ("maxResults", &max_results.to_string()),
+                ("contextId", &context_id.to_string()),
+            ])
             .send()
             .await?;
         handle_response(resp).await
+    }
+
+    pub async fn field_context_issue_type_mappings_all(
+        &self,
+        field_id: &str,
+        context_id: &str,
+    ) -> Result<Value, Error> {
+        let url = format!(
+            "{}/field/{field_id}/context/issuetypemapping",
+            self.base_url
+        );
+        self.paginate_offset(&url, 50, "values", &[("contextId", context_id)])
+            .await
     }
 
     pub async fn field_context_assign_issue_types(

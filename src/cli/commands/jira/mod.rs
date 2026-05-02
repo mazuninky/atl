@@ -13,7 +13,7 @@ use serde_json::{Value, json};
 
 use crate::auth::SystemKeyring;
 use crate::cli::args::*;
-use crate::client::JiraClient;
+use crate::client::{JiraClient, RetryConfig};
 use crate::config::ConfigLoader;
 use crate::io::IoStreams;
 use crate::output::{OutputFormat, Transforms, write_output};
@@ -333,7 +333,7 @@ pub async fn run(
     cmd: &JiraSubcommand,
     config_path: Option<&Utf8Path>,
     profile_name: Option<&str>,
-    retries: u32,
+    retry_cfg: RetryConfig,
     format: &OutputFormat,
     io: &mut IoStreams,
     transforms: &Transforms<'_>,
@@ -347,7 +347,7 @@ pub async fn run(
             target: args.key.clone(),
             service: crate::cli::args::BrowseService::Jira,
         };
-        return super::browse::run(&browse_args, config_path, profile_name, retries, io).await;
+        return super::browse::run(&browse_args, config_path, profile_name, retry_cfg, io).await;
     }
 
     let config = ConfigLoader::load(config_path)?;
@@ -365,7 +365,7 @@ pub async fn run(
     })?;
     let store = SystemKeyring;
 
-    let client = JiraClient::new(instance, resolved_profile_name, &store, retries)?;
+    let client = JiraClient::new(instance, resolved_profile_name, &store, retry_cfg)?;
 
     dispatch(cmd, &client, format, io, transforms).await
 }
@@ -1792,7 +1792,7 @@ mod tests {
             &cmd,
             Some(&bogus),
             None,
-            0,
+            RetryConfig::off(),
             &OutputFormat::Json,
             &mut io,
             &Transforms::none(),
@@ -1817,7 +1817,7 @@ mod tests {
             &cmd,
             Some(&cfg),
             None,
-            0,
+            RetryConfig::off(),
             &OutputFormat::Json,
             &mut io,
             &Transforms::none(),
@@ -1860,7 +1860,7 @@ domain = "example.atlassian.net"
             &cmd,
             Some(&cfg),
             None,
-            0,
+            RetryConfig::off(),
             &OutputFormat::Console,
             &mut io,
             &Transforms::none(),
@@ -1898,7 +1898,7 @@ domain = "x.atlassian.net"
             &cmd,
             Some(&cfg),
             None,
-            0,
+            RetryConfig::off(),
             &OutputFormat::Json,
             &mut io,
             &Transforms::none(),

@@ -17,7 +17,7 @@ use tracing::debug;
 
 use crate::auth::{SecretStore, SystemKeyring};
 use crate::cli::args::{ApiArgs, ApiService};
-use crate::client::raw_request;
+use crate::client::{RetryConfig, raw_request};
 use crate::config::{AtlassianInstance, ConfigLoader};
 use crate::io::IoStreams;
 use crate::output::{OutputFormat, Transforms, write_output};
@@ -27,7 +27,7 @@ pub async fn run(
     args: &ApiArgs,
     config_path: Option<&Utf8Path>,
     profile_name: Option<&str>,
-    retries: u32,
+    retry_cfg: RetryConfig,
     format: &OutputFormat,
     io: &mut IoStreams,
     transforms: &Transforms<'_>,
@@ -88,7 +88,8 @@ pub async fn run(
             &headers,
             &query,
             body.as_ref(),
-            retries,
+            retry_cfg,
+            args.max_pages,
         )
         .await?
     } else {
@@ -102,7 +103,7 @@ pub async fn run(
             headers,
             &query,
             body,
-            retries,
+            retry_cfg,
         )
         .await?
     };
@@ -312,7 +313,8 @@ async fn paginate(
     headers: &HeaderMap,
     query: &[(String, String)],
     body: Option<&Value>,
-    retries: u32,
+    retry_cfg: RetryConfig,
+    max_pages: u32,
 ) -> Result<Value> {
     // First page — shape drives the rest of the walk.
     let first = raw_request(
@@ -325,7 +327,7 @@ async fn paginate(
         headers.clone(),
         query,
         body.cloned(),
-        retries,
+        retry_cfg,
     )
     .await?;
 
@@ -333,20 +335,20 @@ async fn paginate(
         PaginationStyle::JiraSearch => {
             paginate_jira_search(
                 instance, profile, kind, store, method, endpoint, headers, query, body, first,
-                retries,
+                retry_cfg, max_pages,
             )
             .await
         }
         PaginationStyle::JiraAgile => {
             paginate_jira_agile(
                 instance, profile, kind, store, method, endpoint, headers, query, body, first,
-                retries,
+                retry_cfg, max_pages,
             )
             .await
         }
         PaginationStyle::ConfluenceLinksNext => {
             paginate_confluence_links(
-                instance, profile, kind, store, method, headers, body, first, retries,
+                instance, profile, kind, store, method, headers, body, first, retry_cfg, max_pages,
             )
             .await
         }
@@ -354,6 +356,21 @@ async fn paginate(
             "pagination style not detected for this endpoint; use manual pagination"
         )),
     }
+}
+
+/// Returns an error when the page counter has hit the user-configured cap.
+///
+/// `max_pages == 0` means "no cap" (escape hatch for users who explicitly
+/// opt out — not recommended because the client has no other defence
+/// against a server returning a cycle of pagination links).
+fn check_max_pages(page_count: u32, max_pages: u32) -> Result<()> {
+    if max_pages > 0 && page_count >= max_pages {
+        bail!(
+            "pagination exceeded --max-pages={max_pages}; the server may be \
+             returning a cycle of _links.next, or you need a larger limit"
+        );
+    }
+    Ok(())
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -368,7 +385,8 @@ async fn paginate_jira_search(
     query: &[(String, String)],
     body: Option<&Value>,
     first: Value,
-    retries: u32,
+    retry_cfg: RetryConfig,
+    max_pages: u32,
 ) -> Result<Value> {
     let mut merged = first;
     let mut accumulated: Vec<Value> = merged
@@ -376,6 +394,7 @@ async fn paginate_jira_search(
         .and_then(Value::as_array)
         .cloned()
         .unwrap_or_default();
+    let mut page_count: u32 = 1;
 
     loop {
         let total = merged
@@ -385,6 +404,8 @@ async fn paginate_jira_search(
         if accumulated.len() as u64 >= total {
             break;
         }
+
+        check_max_pages(page_count, max_pages)?;
 
         let mut next_query: Vec<(String, String)> = query
             .iter()
@@ -403,9 +424,10 @@ async fn paginate_jira_search(
             headers.clone(),
             &next_query,
             body.cloned(),
-            retries,
+            retry_cfg,
         )
         .await?;
+        page_count = page_count.saturating_add(1);
 
         let issues = page
             .get("issues")
@@ -436,7 +458,8 @@ async fn paginate_jira_agile(
     query: &[(String, String)],
     body: Option<&Value>,
     first: Value,
-    retries: u32,
+    retry_cfg: RetryConfig,
+    max_pages: u32,
 ) -> Result<Value> {
     let mut merged = first;
     let mut accumulated: Vec<Value> = merged
@@ -448,8 +471,11 @@ async fn paginate_jira_agile(
         .get("isLast")
         .and_then(Value::as_bool)
         .unwrap_or(true);
+    let mut page_count: u32 = 1;
 
     while !is_last {
+        check_max_pages(page_count, max_pages)?;
+
         let mut next_query: Vec<(String, String)> = query
             .iter()
             .filter(|(k, _)| k != "startAt")
@@ -467,9 +493,10 @@ async fn paginate_jira_agile(
             headers.clone(),
             &next_query,
             body.cloned(),
-            retries,
+            retry_cfg,
         )
         .await?;
+        page_count = page_count.saturating_add(1);
 
         let values = page
             .get("values")
@@ -500,7 +527,8 @@ async fn paginate_confluence_links(
     headers: &HeaderMap,
     body: Option<&Value>,
     first: Value,
-    retries: u32,
+    retry_cfg: RetryConfig,
+    max_pages: u32,
 ) -> Result<Value> {
     let mut merged = first;
     let mut accumulated: Vec<Value> = merged
@@ -508,6 +536,7 @@ async fn paginate_confluence_links(
         .and_then(Value::as_array)
         .cloned()
         .unwrap_or_default();
+    let mut page_count: u32 = 1;
 
     while let Some(next) = merged
         .get("_links")
@@ -515,6 +544,8 @@ async fn paginate_confluence_links(
         .and_then(|l| l.get("next"))
         .and_then(Value::as_str)
     {
+        check_max_pages(page_count, max_pages)?;
+
         let (next_endpoint, next_query) = split_next_url(next, &instance.domain);
         debug!(
             "Confluence _links.next → endpoint={next_endpoint} query_pairs={}",
@@ -531,9 +562,10 @@ async fn paginate_confluence_links(
             headers.clone(),
             &next_query,
             body.cloned(),
-            retries,
+            retry_cfg,
         )
         .await?;
+        page_count = page_count.saturating_add(1);
 
         let results = page
             .get("results")
@@ -1424,5 +1456,165 @@ mod tests {
             "stderr={err}"
         );
         assert!(!err.contains("net//x"), "stderr={err}");
+    }
+
+    // -------------------------------------------------------------------
+    // check_max_pages — pagination cap
+    // -------------------------------------------------------------------
+
+    #[test]
+    fn check_max_pages_under_cap_is_ok() {
+        // Mid-walk: 5 pages fetched so far against a cap of 1000 — must
+        // keep walking.
+        assert!(check_max_pages(5, 1000).is_ok());
+    }
+
+    #[test]
+    fn check_max_pages_at_cap_errors() {
+        // The sentinel is `>=`, so reaching the cap exactly must abort
+        // before we issue another request.
+        let err = check_max_pages(1000, 1000).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("pagination exceeded"),
+            "expected 'pagination exceeded' in error, got: {msg}"
+        );
+        assert!(
+            msg.contains("--max-pages=1000"),
+            "expected limit echoed in message, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn check_max_pages_over_cap_errors() {
+        let err = check_max_pages(2000, 1000).unwrap_err();
+        assert!(
+            err.to_string().contains("pagination exceeded"),
+            "got: {err}"
+        );
+    }
+
+    #[test]
+    fn check_max_pages_zero_means_unlimited() {
+        // The escape hatch: `--max-pages=0` opts out of the cap entirely.
+        assert!(check_max_pages(1, 0).is_ok());
+        assert!(check_max_pages(1_000_000, 0).is_ok());
+        assert!(check_max_pages(u32::MAX, 0).is_ok());
+    }
+
+    /// Simulates the pagination loop body using a fake `next_link` provider
+    /// to exercise the cap enforcement without an HTTP layer. Returns the
+    /// number of pages fetched on success or propagates `check_max_pages`
+    /// errors.
+    fn run_capped_loop(
+        max_pages: u32,
+        mut next_link: impl FnMut(u32) -> Option<&'static str>,
+    ) -> Result<u32> {
+        // First page is "fetched" before the loop, mirroring `paginate`.
+        let mut page_count: u32 = 1;
+        while next_link(page_count).is_some() {
+            check_max_pages(page_count, max_pages)?;
+            // "Fetch" the next page.
+            page_count = page_count.saturating_add(1);
+        }
+        Ok(page_count)
+    }
+
+    #[test]
+    fn pagination_loop_stops_at_default_cap_with_cyclic_next_link() {
+        // A malicious server returns `Some` forever — without the cap, the
+        // client would loop indefinitely. With max_pages=1000 we must abort
+        // having fetched exactly 1000 pages.
+        let err = run_capped_loop(1000, |_| Some("/wiki/api/v2/pages?cursor=cycle")).unwrap_err();
+        let msg = err.to_string();
+        assert!(
+            msg.contains("pagination exceeded"),
+            "expected 'pagination exceeded' in error, got: {msg}"
+        );
+        assert!(
+            msg.contains("--max-pages=1000"),
+            "expected default cap echoed, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn pagination_loop_stops_at_small_cap_with_cyclic_next_link() {
+        // Same shape, smaller cap — easier to verify the boundary exactly.
+        let err = run_capped_loop(3, |_| Some("/cycle")).unwrap_err();
+        assert!(
+            err.to_string().contains("pagination exceeded"),
+            "got: {err}"
+        );
+    }
+
+    #[test]
+    fn pagination_loop_max_pages_zero_skips_cap() {
+        // 5 bounded pages walked to completion with no cap (max_pages=0).
+        // This must succeed even though we'd hit a cap of 3 mid-walk.
+        let pages = run_capped_loop(0, |n| if n < 5 { Some("/next") } else { None }).unwrap();
+        assert_eq!(pages, 5, "expected 5 pages walked, got {pages}");
+    }
+
+    #[test]
+    fn pagination_loop_under_cap_walks_to_completion() {
+        // Bounded server-side: only 4 pages exist. With cap of 1000 the
+        // loop terminates naturally without tripping the cap.
+        let pages = run_capped_loop(1000, |n| if n < 4 { Some("/next") } else { None }).unwrap();
+        assert_eq!(pages, 4);
+    }
+
+    #[test]
+    fn api_args_default_max_pages_is_1000() {
+        // Lock the default to catch accidental changes in CLI defaults.
+        use clap::Parser;
+        // A minimal parent so we can parse the subcommand standalone.
+        #[derive(clap::Parser)]
+        struct Probe {
+            #[command(flatten)]
+            api: crate::cli::args::ApiArgs,
+        }
+        let probe = Probe::try_parse_from(["probe", "rest/api/2/myself", "--service", "jira"])
+            .expect("default args parse");
+        assert_eq!(probe.api.max_pages, 1000);
+    }
+
+    #[test]
+    fn api_args_max_pages_zero_is_accepted() {
+        use clap::Parser;
+        #[derive(clap::Parser)]
+        struct Probe {
+            #[command(flatten)]
+            api: crate::cli::args::ApiArgs,
+        }
+        let probe = Probe::try_parse_from([
+            "probe",
+            "rest/api/2/myself",
+            "--service",
+            "jira",
+            "--max-pages",
+            "0",
+        ])
+        .expect("max-pages=0 must parse");
+        assert_eq!(probe.api.max_pages, 0);
+    }
+
+    #[test]
+    fn api_args_max_pages_custom_value() {
+        use clap::Parser;
+        #[derive(clap::Parser)]
+        struct Probe {
+            #[command(flatten)]
+            api: crate::cli::args::ApiArgs,
+        }
+        let probe = Probe::try_parse_from([
+            "probe",
+            "rest/api/2/myself",
+            "--service",
+            "jira",
+            "--max-pages",
+            "42",
+        ])
+        .expect("max-pages=42 must parse");
+        assert_eq!(probe.api.max_pages, 42);
     }
 }

@@ -79,6 +79,12 @@ pub struct Cli {
     #[arg(long, global = true, default_value_t = 3)]
     pub retries: u32,
 
+    /// Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause
+    /// duplicate writes on transient failures (a POST that creates a
+    /// resource may run twice).
+    #[arg(long, global = true)]
+    pub retry_all_methods: bool,
+
     #[command(subcommand)]
     pub command: Command,
 }

@@ -15,7 +15,8 @@ use camino::Utf8Path;
 
 use crate::auth::{SecretStore, SystemKeyring};
 use crate::cli::args::{BrowseArgs, BrowseService};
-use crate::client::raw_request;
+use crate::cli::commands::confluence_url::build_confluence_url;
+use crate::client::{RetryConfig, raw_request};
 use crate::config::{AtlassianInstance, ConfigLoader};
 use crate::io::IoStreams;
 
@@ -24,7 +25,7 @@ pub async fn run(
     args: &BrowseArgs,
     config_path: Option<&Utf8Path>,
     profile_name: Option<&str>,
-    retries: u32,
+    retry_cfg: RetryConfig,
     io: &mut IoStreams,
 ) -> Result<()> {
     let service = resolve_service(args.service, &args.target);
@@ -57,7 +58,7 @@ pub async fn run(
                 resolved_profile_name,
                 &store,
                 &args.target,
-                retries,
+                retry_cfg,
             )
             .await?
         }
@@ -144,15 +145,22 @@ fn jira_url(instance: &AtlassianInstance, key: &str) -> String {
 
 /// Resolves a Confluence page ID to its human-facing web URL.
 ///
-/// Confluence Cloud stores the canonical web URL in `_links.webui`, with
-/// the absolute origin in `_links.base`. Older v1 responses may omit
-/// `base`, in which case we fall back to the profile's domain.
+/// The browser URL is **always** anchored to the profile's configured
+/// `instance.domain` — never to the host of the server-supplied
+/// `_links.base`. Trusting `_links.base`'s host would let a compromised
+/// or MITM-proxied Confluence instance redirect the user's browser to an
+/// arbitrary origin under the guise of "open Confluence page X". The
+/// path component of `_links.base` is used as a context prefix only
+/// after its host is validated against the configured domain (so the
+/// canonical Confluence Cloud `/wiki` prefix is preserved). The
+/// `_links.webui` value is validated to be a clean server-relative path
+/// before concatenation (see [`build_confluence_url`]).
 async fn confluence_url(
     instance: &AtlassianInstance,
     profile: &str,
     store: &dyn SecretStore,
     page_id: &str,
-    retries: u32,
+    retry_cfg: RetryConfig,
 ) -> Result<String> {
     // Prefer the v2 endpoint since the rest of the code base probes and
     // upgrades to it. The v2 shape is `{ "_links": { "webui": ..., "base": ... } }`
@@ -169,7 +177,7 @@ async fn confluence_url(
         reqwest::header::HeaderMap::new(),
         &[],
         None,
-        retries,
+        retry_cfg,
     )
     .await?;
 
@@ -177,22 +185,9 @@ async fn confluence_url(
         .pointer("/_links/webui")
         .and_then(|v| v.as_str())
         .ok_or_else(|| anyhow!("Confluence response missing _links.webui for page {page_id}"))?;
+    let base = page.pointer("/_links/base").and_then(|v| v.as_str());
 
-    // `_links.base` is an absolute URL prefix (e.g. `https://foo.atlassian.net/wiki`).
-    // If it's missing we reconstruct the origin from the profile's configured
-    // domain and keep the webui path as-is. The `webui` value is always a
-    // server-relative path starting with `/`.
-    if let Some(base) = page.pointer("/_links/base").and_then(|v| v.as_str()) {
-        Ok(format!("{}{}", base.trim_end_matches('/'), webui))
-    } else {
-        let domain = instance.domain.trim_end_matches('/');
-        let scheme = if domain.starts_with("http://") || domain.starts_with("https://") {
-            ""
-        } else {
-            "https://"
-        };
-        Ok(format!("{scheme}{domain}{webui}"))
-    }
+    build_confluence_url(&instance.domain, base, webui)
 }
 
 #[cfg(test)]

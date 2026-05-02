@@ -6337,6 +6337,8 @@ Usage: atl jira [OPTIONS] <COMMAND>
 - `bulk-create` — Bulk create issues from a JSON array
 - `archive` — Archive one or more issues
 - `unarchive` — Unarchive one or more issues
+- `issue` — Issue subcommands (check field completeness, …)
+- `automation` — Manage Jira Cloud automation rules
 
 #### atl jira search
 
@@ -12828,6 +12830,272 @@ Usage: atl jira unarchive [OPTIONS] <KEYS>...
 **Options**
 
 - `<KEYS>` — Issue key(s) to unarchive (e.g. PROJ-123). Repeat for bulk
+- `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
+- `--quiet, -q` — Suppress all output except errors
+- `--config` — Path to configuration file
+- `--profile, -p` — Profile name to use
+- `--format, -F` — Output format
+- `--no-color` — Disable colored output
+- `--no-pager` — Do not pipe long output through a pager
+- `--jq` — Query output with a jq expression
+- `--template` — Format output with a minijinja template
+- `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
+
+#### atl jira issue
+
+Issue subcommands (check field completeness, …)
+
+**Usage**
+
+```text
+Usage: atl jira issue [OPTIONS] <COMMAND>
+```
+
+**Options**
+
+- `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
+- `--quiet, -q` — Suppress all output except errors
+- `--config` — Path to configuration file
+- `--profile, -p` — Profile name to use
+- `--format, -F` — Output format
+- `--no-color` — Disable colored output
+- `--no-pager` — Do not pipe long output through a pager
+- `--jq` — Query output with a jq expression
+- `--template` — Format output with a minijinja template
+- `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
+
+**Subcommands**
+
+- `check` — Verify an issue has values for required/warning fields
+
+##### atl jira issue check
+
+Verify an issue has values for required/warning fields
+
+**Usage**
+
+```text
+Usage: atl jira issue check [OPTIONS] <KEY>
+```
+
+**Options**
+
+- `<KEY>` — Issue key (e.g. PROJ-123)
+- `--require` — Field that must be set; missing fails the command. Repeatable; comma-lists allowed
+- `--warn` — Field reported as a warning when missing (never fails). Repeatable; comma-lists allowed
+- `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
+- `--quiet, -q` — Suppress all output except errors
+- `--config` — Path to configuration file
+- `--profile, -p` — Profile name to use
+- `--format, -F` — Output format
+- `--no-color` — Disable colored output
+- `--no-pager` — Do not pipe long output through a pager
+- `--jq` — Query output with a jq expression
+- `--template` — Format output with a minijinja template
+- `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
+
+#### atl jira automation
+
+Manage Jira Cloud automation rules
+
+**Usage**
+
+```text
+Usage: atl jira automation [OPTIONS] <COMMAND>
+```
+
+**Options**
+
+- `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
+- `--quiet, -q` — Suppress all output except errors
+- `--config` — Path to configuration file
+- `--profile, -p` — Profile name to use
+- `--format, -F` — Output format
+- `--no-color` — Disable colored output
+- `--no-pager` — Do not pipe long output through a pager
+- `--jq` — Query output with a jq expression
+- `--template` — Format output with a minijinja template
+- `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
+
+**Subcommands**
+
+- `list` — List automation rules
+- `get` — Get full definition of a rule by UUID
+- `create` — Create a new rule from a JSON body (`<literal>`, `@file`, or `-` for stdin)
+- `update` — Update an existing rule with a JSON body
+- `enable` — Enable a rule
+- `disable` — Disable a rule
+- `delete` — Delete a rule (must be disabled first per Atlassian)
+
+##### atl jira automation list
+
+List automation rules
+
+**Usage**
+
+```text
+Usage: atl jira automation list [OPTIONS]
+```
+
+**Options**
+
+- `--limit, -l` — Max results per page
+- `--cursor` — Pagination cursor returned by a previous `list` call
+- `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
+- `--quiet, -q` — Suppress all output except errors
+- `--config` — Path to configuration file
+- `--profile, -p` — Profile name to use
+- `--format, -F` — Output format
+- `--no-color` — Disable colored output
+- `--no-pager` — Do not pipe long output through a pager
+- `--jq` — Query output with a jq expression
+- `--template` — Format output with a minijinja template
+- `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
+
+##### atl jira automation get
+
+Get full definition of a rule by UUID
+
+**Usage**
+
+```text
+Usage: atl jira automation get [OPTIONS] <UUID>
+```
+
+**Options**
+
+- `<UUID>` — Rule UUID
+- `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
+- `--quiet, -q` — Suppress all output except errors
+- `--config` — Path to configuration file
+- `--profile, -p` — Profile name to use
+- `--format, -F` — Output format
+- `--no-color` — Disable colored output
+- `--no-pager` — Do not pipe long output through a pager
+- `--jq` — Query output with a jq expression
+- `--template` — Format output with a minijinja template
+- `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
+
+##### atl jira automation create
+
+Create a new rule from a JSON body (`<literal>`, `@file`, or `-` for stdin)
+
+**Usage**
+
+```text
+Usage: atl jira automation create [OPTIONS] --body <BODY>
+```
+
+**Options**
+
+- `--body, -b` — JSON rule definition. Literal string, `@path/to/file.json`, or `-` for stdin
+- `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
+- `--quiet, -q` — Suppress all output except errors
+- `--config` — Path to configuration file
+- `--profile, -p` — Profile name to use
+- `--format, -F` — Output format
+- `--no-color` — Disable colored output
+- `--no-pager` — Do not pipe long output through a pager
+- `--jq` — Query output with a jq expression
+- `--template` — Format output with a minijinja template
+- `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
+
+##### atl jira automation update
+
+Update an existing rule with a JSON body
+
+**Usage**
+
+```text
+Usage: atl jira automation update [OPTIONS] --body <BODY> <UUID>
+```
+
+**Options**
+
+- `<UUID>` — Rule UUID
+- `--body, -b` — JSON rule definition. Literal string, `@path/to/file.json`, or `-` for stdin
+- `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
+- `--quiet, -q` — Suppress all output except errors
+- `--config` — Path to configuration file
+- `--profile, -p` — Profile name to use
+- `--format, -F` — Output format
+- `--no-color` — Disable colored output
+- `--no-pager` — Do not pipe long output through a pager
+- `--jq` — Query output with a jq expression
+- `--template` — Format output with a minijinja template
+- `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
+
+##### atl jira automation enable
+
+Enable a rule
+
+**Usage**
+
+```text
+Usage: atl jira automation enable [OPTIONS] <UUID>
+```
+
+**Options**
+
+- `<UUID>` — Rule UUID
+- `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
+- `--quiet, -q` — Suppress all output except errors
+- `--config` — Path to configuration file
+- `--profile, -p` — Profile name to use
+- `--format, -F` — Output format
+- `--no-color` — Disable colored output
+- `--no-pager` — Do not pipe long output through a pager
+- `--jq` — Query output with a jq expression
+- `--template` — Format output with a minijinja template
+- `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
+
+##### atl jira automation disable
+
+Disable a rule
+
+**Usage**
+
+```text
+Usage: atl jira automation disable [OPTIONS] <UUID>
+```
+
+**Options**
+
+- `<UUID>` — Rule UUID
+- `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
+- `--quiet, -q` — Suppress all output except errors
+- `--config` — Path to configuration file
+- `--profile, -p` — Profile name to use
+- `--format, -F` — Output format
+- `--no-color` — Disable colored output
+- `--no-pager` — Do not pipe long output through a pager
+- `--jq` — Query output with a jq expression
+- `--template` — Format output with a minijinja template
+- `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
+
+##### atl jira automation delete
+
+Delete a rule (must be disabled first per Atlassian)
+
+**Usage**
+
+```text
+Usage: atl jira automation delete [OPTIONS] <UUID>
+```
+
+**Options**
+
+- `<UUID>` — Rule UUID
 - `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
 - `--quiet, -q` — Suppress all output except errors
 - `--config` — Path to configuration file

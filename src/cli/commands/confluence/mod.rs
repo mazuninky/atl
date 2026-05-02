@@ -15,10 +15,11 @@ use serde_json::Value;
 use crate::auth::SystemKeyring;
 use crate::cli::args::*;
 use crate::client::{ConfluenceClient, RetryConfig};
-use crate::config::ConfigLoader;
+use crate::config::{AtlassianInstance, ConfigLoader};
 use crate::io::IoStreams;
 use crate::output::{OutputFormat, Transforms, write_output};
 
+use super::confluence_url::build_confluence_url;
 use super::read_body_arg;
 use page::{copy_tree, export_page, maybe_convert_markdown, render_tree};
 
@@ -62,7 +63,7 @@ pub async fn run(
     let client =
         ConfluenceClient::connect(instance, resolved_profile_name, &store, retry_cfg).await?;
 
-    dispatch(cmd, &client, format, io, transforms).await
+    dispatch(cmd, &client, instance, format, io, transforms).await
 }
 
 /// Returns true when the long-form output of `cmd` would benefit from a
@@ -167,7 +168,14 @@ fn flatten_confluence_search(value: Value) -> Value {
 /// Extracts key fields from the nested API response and produces a flat
 /// key-value object that the console reporter renders as a readable list
 /// instead of a giant JSON blob.
-fn flatten_confluence_page(value: Value) -> Value {
+///
+/// The emitted `url` field is built from the locally configured
+/// `instance.domain` and the server's `_links.webui` path, never from
+/// `_links.base` — see [`build_confluence_url`] for the rationale.
+/// A compromised or MITM-proxied Confluence instance would otherwise be
+/// able to inject an attacker-controlled origin into output that
+/// downstream tools or copy-paste would treat as trusted.
+fn flatten_confluence_page(value: Value, instance: &AtlassianInstance) -> Value {
     let id = value.get("id").and_then(Value::as_str).unwrap_or_default();
     let title = value
         .get("title")
@@ -197,21 +205,29 @@ fn flatten_confluence_page(value: Value) -> Value {
         .and_then(Value::as_str)
         .unwrap_or_default();
 
-    // Build full URL from _links
-    let base = value
-        .get("_links")
-        .and_then(|l| l.get("base"))
-        .and_then(Value::as_str)
-        .unwrap_or_default();
+    // Build the full URL from the locally configured domain and the
+    // server-supplied `_links.webui`. `_links.base` is intentionally
+    // ignored — see the function-level doc comment.
     let webui = value
         .get("_links")
         .and_then(|l| l.get("webui"))
         .and_then(Value::as_str)
         .unwrap_or_default();
-    let url = if !base.is_empty() && !webui.is_empty() {
-        format!("{base}{webui}")
+    let url = if webui.is_empty() {
+        String::new()
     } else {
-        webui.to_string()
+        match build_confluence_url(&instance.domain, webui) {
+            Ok(u) => u,
+            Err(e) => {
+                // Output formatting must never fail the command — fall back
+                // to an empty url field. A debug-level log lets developers
+                // notice when a server-supplied path was rejected.
+                tracing::warn!(
+                    "dropping unsafe Confluence webui path from output: {e}; webui={webui:?}"
+                );
+                String::new()
+            }
+        }
     };
 
     // Extract body content from whatever representation is available
@@ -243,6 +259,7 @@ fn flatten_confluence_page(value: Value) -> Value {
 async fn dispatch(
     cmd: &ConfluenceSubcommand,
     client: &ConfluenceClient,
+    instance: &AtlassianInstance,
     format: &OutputFormat,
     io: &mut IoStreams,
     transforms: &Transforms<'_>,
@@ -254,7 +271,7 @@ async fn dispatch(
                 .get_page(&args.page_id, args.body_format.as_str(), &expand)
                 .await?;
             if matches!(format, OutputFormat::Console) && expand.is_empty() {
-                flatten_confluence_page(value)
+                flatten_confluence_page(value, instance)
             } else {
                 value
             }
@@ -559,7 +576,23 @@ async fn dispatch(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::AuthType;
     use serde_json::json;
+
+    /// Builds a minimal `AtlassianInstance` for tests that exercise URL
+    /// formatting. The domain is the only field that affects the
+    /// `flatten_confluence_page` output.
+    fn test_instance(domain: &str) -> AtlassianInstance {
+        AtlassianInstance {
+            domain: domain.to_string(),
+            email: None,
+            api_token: None,
+            auth_type: AuthType::default(),
+            api_path: None,
+            read_only: false,
+            flavor: None,
+        }
+    }
 
     // ---- flatten_confluence_search ----
 
@@ -673,7 +706,7 @@ mod tests {
             "lastOwnerId": null,
             "position": 195
         });
-        let result = flatten_confluence_page(input);
+        let result = flatten_confluence_page(input, &test_instance("example.atlassian.net"));
         let obj = result.as_object().expect("should be an object");
 
         assert_eq!(obj.get("id").and_then(Value::as_str), Some("98420"));
@@ -689,9 +722,12 @@ mod tests {
             obj.get("updated").and_then(Value::as_str),
             Some("2025-11-01T08:30:00Z")
         );
+        // The URL is built from the locally configured domain, NOT the
+        // server-supplied `_links.base`. Even though `_links.base` claims
+        // `/wiki`, the output uses the configured `example.atlassian.net`.
         assert_eq!(
             obj.get("url").and_then(Value::as_str),
-            Some("https://example.atlassian.net/wiki/spaces/inno/overview")
+            Some("https://example.atlassian.net/spaces/inno/overview")
         );
         assert_eq!(
             obj.get("body").and_then(Value::as_str),
@@ -709,18 +745,21 @@ mod tests {
     }
 
     #[test]
-    fn flatten_page_url_without_base() {
+    fn flatten_page_uses_configured_domain_when_base_absent() {
+        // Even with no `_links.base`, the URL is built from the configured
+        // domain — never as a bare server-relative path that downstream
+        // tools would have to guess at.
         let input = json!({
             "id": "1",
             "title": "T",
             "status": "current",
             "_links": { "webui": "/spaces/X/overview" }
         });
-        let result = flatten_confluence_page(input);
+        let result = flatten_confluence_page(input, &test_instance("example.atlassian.net"));
         assert_eq!(
             result.get("url").and_then(Value::as_str),
-            Some("/spaces/X/overview"),
-            "url should be just webui when base is absent"
+            Some("https://example.atlassian.net/spaces/X/overview"),
+            "url must be qualified with the configured domain"
         );
     }
 
@@ -731,7 +770,7 @@ mod tests {
             "title": "T",
             "status": "current"
         });
-        let result = flatten_confluence_page(input);
+        let result = flatten_confluence_page(input, &test_instance("example.atlassian.net"));
         assert!(
             result.get("body").is_none(),
             "body key should be absent when no body content exists"
@@ -745,7 +784,7 @@ mod tests {
             "title": "T",
             "status": "current"
         });
-        let result = flatten_confluence_page(input);
+        let result = flatten_confluence_page(input, &test_instance("example.atlassian.net"));
         assert!(
             result.get("url").is_none(),
             "url key should be absent when _links is missing"
@@ -764,7 +803,7 @@ mod tests {
             "_links": { "webui": "/x", "base": "https://example.com" },
             "body": { "storage": { "value": "content" } }
         });
-        let result = flatten_confluence_page(input);
+        let result = flatten_confluence_page(input, &test_instance("example.atlassian.net"));
         let obj = result.as_object().unwrap();
         let keys: Vec<&String> = obj.keys().collect();
         assert_eq!(
@@ -774,6 +813,50 @@ mod tests {
             ],
             "columns should appear in insertion order"
         );
+    }
+
+    #[test]
+    fn flatten_page_ignores_attacker_controlled_base() {
+        // A compromised / MITM-proxied Confluence server can return a
+        // hostile `_links.base`. The output must still point at the
+        // configured domain — the attacker's `base` is never trusted.
+        let input = json!({
+            "id": "1",
+            "title": "T",
+            "status": "current",
+            "_links": {
+                "webui": "/x",
+                "base": "https://attacker.example/"
+            }
+        });
+        let result = flatten_confluence_page(input, &test_instance("example.atlassian.net"));
+        assert_eq!(
+            result.get("url").and_then(Value::as_str),
+            Some("https://example.atlassian.net/x"),
+            "url must use configured domain, not attacker-controlled `_links.base`"
+        );
+    }
+
+    #[test]
+    fn flatten_page_drops_url_when_webui_unsafe() {
+        // If the server returns a webui that fails validation (e.g. a
+        // scheme-relative URL pointing at an attacker), we drop the url
+        // field entirely rather than emit something dangerous. Output
+        // formatting must never bail — the rest of the page still flattens.
+        let input = json!({
+            "id": "1",
+            "title": "T",
+            "status": "current",
+            "_links": { "webui": "//attacker.example/x" }
+        });
+        let result = flatten_confluence_page(input, &test_instance("example.atlassian.net"));
+        assert!(
+            result.get("url").is_none(),
+            "url must be dropped when webui fails validation"
+        );
+        // Other fields still present.
+        assert_eq!(result.get("id").and_then(Value::as_str), Some("1"));
+        assert_eq!(result.get("title").and_then(Value::as_str), Some("T"));
     }
 
     // ---- escape_cql ----
@@ -1025,7 +1108,7 @@ mod tests {
                 "view": {"value": "<h1>rendered</h1>", "representation": "view"}
             }
         });
-        let result = flatten_confluence_page(input);
+        let result = flatten_confluence_page(input, &test_instance("example.atlassian.net"));
         assert_eq!(
             result.get("body").and_then(Value::as_str),
             Some("<h1>rendered</h1>")
@@ -1037,7 +1120,7 @@ mod tests {
         // The console reporter renders `version: ""` rather than dropping
         // the field — confirms `unwrap_or_default` on the version path.
         let input = json!({"id": "1", "title": "T", "status": "current"});
-        let result = flatten_confluence_page(input);
+        let result = flatten_confluence_page(input, &test_instance("example.atlassian.net"));
         assert_eq!(result.get("version").and_then(Value::as_str), Some(""));
     }
 

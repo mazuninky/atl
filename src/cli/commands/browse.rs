@@ -15,6 +15,7 @@ use camino::Utf8Path;
 
 use crate::auth::{SecretStore, SystemKeyring};
 use crate::cli::args::{BrowseArgs, BrowseService};
+use crate::cli::commands::confluence_url::build_confluence_url;
 use crate::client::{RetryConfig, raw_request};
 use crate::config::{AtlassianInstance, ConfigLoader};
 use crate::io::IoStreams;
@@ -185,41 +186,6 @@ async fn confluence_url(
     build_confluence_url(&instance.domain, webui)
 }
 
-/// Builds and validates a Confluence browser URL from a configured
-/// domain and a server-supplied `_links.webui` path.
-///
-/// The origin is always taken from `domain` (trusted, comes from the
-/// user's local profile). `webui` is treated as untrusted input and must
-/// be a clean server-relative path:
-///
-/// - non-empty
-/// - starts with `/` but **not** `//` (rejects scheme-relative URLs like
-///   `//attacker.com/x` which `webbrowser::open` would treat as a host)
-/// - does not contain `://` (rejects full URL injection)
-/// - does not contain `\` (rejects Windows-style path-traversal attempts)
-/// - does not contain control characters (rejects newlines, escapes, NUL)
-fn build_confluence_url(domain: &str, webui: &str) -> Result<String> {
-    if webui.is_empty()
-        || !webui.starts_with('/')
-        || webui.starts_with("//")
-        || webui.contains("://")
-        || webui.contains('\\')
-        || webui.chars().any(|c| c.is_control())
-    {
-        return Err(anyhow!(
-            "Confluence response returned an unsafe webui path: {webui:?}"
-        ));
-    }
-
-    let domain = domain.trim_end_matches('/');
-    let scheme = if domain.starts_with("http://") || domain.starts_with("https://") {
-        ""
-    } else {
-        "https://"
-    };
-    Ok(format!("{scheme}{domain}{webui}"))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -349,75 +315,5 @@ mod tests {
             jira_url(&inst, "DEV-9"),
             "http://localhost:8080/browse/DEV-9"
         );
-    }
-
-    #[test]
-    fn build_confluence_url_bare_domain_adds_https() {
-        let url = build_confluence_url("example.atlassian.net", "/wiki/spaces/X/pages/123")
-            .expect("valid webui path should produce a URL");
-        assert_eq!(url, "https://example.atlassian.net/wiki/spaces/X/pages/123");
-    }
-
-    #[test]
-    fn build_confluence_url_preserves_explicit_scheme() {
-        let url = build_confluence_url("https://example.atlassian.net", "/wiki/spaces/X")
-            .expect("valid webui path should produce a URL");
-        assert_eq!(url, "https://example.atlassian.net/wiki/spaces/X");
-    }
-
-    #[test]
-    fn build_confluence_url_strips_trailing_slash_on_domain() {
-        let url = build_confluence_url("example.atlassian.net/", "/x")
-            .expect("valid webui path should produce a URL");
-        assert_eq!(url, "https://example.atlassian.net/x");
-    }
-
-    #[test]
-    fn build_confluence_url_rejects_empty_webui() {
-        let err = build_confluence_url("example.atlassian.net", "")
-            .expect_err("empty webui must be rejected");
-        assert!(err.to_string().contains("unsafe webui path"));
-    }
-
-    #[test]
-    fn build_confluence_url_rejects_no_leading_slash() {
-        let err = build_confluence_url("example.atlassian.net", "no-leading-slash")
-            .expect_err("webui without leading slash must be rejected");
-        assert!(err.to_string().contains("unsafe webui path"));
-    }
-
-    #[test]
-    fn build_confluence_url_rejects_scheme_relative() {
-        let err = build_confluence_url("example.atlassian.net", "//attacker.com/x")
-            .expect_err("scheme-relative webui must be rejected");
-        assert!(err.to_string().contains("unsafe webui path"));
-    }
-
-    #[test]
-    fn build_confluence_url_rejects_full_url() {
-        let err = build_confluence_url("example.atlassian.net", "https://attacker.com/x")
-            .expect_err("full URL in webui must be rejected");
-        assert!(err.to_string().contains("unsafe webui path"));
-    }
-
-    #[test]
-    fn build_confluence_url_rejects_control_character() {
-        let err = build_confluence_url("example.atlassian.net", "/path\x1bevil")
-            .expect_err("control characters in webui must be rejected");
-        assert!(err.to_string().contains("unsafe webui path"));
-    }
-
-    #[test]
-    fn build_confluence_url_rejects_backslash() {
-        let err = build_confluence_url("example.atlassian.net", "/path\\..\\..\\evil")
-            .expect_err("backslash in webui must be rejected");
-        assert!(err.to_string().contains("unsafe webui path"));
-    }
-
-    #[test]
-    fn build_confluence_url_rejects_newline() {
-        let err = build_confluence_url("example.atlassian.net", "/path\nnewline")
-            .expect_err("newline in webui must be rejected");
-        assert!(err.to_string().contains("unsafe webui path"));
     }
 }

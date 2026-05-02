@@ -4,6 +4,7 @@ pub mod auth;
 pub mod browse;
 pub mod config;
 pub mod confluence;
+pub mod confluence_url;
 pub mod docs;
 pub mod init;
 pub mod jira;

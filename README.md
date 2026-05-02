@@ -168,6 +168,32 @@ atl api --service jira -X POST rest/api/2/issue \
     --raw-field 'fields={"project":{"key":"TEST"}}'
 ```
 
+## Use in GitHub Actions
+
+Each release publishes a multi-arch image (`linux/amd64`, `linux/arm64`) to GHCR with build provenance and SBOM attached, and a separate signed [build provenance attestation](https://docs.github.com/en/actions/security-for-github-actions/using-artifact-attestations) issued through GitHub. Pin by digest for reproducibility:
+
+```yaml
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    steps:
+      - name: List my open issues
+        uses: docker://ghcr.io/mazuninky/atl@sha256:<digest>
+        with:
+          args: jira search "assignee = currentUser() AND status = Open" -F json
+        env:
+          ATL_API_TOKEN: ${{ secrets.ATL_TOKEN }}
+          ATL_PROFILE: work
+```
+
+Get the digest from the [Docker workflow run summary](https://github.com/mazuninky/atl/actions/workflows/docker.yml) for the release you want to pin, or via `docker buildx imagetools inspect ghcr.io/mazuninky/atl:<version>`. Verify the attestation:
+
+```sh
+gh attestation verify oci://ghcr.io/mazuninky/atl:<version> --owner mazuninky
+```
+
+Authentication uses the standard `ATL_API_TOKEN` env var. Profile selection (`ATL_PROFILE`), config path (`ATL_CONFIG`), and the global flags (`--jq`, `--template`, `-F`) all work the same as locally. The container runs as a non-root user; mount your config with `volumes:` if you need a profile from disk, or rely entirely on env vars in CI.
+
 ## Claude Code skill
 
 An `atl` skill for [Claude Code](https://claude.ai/code) is available, giving Claude deep knowledge of all `atl` commands, flags, output formats, and common workflows.

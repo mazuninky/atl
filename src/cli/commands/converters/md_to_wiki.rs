@@ -322,7 +322,12 @@ fn render_directive(
     match (name, spec) {
         ("info" | "warning" | "note" | "tip", Some(spec)) => render_panel(spec, params, body),
         ("expand", _) => render_expand(params, body),
-        ("toc", _) => render_toc(params),
+        // `:::toc` is officially body-less, but if the user wrote one with a
+        // body (e.g. mistakenly, or to round-trip through a spec-violating
+        // input) we route to `render_unknown_block` so the body is preserved
+        // verbatim instead of being silently dropped on the way through.
+        ("toc", _) if body.trim().is_empty() => render_toc(params),
+        ("toc", _) => render_unknown_block(name, params, body),
         _ => render_unknown_block(name, params, body),
     }
 }
@@ -1474,6 +1479,25 @@ See the [docs](https://example.com) for more.
         assert!(
             result.contains("{toc}") && !result.contains("{toc:"),
             "expected bare `{{toc}}` in:\n{result}"
+        );
+    }
+
+    #[test]
+    fn block_toc_with_body_preserves_body_via_unknown_block() {
+        // Regression: `:::toc` is officially body-less, but if the user
+        // writes one with a body the content must not be silently dropped.
+        // We route to `render_unknown_block` so the body round-trips verbatim
+        // (`:::toc …\nsome notes\n:::\n`).
+        let result = convert(":::toc maxLevel=3\nsome notes\n:::");
+        assert!(
+            result.contains("some notes"),
+            "body must be preserved, got:\n{result}"
+        );
+        // We must NOT have collapsed the directive into the bare `{toc:…}`
+        // form, which would have dropped the body.
+        assert!(
+            !result.contains("{toc:maxLevel=3}"),
+            "must not emit the body-less `{{toc:…}}` form when body is present, got:\n{result}"
         );
     }
 

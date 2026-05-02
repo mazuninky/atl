@@ -386,16 +386,23 @@ fn push_parameter(out: &mut String, key: &str, value: &str) {
 /// Fallback for directives that are known but have no storage equivalent, or
 /// for unknown names that somehow reached the renderer. Emits the original
 /// `:::name {…} … :::` literal.
+///
+/// All three pieces (`name`, the rendered `params` string, and `body`) are
+/// XML-escaped before concatenation so a name like `weird<x>` or a body that
+/// contains `&`/`<`/`>` cannot break the surrounding storage XHTML. The
+/// `:::` fences, spaces, and newlines remain unescaped (they are pure ASCII
+/// and never carry XML metacharacters).
 fn render_unknown_block(name: &str, params: &BTreeMap<String, String>, body: &str) -> String {
     let mut out = String::new();
     out.push_str(":::");
-    out.push_str(name);
+    out.push_str(&xml_escape(name));
     if !params.is_empty() {
         out.push(' ');
-        out.push_str(&crate::cli::commands::directives::render_attrs(params));
+        let rendered = crate::cli::commands::directives::render_attrs(params);
+        out.push_str(&xml_escape(&rendered));
     }
     out.push('\n');
-    out.push_str(body);
+    out.push_str(&xml_escape(body));
     if !body.ends_with('\n') {
         out.push('\n');
     }
@@ -702,6 +709,25 @@ fn render_mention(d: &InlineDirective) -> String {
 }
 
 fn render_link(d: &InlineDirective) -> String {
+    // External URL takes priority over Confluence page references — if the
+    // user wrote `:link[Docs]{url="https://example.com"}` we emit a plain
+    // HTML anchor so the URL isn't silently dropped. Without this branch the
+    // `<ac:link><ri:page/>` fallback would render as a broken page link.
+    if let Some(url) = d.params.get("url") {
+        let label = d
+            .content
+            .as_deref()
+            .filter(|s| !s.is_empty())
+            .unwrap_or(url);
+        let mut out = String::new();
+        out.push_str(r#"<a href=""#);
+        out.push_str(&xml_escape(url));
+        out.push_str(r#"">"#);
+        out.push_str(&xml_escape(label));
+        out.push_str("</a>");
+        return out;
+    }
+
     let mut out = String::new();
     out.push_str("<ac:link>");
     // Prefer pageId when present (numeric content id), otherwise fall back to
@@ -1312,6 +1338,89 @@ body
         assert!(
             out.contains(r#"ac:name="status""#),
             "outside-span directive should still be emitted: {out}"
+        );
+    }
+
+    // ---- render_unknown_block escapes XML metacharacters ------------------
+
+    #[test]
+    fn render_unknown_block_escapes_name_params_and_body() {
+        // Regression: every piece of `render_unknown_block`'s output must be
+        // XML-escaped so a malicious or malformed unknown directive cannot
+        // produce non-well-formed storage XHTML.
+        let mut params = BTreeMap::new();
+        params.insert("k".to_string(), r#"a&b"#.to_string());
+        let out = render_unknown_block("name<x>", &params, "body & <tag>");
+
+        assert!(
+            out.contains("&lt;x&gt;"),
+            "name's `<` and `>` must be escaped: {out}"
+        );
+        assert!(
+            out.contains("&amp;"),
+            "ampersands in body and params must be escaped: {out}"
+        );
+        // The body's `<tag>` must be escaped, not preserved verbatim.
+        assert!(
+            !out.contains("<tag>"),
+            "raw `<tag>` must not appear in output: {out}"
+        );
+        assert!(
+            out.contains("&lt;tag&gt;"),
+            "body `<tag>` must be escaped: {out}"
+        );
+
+        // Sanity: the produced fragment should be well-formed XML when wrapped
+        // in a single root element. We use `quick_xml` since it's already a
+        // dependency for the reverse converter.
+        let wrapped = format!("<root>{out}</root>");
+        let mut reader = quick_xml::reader::Reader::from_str(&wrapped);
+        loop {
+            match reader.read_event() {
+                Ok(quick_xml::events::Event::Eof) => break,
+                Ok(_) => {}
+                Err(e) => panic!("unknown-block output is not well-formed XML: {e}\noutput: {out}"),
+            }
+        }
+    }
+
+    // ---- render_link respects external URL --------------------------------
+
+    #[test]
+    fn link_directive_with_url_emits_anchor() {
+        // Regression: `:link[Docs]{url="…"}` must emit a plain HTML anchor —
+        // not a Confluence page link — so the URL isn't silently dropped.
+        let out = convert(r#":link[Docs]{url="https://example.com/?a=1&b=2"}"#);
+        assert!(
+            out.contains(r#"<a href="https://example.com/?a=1&amp;b=2">Docs</a>"#),
+            "expected escaped anchor in output: {out}"
+        );
+        // And it must NOT fall through to the page-link branch.
+        assert!(
+            !out.contains("<ac:link>"),
+            "url-bearing link must not emit <ac:link>: {out}"
+        );
+    }
+
+    #[test]
+    fn link_directive_with_url_only_uses_url_as_label() {
+        // When `:link{url=…}` has no body, the URL itself should be the
+        // visible label so the link isn't blank.
+        let out = convert(r#":link{url="https://example.com/x"}"#);
+        assert!(
+            out.contains(r#"<a href="https://example.com/x">https://example.com/x</a>"#),
+            "expected URL-as-label, got: {out}"
+        );
+    }
+
+    #[test]
+    fn link_directive_without_url_falls_back_to_page_link() {
+        // Regression check: when neither `url` nor `pageId` is set, but
+        // content is, fall back to the existing `ri:content-title` behaviour.
+        let out = convert(":link[Some Page]");
+        assert!(
+            out.contains(r#"<ac:link><ri:page ri:content-title="Some Page"/></ac:link>"#),
+            "expected page-title fallback: {out}"
         );
     }
 }

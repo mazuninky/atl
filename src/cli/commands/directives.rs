@@ -734,15 +734,21 @@ pub fn parse_inline(text: &str) -> Vec<InlineToken> {
         // a block-only name (e.g. `info`) appearing inline is treated as
         // plain text so the block form remains the single canonical way to
         // invoke it.
-        if !matches!(lookup(name), Some(spec) if matches!(spec.kind, DirectiveKind::Inline)) {
-            i += 1;
-            continue;
-        }
+        let spec = match lookup(name) {
+            Some(s) if matches!(s.kind, DirectiveKind::Inline) => s,
+            _ => {
+                i += 1;
+                continue;
+            }
+        };
 
-        // Optional `[content]`.
+        // Optional `[content]` — only consumed when the directive's spec
+        // declares `allows_body == true`. Self-closing directives like
+        // `:emoticon` and `:image` must not swallow a following `[…]`; the
+        // bracketed text remains in the surrounding text stream.
         let mut cursor = name_end;
         let mut content: Option<String> = None;
-        if cursor < n && bytes[cursor] == b'[' {
+        if spec.allows_body && cursor < n && bytes[cursor] == b'[' {
             // Find matching `]` (no nesting).
             let body_start = cursor + 1;
             let body_end = (body_start..n).find(|j| bytes[*j] == b']');
@@ -1306,6 +1312,55 @@ mod tests {
                 assert_eq!(d.params["src"], "a.png");
                 assert_eq!(d.params["alt"], "x");
                 assert!(d.content.is_none());
+            }
+            other => panic!("expected Directive, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn inline_self_closing_does_not_swallow_brackets() {
+        // Regression: `:emoticon` is a self-closing directive (allows_body =
+        // false). It must NOT consume a following `[hi]` as content; that
+        // bracketed text should remain in the surrounding text stream.
+        let tokens = parse_inline(":emoticon[hi]{name=warning}");
+        // Expected: Directive(:emoticon, no content, no params)
+        // followed by Text("[hi]{name=warning}").
+        assert!(
+            tokens.len() >= 2,
+            "expected at least 2 tokens, got {tokens:?}"
+        );
+        match &tokens[0] {
+            InlineToken::Directive(d) => {
+                assert_eq!(d.name, "emoticon");
+                assert!(
+                    d.content.is_none(),
+                    "self-closing directive must not have a body"
+                );
+            }
+            other => panic!("expected Directive at index 0, got {other:?}"),
+        }
+        // The remaining text `[hi]{name=warning}` should round-trip verbatim.
+        let trailing: String = tokens[1..]
+            .iter()
+            .map(|t| match t {
+                InlineToken::Text(s) => s.clone(),
+                other => panic!("expected only Text after directive, got {other:?}"),
+            })
+            .collect();
+        assert_eq!(trailing, "[hi]{name=warning}");
+    }
+
+    #[test]
+    fn inline_status_with_body_still_parses() {
+        // Regression check: `:status` has allows_body == true, so the body
+        // branch must still work after the spec-aware fix.
+        let tokens = parse_inline(":status[DONE]{color=green}");
+        assert_eq!(tokens.len(), 1);
+        match &tokens[0] {
+            InlineToken::Directive(d) => {
+                assert_eq!(d.name, "status");
+                assert_eq!(d.content.as_deref(), Some("DONE"));
+                assert_eq!(d.params["color"], "green");
             }
             other => panic!("expected Directive, got {other:?}"),
         }

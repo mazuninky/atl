@@ -323,7 +323,7 @@ atl j comment PROJ-123 @comment.md
 atl j update PROJ-123 --description @new-desc.md
 
 # Round-trip read → edit → update
-atl j view PROJ-123 --jq -r '.fields.description' > /tmp/d.md
+atl j view PROJ-123 --jq '.fields.description' --template '{{ this }}' > /tmp/d.md
 $EDITOR /tmp/d.md
 atl j update PROJ-123 --description @/tmp/d.md
 

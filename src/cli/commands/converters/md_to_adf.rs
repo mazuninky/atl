@@ -1073,12 +1073,27 @@ fn render_inline_card_node(d: &InlineDirective) -> Value {
         .params
         .get("url")
         .cloned()
-        .or_else(|| d.params.get("pageId").map(|n| format!("pageId:{n}")))
-        .unwrap_or_default();
-    json!({
-        "type": "inlineCard",
-        "attrs": {"url": url},
-    })
+        .or_else(|| d.params.get("pageId").map(|n| format!("pageId:{n}")));
+
+    match url {
+        Some(url) => json!({
+            "type": "inlineCard",
+            "attrs": {"url": url},
+        }),
+        None => {
+            // Neither `url` nor `pageId` is set — emitting an inlineCard with
+            // an empty URL is invalid ADF, so we degrade gracefully to a plain
+            // text node carrying whatever label the user supplied. If the
+            // body is empty too we still produce a (zero-length) text node;
+            // the upstream renderer is responsible for filtering it out if
+            // necessary.
+            let text = d.content.clone().unwrap_or_default();
+            json!({
+                "type": "text",
+                "text": text,
+            })
+        }
+    }
 }
 
 /// Produce a `:name[content]{attrs}` literal for inline directives we can't
@@ -1495,6 +1510,30 @@ mod tests {
         let inline = &doc["content"][0]["content"][0];
         assert_eq!(inline["type"], "inlineCard");
         assert_eq!(inline["attrs"]["url"], "https://example.com");
+    }
+
+    #[test]
+    fn inline_link_without_url_or_page_id_falls_back_to_text() {
+        // Regression: `:link[fallback]{}` (or any link directive without
+        // `url` / `pageId`) used to emit `{"type":"inlineCard","attrs":
+        // {"url":""}}`, which ADF consumers reject. We now degrade to a plain
+        // text node so the label isn't lost and the document remains valid.
+        let doc = convert(":link[fallback]");
+        let inline = &doc["content"][0]["content"][0];
+        assert_eq!(inline["type"], "text", "expected text fallback: {inline:?}");
+        assert_eq!(inline["text"], "fallback");
+        // Nothing in the doc should be an inlineCard with empty url.
+        let blocks = doc["content"].as_array().unwrap();
+        for block in blocks {
+            if let Some(content) = block.get("content").and_then(|v| v.as_array()) {
+                for node in content {
+                    if node["type"] == "inlineCard" {
+                        let url = node["attrs"]["url"].as_str().unwrap_or_default();
+                        assert!(!url.is_empty(), "must not emit empty-url inlineCard");
+                    }
+                }
+            }
+        }
     }
 
     #[test]

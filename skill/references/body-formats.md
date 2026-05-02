@@ -39,7 +39,10 @@ The two flag families are **not** interchangeable, despite similar names:
   `atl c blog read`, `atl j view`, `atl j comments`, `atl j comment-get`.
 - `--input-format <FORMAT>` — applies to **writes**. Declares the format
   of the body / description / comment text being sent. Available on
-  every `create` / `update` / `comment` command for both services.
+  Confluence page/blog `create` / `update` and on every Jira
+  `create` / `update` / `comment` command. **Not** available on
+  Confluence comment commands (`atl c comment …`, `atl c inline-comment
+  …`) — those still expect raw storage XHTML.
 
 Available values:
 
@@ -131,9 +134,10 @@ Unknown directive names pass through as text — round-trip safe.
 
 ### Strip directives on read
 
-`--no-directives` (on `c read`, `c export`, `j view`, `j comments`,
-`j comment-get`) flattens panels and inline directives to their content
-text. Useful when you just want the body text without macro markers:
+`--no-directives` (on `c read`, `c export`, `c blog read`, `j view`,
+`j comments`, `j comment-get`) flattens panels and inline directives to
+their content text. Useful when you just want the body text without
+macro markers:
 
 ```bash
 atl c read 12345 --no-directives                 # markdown without :::info wrappers

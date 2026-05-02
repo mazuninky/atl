@@ -894,8 +894,18 @@ fn render_emoji(node: &Value, out: &mut String, ctx: &Ctx) {
         .to_string();
 
     if !ctx.opts.render_directives {
+        // No-directives mode: prefer the rendered glyph (`attrs.text`) when
+        // present. If only `attrs.shortName` is set, fall back to the bare
+        // `:shortname:` token so the emoji stays visible in the markdown.
         if !text.is_empty() {
             out.push_str(&text);
+        } else {
+            let bare = short.trim_matches(':');
+            if !bare.is_empty() {
+                out.push(':');
+                out.push_str(bare);
+                out.push(':');
+            }
         }
         return;
     }
@@ -1087,22 +1097,78 @@ fn ensure_blank_line(out: &mut String) {
     }
 }
 
-/// Collapse 3+ consecutive newlines to 2 to keep output tidy.
+/// Collapse 3+ consecutive newlines to 2 to keep output tidy — but never
+/// inside a fenced code block. A code block whose body contains two blank
+/// lines must keep them; collapsing them silently corrupts the user's code.
+///
+/// The walker is line-based: a line whose content (after up to three leading
+/// spaces) starts with three or more backticks toggles the in-fence state.
+/// While in a fence, every line is emitted verbatim. Outside a fence, runs
+/// of consecutive blank lines are clamped to a single blank line (i.e. two
+/// `\n` in a row).
 fn normalize_blank_lines(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
-    let mut newline_run = 0_usize;
-    for c in s.chars() {
-        if c == '\n' {
-            newline_run += 1;
-            if newline_run <= 2 {
+    let mut in_code_fence = false;
+    let mut blank_run = 0_usize;
+
+    for (i, line) in s.split('\n').enumerate() {
+        let is_fence = is_code_fence_line(line);
+        let is_blank = line.is_empty();
+
+        if i > 0 {
+            if in_code_fence || is_fence {
+                // Inside a fence (or on a fence-toggling line) we always emit
+                // the inter-line newline so blank stretches inside code
+                // survive intact.
+                out.push('\n');
+            } else if is_blank {
+                blank_run += 1;
+                // Only the first blank line in a run gets a newline; further
+                // blanks are dropped.
+                if blank_run == 1 {
+                    out.push('\n');
+                }
+            } else {
                 out.push('\n');
             }
-        } else {
-            newline_run = 0;
-            out.push(c);
+        }
+
+        if !is_blank || in_code_fence || is_fence {
+            blank_run = 0;
+        }
+        // Emit the line content (empty for blank lines is fine — the newline
+        // separator is what matters).
+        out.push_str(line);
+
+        if is_fence {
+            in_code_fence = !in_code_fence;
         }
     }
+
     out
+}
+
+/// Returns true if `line` is a CommonMark fenced-code-block fence (three or
+/// more backticks, optionally preceded by up to three spaces and followed by
+/// an info string containing no further backticks).
+fn is_code_fence_line(line: &str) -> bool {
+    let mut leading_spaces = 0_usize;
+    let bytes = line.as_bytes();
+    while leading_spaces < bytes.len() && bytes[leading_spaces] == b' ' {
+        leading_spaces += 1;
+    }
+    if leading_spaces > 3 {
+        return false;
+    }
+    let mut backticks = 0_usize;
+    while leading_spaces + backticks < bytes.len() && bytes[leading_spaces + backticks] == b'`' {
+        backticks += 1;
+    }
+    if backticks < 3 {
+        return false;
+    }
+    let info = &line[leading_spaces + backticks..];
+    !info.contains('`')
 }
 
 fn emit_unknown_block(node: &Value, out: &mut String) {
@@ -1304,6 +1370,26 @@ mod tests {
         ]));
         let md = convert(&adf);
         assert!(md.contains("```\nplain"), "got: {md:?}");
+    }
+
+    #[test]
+    fn code_block_preserves_internal_blank_lines() {
+        // Regression: `normalize_blank_lines` used to collapse 3+ consecutive
+        // newlines globally, including inside fenced code blocks. A code
+        // block whose body has two blank lines between two non-empty lines
+        // must keep all three newlines verbatim.
+        let adf = doc(json!([
+            {
+                "type": "codeBlock",
+                "attrs": {"language": "text"},
+                "content": [{"type": "text", "text": "line1\n\n\nline2"}]
+            }
+        ]));
+        let md = convert(&adf);
+        assert!(
+            md.contains("line1\n\n\nline2"),
+            "blank lines inside fenced code block must be preserved, got:\n{md:?}"
+        );
     }
 
     #[test]
@@ -1732,6 +1818,40 @@ mod tests {
         let md = convert(&adf);
         assert!(md.contains(":emoticon"), "got: {md:?}");
         assert!(md.contains("name=warning"), "got: {md:?}");
+    }
+
+    #[test]
+    fn inline_emoji_no_directives_falls_back_to_short_name() {
+        // Regression: in `--no-directives` mode, an emoji node with only
+        // `attrs.shortName` (no `attrs.text`) used to silently disappear.
+        // We now emit `:smile:` so the emoji stays visible in the rendered
+        // markdown.
+        let adf = one_para(json!([
+            {"type": "emoji", "attrs": {"shortName": "smile"}}
+        ]));
+        let md = convert_no_directives(&adf);
+        assert!(
+            md.contains(":smile:"),
+            "expected `:smile:` short-name fallback, got: {md:?}"
+        );
+    }
+
+    #[test]
+    fn inline_emoji_no_directives_prefers_text_over_short_name() {
+        // When both `attrs.text` (the rendered glyph) and `attrs.shortName`
+        // are present, the glyph wins — that's the most fluent rendering.
+        let adf = one_para(json!([
+            {"type": "emoji", "attrs": {"shortName": "smile", "text": "\u{1F604}"}}
+        ]));
+        let md = convert_no_directives(&adf);
+        assert!(
+            md.contains('\u{1F604}'),
+            "expected glyph `text` to win, got: {md:?}"
+        );
+        assert!(
+            !md.contains(":smile:"),
+            "must not also emit short-name fallback when text is present, got: {md:?}"
+        );
     }
 
     #[test]

@@ -1,7 +1,9 @@
 mod admin;
+mod automation;
 mod board;
 mod field;
 mod filter;
+mod issue;
 mod project;
 mod sprint;
 mod user;
@@ -546,6 +548,14 @@ async fn dispatch(
     io: &mut IoStreams,
     transforms: &Transforms<'_>,
 ) -> anyhow::Result<()> {
+    // The issue subtree owns its own output flow because `check` needs to
+    // write the JSON report before signalling a non-zero exit on missing
+    // required fields. Short-circuit here so the trailing `write_output` at
+    // the bottom of this function doesn't double-print.
+    if let JiraSubcommand::Issue(cmd) = cmd {
+        return issue::dispatch_issue(&cmd.command, client, format, io, transforms).await;
+    }
+
     let value = match cmd {
         JiraSubcommand::Search(args) => {
             let jql = build_jql(args)?;
@@ -807,6 +817,13 @@ async fn dispatch(
             }
         }
         JiraSubcommand::Unarchive(args) => client.unarchive_issues_bulk(&args.keys).await?,
+        JiraSubcommand::Automation(cmd) => {
+            automation::dispatch_automation(&cmd.command, client).await?
+        }
+        // Handled at the top of this function before the `value` match —
+        // dispatching here would let the trailing `write_output` re-emit
+        // the report.
+        JiraSubcommand::Issue(_) => unreachable!("issue subtree handled above"),
     };
 
     // Start the pager before writing the (potentially long) response so the

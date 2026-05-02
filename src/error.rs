@@ -40,6 +40,12 @@ pub enum Error {
 
     #[error("template error: {0}")]
     Template(String),
+
+    /// `atl jira issue check` found one or more `--require`d fields that are
+    /// missing on the issue. The variant carries the field IDs (not display
+    /// names) so callers can format a stable, machine-friendly summary.
+    #[error("required fields missing: {}", .0.join(", "))]
+    CheckFailed(Vec<String>),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -59,6 +65,7 @@ pub fn exit_code_for_error(err: &anyhow::Error) -> i32 {
             Error::Auth(_) => exit_code::AUTH_ERROR,
             Error::NotFound(_) => exit_code::NOT_FOUND,
             Error::InvalidInput(_) => exit_code::INPUT_ERROR,
+            Error::CheckFailed(_) => exit_code::RUNTIME_ERROR,
             _ => exit_code::RUNTIME_ERROR,
         })
         .unwrap_or(exit_code::RUNTIME_ERROR)
@@ -112,5 +119,17 @@ mod tests {
     fn exit_code_template_error_is_runtime() {
         let err: anyhow::Error = Error::Template("bad template".into()).into();
         assert_eq!(exit_code_for_error(&err), exit_code::RUNTIME_ERROR);
+    }
+
+    #[test]
+    fn exit_code_check_failed_is_runtime() {
+        let err: anyhow::Error = Error::CheckFailed(vec!["customfield_10035".into()]).into();
+        assert_eq!(exit_code_for_error(&err), exit_code::RUNTIME_ERROR);
+    }
+
+    #[test]
+    fn check_failed_message_lists_missing_ids() {
+        let err = Error::CheckFailed(vec!["a".into(), "b".into()]);
+        assert_eq!(err.to_string(), "required fields missing: a, b");
     }
 }

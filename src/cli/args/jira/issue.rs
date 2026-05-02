@@ -1,5 +1,5 @@
 use camino::Utf8PathBuf;
-use clap::Args;
+use clap::{Args, Subcommand};
 
 use super::JiraInputFormat;
 
@@ -389,4 +389,44 @@ pub struct JiraUnarchiveArgs {
     /// Issue key(s) to unarchive (e.g. PROJ-123). Repeat for bulk.
     #[arg(required = true)]
     pub keys: Vec<String>,
+}
+
+// -- Jira issue subtree (`atl jira issue …`) --
+//
+// The flat issue surface (`view`, `create`, `update`, `delete`, …) above is
+// kept untouched; this nested wrapper only hosts new commands like `check`
+// that don't have a flat counterpart.
+
+/// Wrapper for `atl jira issue <subcommand>`.
+#[derive(Debug, Args)]
+pub struct JiraIssueCommand {
+    #[command(subcommand)]
+    pub command: JiraIssueSubcommand,
+}
+
+/// Nested issue-scoped subcommands.
+#[derive(Debug, Subcommand)]
+pub enum JiraIssueSubcommand {
+    /// Verify an issue has values for required/warning fields
+    Check(JiraCheckArgs),
+}
+
+/// Arguments for `atl jira issue check <KEY>`.
+///
+/// `--require` and `--warn` are repeatable and also accept comma-separated
+/// values. When neither is given, a curated default warn-list is applied.
+/// When `--require` is given alone (no `--warn`), the curated list is **not**
+/// applied — only the explicitly named fields are checked.
+#[derive(Debug, Args)]
+pub struct JiraCheckArgs {
+    /// Issue key (e.g. PROJ-123)
+    pub key: String,
+
+    /// Field that must be set; missing fails the command. Repeatable; comma-lists allowed.
+    #[arg(long, value_delimiter = ',')]
+    pub require: Vec<String>,
+
+    /// Field reported as a warning when missing (never fails). Repeatable; comma-lists allowed.
+    #[arg(long, value_delimiter = ',')]
+    pub warn: Vec<String>,
 }

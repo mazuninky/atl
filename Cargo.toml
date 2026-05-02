@@ -6,6 +6,14 @@ rust-version = "1.95"
 description = "Unified CLI for Atlassian Confluence and Jira"
 license = "MIT"
 
+[features]
+# Test-only seams — exposes `pub` cfg-gated helpers (e.g.
+# `JiraClient::with_automation_base_url`) to integration tests under
+# `tests/`. In-crate unit tests pick this up automatically because
+# `#[cfg(any(test, feature = "test-util"))]` is true under `cargo test`.
+# Production builds never enable it.
+test-util = []
+
 [dependencies]
 # CLI
 clap = { version = "4", features = ["derive", "env"] }
@@ -27,7 +35,7 @@ reqwest-middleware = { version = "0.5", features = ["json", "multipart", "query"
 reqwest-retry = "0.9"
 async-trait = "0.1"
 http = "1"
-tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync"] }
 
 # Browser launcher (P7 `atl browse`)
 webbrowser = "1"
@@ -82,6 +90,8 @@ libc = "0.2"
 [dev-dependencies]
 assert_cmd = "2"
 predicates = "3"
+httpmock = "0.7"
+pretty_assertions = "1"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 apple-native-keyring-store = { version = "1", default-features = false, features = ["keychain"] }

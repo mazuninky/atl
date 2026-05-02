@@ -119,6 +119,7 @@ Usage: atl confluence read [OPTIONS] <PAGE_ID>
 
 - `<PAGE_ID>` — Page ID
 - `--body-format` — Body format
+- `--no-directives` — Strip MyST-style directives (`:::info`/`:::warning`/etc.) from markdown output. No effect when `--body-format` is not `markdown`
 - `--include-labels` — Include labels in the response
 - `--include-properties` — Include properties in the response
 - `--include-operations` — Include operations in the response
@@ -1514,6 +1515,7 @@ Usage: atl confluence export [OPTIONS] <PAGE_ID>
 - `<PAGE_ID>` — Page ID
 - `--output-dir, -o` — Output directory (default: current directory)
 - `--body-format` — Body format for the page content
+- `--no-directives` — Strip MyST-style directives (`:::info`/`:::warning`/etc.) from markdown output. No effect when `--body-format` is not `markdown`
 - `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
 - `--quiet, -q` — Suppress all output except errors
 - `--config` — Path to configuration file
@@ -6395,6 +6397,8 @@ Usage: atl jira view [OPTIONS] <KEY>
 
 - `<KEY>` — Issue key (e.g. PROJ-123)
 - `--web` — Open the issue in a browser instead of printing
+- `--body-format` — Output format for description and comment bodies
+- `--no-directives` — Strip MyST-style directives (`:::info`/`:::warning`/etc.) from markdown output. No effect when `--body-format` is not `markdown`
 - `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
 - `--quiet, -q` — Suppress all output except errors
 - `--config` — Path to configuration file
@@ -6595,6 +6599,8 @@ Usage: atl jira comments [OPTIONS] <KEY>
 **Options**
 
 - `<KEY>` — Issue key (e.g. PROJ-123)
+- `--body-format` — Output format for comment bodies
+- `--no-directives` — Strip MyST-style directives (`:::info`/`:::warning`/etc.) from markdown output. No effect when `--body-format` is not `markdown`
 - `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
 - `--quiet, -q` — Suppress all output except errors
 - `--config` — Path to configuration file
@@ -6621,6 +6627,8 @@ Usage: atl jira comment-get [OPTIONS] <KEY> <COMMENT_ID>
 
 - `<KEY>` — Issue key (e.g. PROJ-123)
 - `<COMMENT_ID>` — Comment ID
+- `--body-format` — Output format for the comment body
+- `--no-directives` — Strip MyST-style directives (`:::info`/`:::warning`/etc.) from markdown output. No effect when `--body-format` is not `markdown`
 - `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
 - `--quiet, -q` — Suppress all output except errors
 - `--config` — Path to configuration file

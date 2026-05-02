@@ -2,7 +2,7 @@ mod confluence;
 mod jira;
 
 pub use confluence::ConfluenceClient;
-pub use jira::JiraClient;
+pub use jira::{JiraApiVersion, JiraClient};
 
 use async_trait::async_trait;
 use http::Extensions;

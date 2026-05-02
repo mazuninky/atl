@@ -9,8 +9,13 @@ pub struct ConfluenceReadArgs {
     pub page_id: String,
 
     /// Body format
-    #[arg(long, default_value = "storage", value_enum)]
+    #[arg(long, default_value = "markdown", value_enum)]
     pub body_format: BodyFormat,
+
+    /// Strip MyST-style directives (`:::info`/`:::warning`/etc.) from
+    /// markdown output. No effect when `--body-format` is not `markdown`.
+    #[arg(long)]
+    pub no_directives: bool,
 
     /// Include labels in the response
     #[arg(long)]
@@ -137,7 +142,7 @@ pub struct ConfluenceCreateArgs {
     pub parent: Option<String>,
 
     /// Input format for the body
-    #[arg(long, default_value = "storage", value_enum)]
+    #[arg(long, default_value = "markdown", value_enum)]
     pub input_format: InputFormat,
 
     /// Create as a private (personal) page
@@ -175,7 +180,7 @@ pub struct ConfluenceUpdateArgs {
     pub version: u64,
 
     /// Input format for the body
-    #[arg(long, default_value = "storage", value_enum)]
+    #[arg(long, default_value = "markdown", value_enum)]
     pub input_format: InputFormat,
 
     /// Version comment/message
@@ -208,8 +213,13 @@ pub struct ConfluenceExportArgs {
     pub output_dir: Utf8PathBuf,
 
     /// Body format for the page content
-    #[arg(long, default_value = "storage", value_enum)]
+    #[arg(long, default_value = "markdown", value_enum)]
     pub body_format: BodyFormat,
+
+    /// Strip MyST-style directives (`:::info`/`:::warning`/etc.) from
+    /// markdown output. No effect when `--body-format` is not `markdown`.
+    #[arg(long)]
+    pub no_directives: bool,
 }
 
 #[derive(Debug, Args)]

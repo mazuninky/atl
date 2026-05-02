@@ -21,7 +21,7 @@ use crate::output::{OutputFormat, Transforms, write_output};
 
 use super::confluence_url::build_confluence_url;
 use super::read_body_arg;
-use page::{copy_tree, export_page, maybe_convert_markdown, render_tree};
+use page::{convert_input, copy_tree, export_page, render_tree};
 
 pub async fn run(
     cmd: &ConfluenceSubcommand,
@@ -275,7 +275,7 @@ async fn dispatch(
         ConfluenceSubcommand::Read(args) => {
             let expand = compute_read_expand(args);
             let value = client
-                .get_page(&args.page_id, args.body_format.as_str(), &expand)
+                .get_page(&args.page_id, args.body_format.wire_format(), &expand)
                 .await?;
             if matches!(format, OutputFormat::Console) && expand.is_empty() {
                 flatten_confluence_page(value, instance)
@@ -314,7 +314,7 @@ async fn dispatch(
             }
         }
         ConfluenceSubcommand::Create(args) => {
-            let body = maybe_convert_markdown(read_body_arg(&args.body)?, &args.input_format);
+            let body = convert_input(read_body_arg(&args.body)?, &args.input_format)?;
             let space =
                 args.space.as_deref().or(args.space_id.as_deref()).expect(
                     "clap enforces required_unless_present=space_id on ConfluenceCreateArgs",
@@ -330,7 +330,7 @@ async fn dispatch(
                 .await?
         }
         ConfluenceSubcommand::Update(args) => {
-            let body = maybe_convert_markdown(read_body_arg(&args.body)?, &args.input_format);
+            let body = convert_input(read_body_arg(&args.body)?, &args.input_format)?;
             client
                 .update_page(
                     &args.page_id,
@@ -951,6 +951,7 @@ mod tests {
         ConfluenceReadArgs {
             page_id: "1".into(),
             body_format: BodyFormat::Storage,
+            no_directives: false,
             include_labels: false,
             include_properties: false,
             include_operations: false,

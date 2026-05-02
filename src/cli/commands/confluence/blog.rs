@@ -4,7 +4,7 @@ use crate::cli::args::*;
 use crate::cli::commands::read_body_arg;
 use crate::client::ConfluenceClient;
 
-use super::page::maybe_convert_markdown;
+use super::page::convert_input;
 use super::property::dispatch_resource_property;
 
 /// Build the `expand` query-parameter list for a blog post `Read` request from
@@ -55,18 +55,18 @@ pub(super) async fn dispatch_blog(
         ConfluenceBlogSubcommand::Read(args) => {
             let expand = build_blog_read_expand(args);
             client
-                .get_blog_post(&args.blog_id, args.body_format.as_str(), &expand)
+                .get_blog_post(&args.blog_id, args.body_format.wire_format(), &expand)
                 .await?
         }
         ConfluenceBlogSubcommand::Create(args) => {
-            let body = maybe_convert_markdown(read_body_arg(&args.body)?, &args.input_format);
+            let body = convert_input(read_body_arg(&args.body)?, &args.input_format)?;
             let space = resolve_blog_create_space(args);
             client
                 .create_blog_post(space, &args.title, &body, args.private)
                 .await?
         }
         ConfluenceBlogSubcommand::Update(args) => {
-            let body = maybe_convert_markdown(read_body_arg(&args.body)?, &args.input_format);
+            let body = convert_input(read_body_arg(&args.body)?, &args.input_format)?;
             client
                 .update_blog_post(
                     &args.blog_id,

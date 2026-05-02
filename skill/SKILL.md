@@ -96,8 +96,11 @@ Service aliases: `confluence` = `conf` = `c`
 ### Reading & searching
 
 ```bash
-atl c read 123456                                  # full page body (storage format)
+atl c read 123456                                  # markdown by default — :::info panels, inline directives, etc.
+atl c read 123456 --body-format storage            # raw Confluence storage XHTML
 atl c read 123456 --body-format view               # rendered HTML
+atl c read 123456 --body-format adf                # ADF JSON (atlas_doc_format)
+atl c read 123456 --no-directives                  # markdown stripped of :::name wrappers
 atl c read 123456 --web                            # open in browser
 atl c info 123456                                  # metadata only (no body — fast)
 atl c search "space = DEV AND type = page" --limit 10
@@ -110,22 +113,31 @@ atl c page-list --space-id 65537 --limit 50        # list pages via v2 API
 ### Creating & updating
 
 ```bash
-# Create from markdown file
-atl c create --space DEV --title "Design" --body @design.md --input-format markdown
+# Create from markdown file (markdown is the default — no flag needed)
+atl c create --space DEV --title "Design" --body @design.md
 
 # Create with parent page
-atl c create --space DEV --title "Sub-page" --body @body.md --parent 123456 --input-format markdown
+atl c create --space DEV --title "Sub-page" --body @body.md --parent 123456
+
+# Send raw storage XHTML or ADF JSON when needed
+atl c create --space DEV --title "X" --body @page.xhtml --input-format storage
+atl c create --space DEV --title "X" --body @page.json  --input-format adf
 
 # Update — ALL THREE flags are required: --title, --body, --version
 # Step 1: get current version and title
 atl -F toon c info 123456
 # Step 2: increment version by 1, pass existing title
-atl c update 123456 --title "Title" --body @new.md --version 5 --input-format markdown
+atl c update 123456 --title "Title" --body @new.md --version 5
 
 # Scriptable pattern: extract values programmatically
 TITLE=$(atl -F json c info 123456 --jq '.title')
 VERSION=$(atl -F json c info 123456 --jq '.version.number')
-atl c update 123456 --title "$TITLE" --body @new.md --version $((VERSION + 1)) --input-format markdown
+atl c update 123456 --title "$TITLE" --body @new.md --version $((VERSION + 1))
+
+# Read → edit → push back roundtrip (markdown is default for both directions)
+atl c read 123456 > /tmp/p.md
+$EDITOR /tmp/p.md
+atl c update 123456 --title "$TITLE" --version $((VERSION + 1)) --body @/tmp/p.md
 
 # Update title only (still needs version)
 atl c update-title 123456 --title "Better title" --version 5
@@ -170,7 +182,7 @@ atl c space list --all
 atl c space get SPACE_ID
 atl c blog list --space DEV
 atl c blog read BLOG_ID
-atl c blog create --space DEV --title "Update" --body @post.md --input-format markdown
+atl c blog create --space DEV --title "Update" --body @post.md
 atl c task list --page-id 123456
 atl c property list 123456
 atl c property set 123456 my-key --value '{"foo": 1}'
@@ -240,8 +252,8 @@ atl j create --project PROJ --issue-type Story \
 atl j update PROJ-123 --summary "New title" --priority Medium
 atl j update PROJ-123 --labels "done,reviewed" --fix-version "v2.0"
 
-# Update description from a markdown file (see "Input formats" below)
-atl j update PROJ-123 --description @new-description.md --input-format markdown
+# Update description from a markdown file (markdown is the default)
+atl j update PROJ-123 --description @new-description.md
 
 # Transition: ALWAYS use numeric transition ID, not status name
 atl j transitions PROJ-123                 # list available transitions + IDs
@@ -269,43 +281,72 @@ atl j comment-get PROJ-123 10042
 atl j comment-delete PROJ-123 10042
 ```
 
-**Jira Cloud ADF note**: On Jira Cloud, comment `.body` is an Atlassian Document Format (ADF) object. When extracting text with `--jq`, use a deeper path like `.comments[].body.content[].content[].text`.
+### Body formats — markdown is the default
 
-### Input formats — Jira vs Confluence are different
+> Full reference (six converters, MyST-style directive grammar, lossy mappings) lives in `references/body-formats.md`. Read it when something round-trips badly or you're using `--body-format` / `--input-format` for the first time.
 
-> Full mapping tables (markdown → Confluence storage, markdown → Jira wiki) and read/write flag semantics live in `references/body-formats.md` — read it when in doubt about what format to send or what `--body-format` / `--input-format` actually do.
+Both Confluence and Jira default to **markdown** on input and output.
+The `--input-format` flag declares your input's format on writes (`markdown` default; `storage` for raw Confluence XHTML; `wiki` for raw Jira; `adf` for raw ADF JSON). The `--body-format` flag selects the output representation on reads.
 
-This is a footgun worth memorising. Jira and Confluence accept different body formats by default, and the `--input-format` flag does **different** conversions on each side:
+Markdown extends CommonMark with two MyST-style directive forms for things markdown can't natively express:
 
-| Service | Default format | What `--input-format markdown` converts to |
-|---|---|---|
-| **Confluence** (`c create`, `c update`, `c blog create/update`) | `storage` (XHTML) | Confluence storage XHTML (via `comrak::markdown_to_html`) |
-| **Jira** (`j create`, `j update`, `j comment`) | `wiki` (Jira wiki syntax) | Jira wiki syntax (markdown AST → wiki text) |
+```markdown
+:::info
+Block panel — same syntax for Confluence info macro and Jira `{info}`.
+:::
 
-The Confluence storage format and Jira wiki syntax are **completely different markup languages** — same flag name, different conversions, different outputs. You cannot mix them.
+:::warning title="Heads up"
+Block panels accept attributes.
+:::
 
-**Rule**: when the body is markdown, always pass `--input-format markdown`. Without it, Jira will silently interpret your markdown as wiki syntax and produce mangled output (headings become nested numbered lists, `**bold**` renders as literal `**`, code fences become paragraphs, pipe tables don't render, `[text](url)` stays literal). The API call returns 201 success, but the rendered description is garbage — only visible in the UI.
+:::expand title="Click me"
+Expand sections (Confluence). Falls back to a *Title*\nbody on Jira.
+:::
 
-```bash
-# Jira — markdown description
-atl j create --project PROJ --issue-type Task \
-  --summary "Bug report" \
-  --description @body.md \
-  --input-format markdown
+:::toc maxLevel=3
+:::
 
-# Jira — markdown comment
-atl j comment PROJ-123 @comment.md --input-format markdown
-
-# Jira — markdown in update
-atl j update PROJ-123 --description @new-desc.md --input-format markdown
-
-# Jira — explicit wiki syntax (default; flag optional)
-atl j comment PROJ-123 'h2. Heading\n*bold* and _italic_'
+inline release :status[DONE]{color=green} ready
+notify :mention[@john]{accountId=abc123}
+:emoticon{name=warning} careful
 ```
 
-Markdown → Jira wiki mapping (lossy, best-effort): headings `# H1`/`## H2` → `h1.`/`h2.`, `**bold**` → `*bold*`, `*italic*` → `_italic_`, `` `code` `` → `{{code}}`, fenced code blocks → `{code:lang}...{code}` (or `{noformat}` if the body contains `{code}` itself), `[text](url)` → `[text|url]`, `![alt](url)` → `!url!` (alt dropped), pipe tables → `||h1||h2||` headers + `|c|c|` rows, `- item` → `* item` (nested = `**`/`***`), `1. item` → `# item`, `> quote` → `{quote}...{quote}`, `~~strike~~` → `-strike-`, `---` → `----`.
+Block fences nest by depth — keep using `:::` everywhere, the parser pairs them.
 
-Out of scope: ADF (v3 API) input. If you need rich Jira features beyond wiki syntax (panels, mentions, expanding sections), construct ADF JSON and POST via `atl api -X POST` directly.
+```bash
+# Markdown is the default — no flags needed
+atl j create --project PROJ --issue-type Task \
+  --summary "Bug report" \
+  --description @body.md
+
+atl j comment PROJ-123 @comment.md
+atl j update PROJ-123 --description @new-desc.md
+
+# Round-trip read → edit → update
+atl j view PROJ-123 --jq -r '.fields.description' > /tmp/d.md
+$EDITOR /tmp/d.md
+atl j update PROJ-123 --description @/tmp/d.md
+
+# Send raw wiki when needed
+atl j comment PROJ-123 'h2. Heading\n*bold* and _italic_' --input-format wiki
+
+# Strip directives on read (clean text without :::info wrappers)
+atl j view PROJ-123 --no-directives
+atl c read 123456 --no-directives
+```
+
+ADF (Cloud only for Jira; both Cloud and DC for Confluence) is supported as a raw passthrough:
+
+```bash
+atl c read 123456 --body-format adf | jq '.content[0]'
+atl j view PROJ-1 --body-format adf --jq '.fields.description.content[0]'
+
+atl c create --space DEV --title "X" --body @page.json --input-format adf
+atl j create --project PROJ --issue-type Task --summary "X" \
+  --description @desc.json --input-format adf      # Cloud only — uses v3 API
+```
+
+On Jira Data Center / Server, `--body-format adf` and `--input-format adf` fail fast because the v3 API doesn't exist there.
 
 ### Boards, sprints, epics
 

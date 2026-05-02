@@ -173,25 +173,52 @@ pub enum ConfluenceSubcommand {
 
 #[derive(Debug, Clone, Copy, Default, ValueEnum)]
 pub enum BodyFormat {
-    #[default]
+    /// Confluence storage format (XHTML) — the canonical wire format.
     Storage,
+    /// Server-rendered HTML preview (read-only).
     View,
+    /// Markdown rendered from storage XHTML (converted client-side).
+    #[default]
+    Markdown,
+    /// Atlassian Document Format — the native Cloud JSON representation.
+    Adf,
 }
 
 impl BodyFormat {
+    /// Stable short identifier suitable for log/diagnostic output.
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Storage => "storage",
             Self::View => "view",
+            Self::Markdown => "markdown",
+            Self::Adf => "adf",
+        }
+    }
+
+    /// Wire-format value to send to the Confluence v2 `body-format` query
+    /// parameter.
+    ///
+    /// `Markdown` and `Storage` both fetch storage XHTML from the server;
+    /// markdown conversion happens client-side. `Adf` requests the native
+    /// `atlas_doc_format` representation. `View` is for rendered HTML
+    /// preview.
+    pub fn wire_format(&self) -> &'static str {
+        match self {
+            Self::Storage | Self::Markdown => "storage",
+            Self::View => "view",
+            Self::Adf => "atlas_doc_format",
         }
     }
 }
 
 #[derive(Debug, Clone, Copy, Default, ValueEnum)]
 pub enum InputFormat {
-    /// Confluence storage format (XHTML)
-    #[default]
+    /// Confluence storage format (XHTML) — sent to the server unchanged.
     Storage,
-    /// Markdown (converted to storage format)
+    /// Markdown — converted to storage format client-side.
+    #[default]
     Markdown,
+    /// Atlassian Document Format JSON — sent natively as
+    /// `atlas_doc_format`.
+    Adf,
 }

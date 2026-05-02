@@ -1,24 +1,104 @@
 use std::io::Write;
 
+use anyhow::Context;
 use serde_json::Value;
 use tracing::info;
 
 use crate::cli::args::*;
-use crate::cli::commands::markdown;
+use crate::cli::commands::converters::adf_to_md::adf_to_markdown;
+use crate::cli::commands::converters::body_content::BodyContent;
+use crate::cli::commands::converters::md_to_storage::markdown_to_storage;
+use crate::cli::commands::converters::storage_to_md::{ConvertOpts, storage_to_markdown};
 use crate::client::ConfluenceClient;
 
-/// Extract the body content string out of a Confluence page response, given
-/// the requested body format. Returns `""` when the body is missing instead
-/// of erroring — the caller writes the result verbatim, and an empty body is
-/// a legal page state.
-fn extract_body_content(page: &Value, body_format: BodyFormat) -> &str {
-    let body_key = match body_format {
-        BodyFormat::Storage => "storage",
-        BodyFormat::View => "view",
-    };
-    page.pointer(&format!("/body/{body_key}/value"))
+/// Options that control how [`extract_body`] renders converted output.
+///
+/// `render_directives` is forwarded to the markdown converters so the
+/// `--no-directives` flag can strip MyST-style directives in markdown
+/// output.
+#[derive(Debug, Clone, Copy)]
+pub(super) struct ExtractOpts {
+    /// When `true` (the default), Confluence macros become MyST-style
+    /// directives in markdown output. When `false`, directives are
+    /// stripped to their plain body text.
+    pub render_directives: bool,
+}
+
+impl Default for ExtractOpts {
+    fn default() -> Self {
+        Self {
+            render_directives: true,
+        }
+    }
+}
+
+/// Extract the body content out of a Confluence page response in the
+/// requested format.
+///
+/// - [`BodyFormat::Storage`] / [`BodyFormat::View`] read the matching
+///   `body.{storage,view}.value` field as a UTF-8 string.
+/// - [`BodyFormat::Adf`] reads `body.atlas_doc_format.value` (a stringified
+///   JSON document) and pretty-prints it for readability. If the value
+///   isn't valid JSON it is returned as-is so the user still sees something
+///   they can recover.
+/// - [`BodyFormat::Markdown`] runs the storage XHTML through
+///   [`storage_to_markdown`]; when `body.storage` is missing or empty, it
+///   falls back to [`adf_to_markdown`] on `body.atlas_doc_format.value`.
+///
+/// Returns the empty string when no recognised body representation is
+/// present — an empty body is a legal page state.
+pub(super) fn extract_body(
+    page: &Value,
+    body_format: BodyFormat,
+    opts: ExtractOpts,
+) -> anyhow::Result<String> {
+    match body_format {
+        BodyFormat::Storage => Ok(read_body_value(page, "storage")),
+        BodyFormat::View => Ok(read_body_value(page, "view")),
+        BodyFormat::Adf => {
+            let raw = read_body_value(page, "atlas_doc_format");
+            if raw.is_empty() {
+                return Ok(String::new());
+            }
+            // Pretty-print so the JSON document is readable. Fall back to
+            // the raw string if the server sent something we can't parse —
+            // the caller still gets useful output.
+            Ok(serde_json::from_str::<Value>(&raw)
+                .ok()
+                .and_then(|v| serde_json::to_string_pretty(&v).ok())
+                .unwrap_or(raw))
+        }
+        BodyFormat::Markdown => {
+            let convert_opts = ConvertOpts {
+                render_directives: opts.render_directives,
+            };
+            let storage = read_body_value(page, "storage");
+            if !storage.is_empty() {
+                return storage_to_markdown(&storage, convert_opts)
+                    .with_context(|| "failed to convert storage XHTML to markdown");
+            }
+            let adf_raw = read_body_value(page, "atlas_doc_format");
+            if !adf_raw.is_empty() {
+                let adf: Value = serde_json::from_str(&adf_raw)
+                    .with_context(|| "atlas_doc_format body is not valid JSON")?;
+                let adf_opts = crate::cli::commands::converters::adf_to_md::ConvertOpts {
+                    render_directives: opts.render_directives,
+                };
+                return adf_to_markdown(&adf, adf_opts)
+                    .with_context(|| "failed to convert ADF to markdown");
+            }
+            Ok(String::new())
+        }
+    }
+}
+
+/// Read `body.<key>.value` as a `String`, returning empty when the path is
+/// missing or not a string.
+fn read_body_value(page: &Value, key: &str) -> String {
+    page.pointer(&format!("/body/{key}/value"))
         .and_then(Value::as_str)
         .unwrap_or("")
+        .to_string()
 }
 
 /// Build the JSON summary returned by the `export` command. Pure so the test
@@ -63,7 +143,7 @@ pub(super) async fn export_page(
     args: &ConfluenceExportArgs,
 ) -> anyhow::Result<Value> {
     let page = client
-        .get_page(&args.page_id, args.body_format.as_str(), &[])
+        .get_page(&args.page_id, args.body_format.wire_format(), &[])
         .await?;
     let title = page
         .get("title")
@@ -72,11 +152,17 @@ pub(super) async fn export_page(
 
     std::fs::create_dir_all(args.output_dir.as_std_path())?;
 
-    let body_content = extract_body_content(&page, args.body_format);
+    let body_content = extract_body(
+        &page,
+        args.body_format,
+        ExtractOpts {
+            render_directives: !args.no_directives,
+        },
+    )?;
     let page_file = args
         .output_dir
         .join(format!("{}.html", sanitize_filename(title)));
-    std::fs::write(page_file.as_std_path(), body_content)?;
+    std::fs::write(page_file.as_std_path(), &body_content)?;
     info!("Wrote page content to {page_file}");
 
     let attachments = client.get_attachments_all(&args.page_id, 200).await?;
@@ -201,7 +287,7 @@ fn copy_tree_recursive<'a>(
             return Ok(vec![]);
         }
 
-        let body = extract_body_content(&page, BodyFormat::Storage);
+        let body = extract_body(&page, BodyFormat::Storage, ExtractOpts::default())?;
 
         let mut results = Vec::new();
 
@@ -211,7 +297,13 @@ fn copy_tree_recursive<'a>(
         } else {
             info!("Copying page '{title}' (depth {level})");
             let created = client
-                .create_page(target_space, title, body, target_parent, false)
+                .create_page(
+                    target_space,
+                    title,
+                    &BodyContent::Storage(body),
+                    target_parent,
+                    false,
+                )
                 .await?;
             let new_id = created.get("id").and_then(Value::as_str).unwrap_or("");
             results.push(build_copy_record(
@@ -260,11 +352,28 @@ fn copy_tree_recursive<'a>(
     })
 }
 
-pub(super) fn maybe_convert_markdown(body: String, input_format: &InputFormat) -> String {
-    match input_format {
-        InputFormat::Markdown => markdown::markdown_to_storage(&body),
-        InputFormat::Storage => body,
-    }
+/// Normalise a user-supplied body into the [`BodyContent`] enum the
+/// Confluence client knows how to ship.
+///
+/// - [`InputFormat::Storage`] is a passthrough — the body reaches the API
+///   byte-for-byte as `body.storage.value`.
+/// - [`InputFormat::Markdown`] runs the body through
+///   [`markdown_to_storage`] and produces [`BodyContent::Storage`].
+/// - [`InputFormat::Adf`] parses the body as JSON and wraps it in
+///   [`BodyContent::Adf`]; invalid JSON surfaces as an error.
+pub(super) fn convert_input(
+    body: String,
+    input_format: &InputFormat,
+) -> anyhow::Result<BodyContent> {
+    Ok(match input_format {
+        InputFormat::Markdown => BodyContent::Storage(markdown_to_storage(&body)?),
+        InputFormat::Storage => BodyContent::Storage(body),
+        InputFormat::Adf => {
+            let parsed: Value =
+                serde_json::from_str(&body).with_context(|| "ADF input is not valid JSON")?;
+            BodyContent::Adf(parsed)
+        }
+    })
 }
 
 /// Windows reserved device names that cannot be used as filenames.
@@ -441,14 +550,23 @@ mod tests {
         );
     }
 
-    // ---- maybe_convert_markdown ----
+    // ---- convert_input ----
+
+    /// Helper that unwraps the storage variant for tests that expect storage
+    /// output. Panics with a clear message if the result was actually ADF.
+    fn assert_storage(content: BodyContent) -> String {
+        match content {
+            BodyContent::Storage(s) => s,
+            BodyContent::Adf(adf) => panic!("expected Storage, got Adf: {adf:?}"),
+        }
+    }
 
     #[test]
-    fn maybe_convert_markdown_storage_passthrough() {
+    fn convert_input_storage_passthrough() {
         // Storage-format input must be returned byte-for-byte so the user's
         // hand-written XHTML reaches Confluence as-is.
         let body = "<p>already storage</p>".to_string();
-        let result = maybe_convert_markdown(body.clone(), &InputFormat::Storage);
+        let result = assert_storage(convert_input(body.clone(), &InputFormat::Storage).unwrap());
         assert_eq!(
             result, body,
             "storage input must pass through unchanged, got: {result:?}"
@@ -456,10 +574,11 @@ mod tests {
     }
 
     #[test]
-    fn maybe_convert_markdown_markdown_converts_heading() {
+    fn convert_input_markdown_converts_heading() {
         // Markdown input must run through the converter — the cheapest signal
         // that conversion happened is the presence of the storage `<h1>` tag.
-        let result = maybe_convert_markdown("# Hi".to_string(), &InputFormat::Markdown);
+        let result =
+            assert_storage(convert_input("# Hi".to_string(), &InputFormat::Markdown).unwrap());
         assert!(
             result.contains("<h1>"),
             "expected <h1> after markdown conversion, got: {result:?}"
@@ -471,25 +590,66 @@ mod tests {
     }
 
     #[test]
-    fn maybe_convert_markdown_empty_body_is_safe() {
+    fn convert_input_empty_body_is_safe() {
         // Empty body is legal (e.g. user passes `--body ""` with `--input-format markdown`).
         // Must not panic on either path.
-        let storage = maybe_convert_markdown(String::new(), &InputFormat::Storage);
+        let storage = assert_storage(convert_input(String::new(), &InputFormat::Storage).unwrap());
         assert_eq!(storage, "", "empty storage body should pass through");
 
         // Markdown converter may emit nothing or trivial whitespace; just
         // require it doesn't panic.
-        let _ = maybe_convert_markdown(String::new(), &InputFormat::Markdown);
+        let _ = convert_input(String::new(), &InputFormat::Markdown).unwrap();
     }
 
-    // ---- extract_body_content ----
+    #[test]
+    fn convert_input_unclosed_directive_propagates_error() {
+        // An unclosed `:::` block must surface as an error rather than a
+        // silent best-effort conversion — the upstream API would reject the
+        // body anyway.
+        let result = convert_input(":::info\nbody".to_string(), &InputFormat::Markdown);
+        assert!(
+            result.is_err(),
+            "unclosed directive should bubble up as an error, got: {result:?}"
+        );
+    }
+
+    #[test]
+    fn convert_input_adf_valid_json_yields_adf_variant() {
+        // Valid ADF JSON must be parsed and wrapped in BodyContent::Adf so
+        // the client emits an `atlas_doc_format` payload.
+        let adf = r#"{"type":"doc","version":1,"content":[]}"#;
+        let result = convert_input(adf.to_string(), &InputFormat::Adf).unwrap();
+        match result {
+            BodyContent::Adf(v) => {
+                assert_eq!(v.get("type").and_then(Value::as_str), Some("doc"));
+                assert_eq!(v.get("version").and_then(Value::as_u64), Some(1));
+            }
+            BodyContent::Storage(_) => panic!("expected Adf variant, got Storage"),
+        }
+    }
+
+    #[test]
+    fn convert_input_adf_invalid_json_returns_error() {
+        // Invalid JSON must surface as an error so the user gets a clear
+        // signal that their `--input-format adf` payload was malformed.
+        let result = convert_input("not json".to_string(), &InputFormat::Adf);
+        assert!(
+            result.is_err(),
+            "invalid ADF JSON should bubble up as an error, got: {result:?}"
+        );
+    }
+
+    // ---- extract_body ----
 
     #[test]
     fn extract_body_storage_path() {
         let page = serde_json::json!({
             "body": {"storage": {"value": "<p>x</p>", "representation": "storage"}}
         });
-        assert_eq!(extract_body_content(&page, BodyFormat::Storage), "<p>x</p>");
+        assert_eq!(
+            extract_body(&page, BodyFormat::Storage, ExtractOpts::default()).unwrap(),
+            "<p>x</p>"
+        );
     }
 
     #[test]
@@ -498,7 +658,7 @@ mod tests {
             "body": {"view": {"value": "<p>rendered</p>", "representation": "view"}}
         });
         assert_eq!(
-            extract_body_content(&page, BodyFormat::View),
+            extract_body(&page, BodyFormat::View, ExtractOpts::default()).unwrap(),
             "<p>rendered</p>"
         );
     }
@@ -508,13 +668,98 @@ mod tests {
         let page = serde_json::json!({"body": {"view": {"value": "x"}}});
         // Asking for storage when only view exists must return "" rather than
         // panicking; the caller writes the empty string to disk.
-        assert_eq!(extract_body_content(&page, BodyFormat::Storage), "");
+        assert_eq!(
+            extract_body(&page, BodyFormat::Storage, ExtractOpts::default()).unwrap(),
+            ""
+        );
     }
 
     #[test]
     fn extract_body_missing_body_object_yields_empty_string() {
         let page = serde_json::json!({"id": "1"});
-        assert_eq!(extract_body_content(&page, BodyFormat::Storage), "");
+        assert_eq!(
+            extract_body(&page, BodyFormat::Storage, ExtractOpts::default()).unwrap(),
+            ""
+        );
+    }
+
+    // -- new format coverage --
+
+    #[test]
+    fn extract_body_markdown_converts_storage_xhtml() {
+        // When `body.storage.value` holds storage XHTML, markdown extraction
+        // runs it through the storage→markdown converter.
+        let page = serde_json::json!({
+            "body": {"storage": {"value": "<p>Hello</p>", "representation": "storage"}}
+        });
+        let md = extract_body(&page, BodyFormat::Markdown, ExtractOpts::default()).unwrap();
+        assert!(
+            md.contains("Hello"),
+            "markdown should contain the paragraph text, got: {md:?}"
+        );
+    }
+
+    #[test]
+    fn extract_body_markdown_falls_back_to_adf() {
+        // When `body.storage.value` is missing or empty, markdown extraction
+        // must fall back to ADF→md so users can request markdown against
+        // pages that only have an `atlas_doc_format` representation.
+        let adf = r#"{"type":"doc","version":1,"content":[{"type":"paragraph","content":[{"type":"text","text":"Howdy"}]}]}"#;
+        let page = serde_json::json!({
+            "body": {"atlas_doc_format": {"value": adf, "representation": "atlas_doc_format"}}
+        });
+        let md = extract_body(&page, BodyFormat::Markdown, ExtractOpts::default()).unwrap();
+        assert!(
+            md.contains("Howdy"),
+            "markdown should reflect the ADF text node, got: {md:?}"
+        );
+    }
+
+    #[test]
+    fn extract_body_adf_pretty_prints_json() {
+        // ADF body is delivered as a stringified JSON document — the
+        // extractor pretty-prints it so the user sees something readable.
+        let adf = r#"{"type":"doc","version":1,"content":[]}"#;
+        let page = serde_json::json!({
+            "body": {"atlas_doc_format": {"value": adf, "representation": "atlas_doc_format"}}
+        });
+        let out = extract_body(&page, BodyFormat::Adf, ExtractOpts::default()).unwrap();
+        // Pretty-printed JSON contains newlines and indentation; the raw
+        // single-line input does not.
+        assert!(
+            out.contains('\n'),
+            "ADF output should be pretty-printed (multi-line), got: {out:?}"
+        );
+        // Round-trip through serde to confirm it's still valid JSON with
+        // the same shape.
+        let parsed: Value = serde_json::from_str(&out).expect("pretty output must still parse");
+        assert_eq!(parsed.get("type").and_then(Value::as_str), Some("doc"));
+    }
+
+    #[test]
+    fn extract_body_no_directives_strips_directive_syntax() {
+        // With `render_directives: false`, info macros must collapse to
+        // their plain body text — no `:::info` fence in the output.
+        let storage = r#"<ac:structured-macro ac:name="info"><ac:rich-text-body><p>note</p></ac:rich-text-body></ac:structured-macro>"#;
+        let page = serde_json::json!({
+            "body": {"storage": {"value": storage, "representation": "storage"}}
+        });
+        let md = extract_body(
+            &page,
+            BodyFormat::Markdown,
+            ExtractOpts {
+                render_directives: false,
+            },
+        )
+        .unwrap();
+        assert!(
+            !md.contains(":::info"),
+            "no_directives must strip the :::info fence, got: {md:?}"
+        );
+        assert!(
+            md.contains("note"),
+            "body text of the info directive must be preserved, got: {md:?}"
+        );
     }
 
     // ---- build_export_summary ----

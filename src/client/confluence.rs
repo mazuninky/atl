@@ -1,9 +1,10 @@
 use camino::Utf8Path;
 use reqwest::header::HeaderValue;
-use serde_json::Value;
+use serde_json::{Value, json};
 use tracing::{debug, info, warn};
 
 use crate::auth::SecretStore;
+use crate::cli::commands::converters::body_content::BodyContent;
 use crate::config::AtlassianInstance;
 use crate::error::Error;
 
@@ -11,6 +12,27 @@ use super::{
     HttpClient, RetryConfig, build_base_url, build_http_client, detect_confluence_api_path,
     handle_error_status, handle_response, handle_response_maybe_empty,
 };
+
+/// Build the v2 `body` payload from a converted body value.
+///
+/// Storage XHTML lands in `body.storage.value`; ADF documents are sent as
+/// stringified JSON in `body.atlas_doc_format.value` (the v2 contract is
+/// that the value is a string, not a nested JSON object).
+fn body_payload(content: &BodyContent) -> Value {
+    match content {
+        BodyContent::Storage(xhtml) => json!({
+            "representation": "storage",
+            "value": xhtml,
+        }),
+        BodyContent::Adf(adf) => json!({
+            "representation": "atlas_doc_format",
+            // ADF must be sent as a stringified JSON. The fallback is
+            // unreachable for valid `Value`s but keeps `body_payload` total
+            // so callers don't have to handle a serialisation error here.
+            "value": serde_json::to_string(adf).unwrap_or_else(|_| "{}".to_string()),
+        }),
+    }
+}
 
 pub struct ConfluenceClient {
     http: HttpClient,
@@ -119,6 +141,7 @@ impl ConfluenceClient {
     ) -> Result<Value, Error> {
         let body_format = match format {
             "view" => "view",
+            "atlas_doc_format" | "adf" => "atlas_doc_format",
             _ => "storage",
         };
         let mut params: Vec<(&str, &str)> = vec![("body-format", body_format)];
@@ -213,7 +236,7 @@ impl ConfluenceClient {
         &self,
         space_key: &str,
         title: &str,
-        body: &str,
+        body: &BodyContent,
         parent_id: Option<&str>,
         private: bool,
     ) -> Result<Value, Error> {
@@ -224,10 +247,7 @@ impl ConfluenceClient {
             "spaceId": space_id,
             "title": title,
             "status": status,
-            "body": {
-                "representation": "storage",
-                "value": body
-            }
+            "body": body_payload(body),
         });
         if let Some(pid) = parent_id {
             payload["parentId"] = serde_json::json!(pid);
@@ -239,7 +259,7 @@ impl ConfluenceClient {
         &self,
         page_id: &str,
         title: &str,
-        body: &str,
+        body: &BodyContent,
         version: u64,
         version_message: Option<&str>,
     ) -> Result<Value, Error> {
@@ -260,10 +280,7 @@ impl ConfluenceClient {
             "id": page_id,
             "status": status,
             "title": title,
-            "body": {
-                "representation": "storage",
-                "value": body
-            },
+            "body": body_payload(body),
             "version": ver
         });
         self.put_v2(&format!("/pages/{page_id}"), &payload).await
@@ -563,6 +580,7 @@ impl ConfluenceClient {
     ) -> Result<Value, Error> {
         let body_format = match format {
             "view" => "view",
+            "atlas_doc_format" | "adf" => "atlas_doc_format",
             _ => "storage",
         };
         let mut params: Vec<(&str, &str)> = vec![("body-format", body_format)];
@@ -592,7 +610,7 @@ impl ConfluenceClient {
         &self,
         space_key: &str,
         title: &str,
-        body: &str,
+        body: &BodyContent,
         private: bool,
     ) -> Result<Value, Error> {
         self.assert_writable()?;
@@ -601,10 +619,7 @@ impl ConfluenceClient {
         let payload = serde_json::json!({
             "spaceId": space_id,
             "title": title,
-            "body": {
-                "representation": "storage",
-                "value": body
-            },
+            "body": body_payload(body),
             "status": status
         });
         self.post_v2("/blogposts", &payload).await
@@ -614,7 +629,7 @@ impl ConfluenceClient {
         &self,
         blog_id: &str,
         title: &str,
-        body: &str,
+        body: &BodyContent,
         version: u64,
         version_message: Option<&str>,
     ) -> Result<Value, Error> {
@@ -635,10 +650,7 @@ impl ConfluenceClient {
             "id": blog_id,
             "status": status,
             "title": title,
-            "body": {
-                "representation": "storage",
-                "value": body
-            },
+            "body": body_payload(body),
             "version": ver
         });
         let path = format!("/blogposts/{blog_id}");
@@ -1830,5 +1842,48 @@ impl ConfluenceClient {
 
     pub async fn delete_app_property_v2(&self, key: &str) -> Result<(), Error> {
         self.delete_v2(&format!("/app/properties/{key}")).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ---- body_payload ----
+
+    #[test]
+    fn body_payload_storage_uses_storage_representation() {
+        // Storage XHTML must travel as `body.value` with the `storage`
+        // representation tag — the historical Confluence wire format.
+        let payload = body_payload(&BodyContent::Storage("<p>hi</p>".into()));
+        assert_eq!(
+            payload,
+            json!({"representation": "storage", "value": "<p>hi</p>"}),
+            "storage payload must use representation=storage and a verbatim value"
+        );
+    }
+
+    #[test]
+    fn body_payload_adf_uses_atlas_doc_format_with_stringified_value() {
+        // ADF documents are sent as stringified JSON — the v2 contract is
+        // that `body.value` is a string, not a nested object.
+        let adf = json!({"type": "doc", "version": 1, "content": []});
+        let payload = body_payload(&BodyContent::Adf(adf.clone()));
+        assert_eq!(
+            payload.get("representation").and_then(Value::as_str),
+            Some("atlas_doc_format"),
+            "ADF payload must use representation=atlas_doc_format"
+        );
+        let value = payload
+            .get("value")
+            .and_then(Value::as_str)
+            .expect("value field must be a string");
+        // The string value must round-trip back to the original ADF JSON
+        // — the stringification must be lossless.
+        let parsed: Value = serde_json::from_str(value).expect("stringified ADF must parse");
+        assert_eq!(
+            parsed, adf,
+            "stringified ADF must be lossless when parsed back"
+        );
     }
 }

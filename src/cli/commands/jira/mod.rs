@@ -13,18 +13,195 @@ use serde_json::{Value, json};
 
 use crate::auth::SystemKeyring;
 use crate::cli::args::*;
-use crate::client::{JiraClient, RetryConfig};
-use crate::config::ConfigLoader;
+use crate::cli::commands::converters::adf_to_md::{ConvertOpts as AdfConvertOpts, adf_to_markdown};
+use crate::cli::commands::converters::body_content::JiraBodyContent;
+use crate::cli::commands::converters::wiki_to_md::{
+    ConvertOpts as WikiConvertOpts, wiki_to_markdown,
+};
+use crate::client::{JiraApiVersion, JiraClient, RetryConfig};
+use crate::config::{ConfigLoader, JiraFlavor};
 use crate::io::IoStreams;
 use crate::output::{OutputFormat, Transforms, write_output};
 
 use super::read_body_arg;
 
-fn maybe_convert_markdown(body: String, input_format: &JiraInputFormat) -> String {
-    match input_format {
-        JiraInputFormat::Markdown => super::markdown::markdown_to_wiki(&body),
-        JiraInputFormat::Wiki => body,
+/// Normalise a user-supplied body into the [`JiraBodyContent`] enum the
+/// Jira client understands.
+///
+/// - [`JiraInputFormat::Wiki`] is a passthrough — the body reaches the v2 API
+///   byte-for-byte as the `description` / comment `body` field.
+/// - [`JiraInputFormat::Markdown`] runs the body through
+///   [`super::converters::md_to_wiki::markdown_to_wiki`] and wraps the result
+///   in [`JiraBodyContent::Wiki`].
+/// - [`JiraInputFormat::Adf`] parses the body as JSON and wraps it in
+///   [`JiraBodyContent::Adf`]. Invalid JSON surfaces as an error. Cloud-flavor
+///   validation lives in [`assert_adf_supported`] at the call site so the
+///   message can mention the specific operation that failed.
+fn convert_input(body: String, fmt: &JiraInputFormat) -> anyhow::Result<JiraBodyContent> {
+    Ok(match fmt {
+        JiraInputFormat::Wiki => JiraBodyContent::Wiki(body),
+        JiraInputFormat::Markdown => {
+            let wiki = super::converters::md_to_wiki::markdown_to_wiki(&body)
+                .context("failed to convert markdown to Jira wiki")?;
+            JiraBodyContent::Wiki(wiki)
+        }
+        JiraInputFormat::Adf => {
+            let parsed: Value =
+                serde_json::from_str(&body).with_context(|| "ADF input is not valid JSON")?;
+            JiraBodyContent::Adf(parsed)
+        }
+    })
+}
+
+/// Map a [`JiraBodyContent`] variant to the API version the Jira client must
+/// call. ADF bodies require the v3 API; wiki bodies use v2.
+fn api_version_for(body: &JiraBodyContent) -> JiraApiVersion {
+    match body {
+        JiraBodyContent::Wiki(_) => JiraApiVersion::V2,
+        JiraBodyContent::Adf(_) => JiraApiVersion::V3,
     }
+}
+
+/// Render a [`JiraBodyContent`] as the JSON value that goes into the
+/// `description` (or any other body-shaped) field. v2 expects a string; v3
+/// expects the ADF object directly.
+fn body_field_value(body: JiraBodyContent) -> Value {
+    match body {
+        JiraBodyContent::Wiki(text) => Value::String(text),
+        JiraBodyContent::Adf(adf) => adf,
+    }
+}
+
+/// Reject ADF input on Data Center / Server with a typed `Error::Config` so
+/// the exit-code mapping returns 3 instead of the generic 1.
+///
+/// Cloud-only because the Jira v3 REST API — which carries the ADF body —
+/// is not available on self-hosted instances. Callers pass the deployment
+/// flavor (from [`JiraClient::flavor`]) and the resolved body content; the
+/// check is a no-op when the body is wiki text.
+fn assert_adf_supported(flavor: JiraFlavor, body: &JiraBodyContent) -> anyhow::Result<()> {
+    if matches!(body, JiraBodyContent::Adf(_)) && flavor != JiraFlavor::Cloud {
+        return Err(crate::error::Error::Config(
+            "ADF input is not supported on Data Center / Server (v3 API not available)".into(),
+        )
+        .into());
+    }
+    Ok(())
+}
+
+/// Map a read-side [`JiraBodyFormat`] to the [`JiraApiVersion`] the client
+/// must call to fetch a body in that format.
+///
+/// `Adf` requires v3 (Cloud only); `Wiki` and `Markdown` both fetch wiki text
+/// from v2 — `Markdown` then runs the result through `wiki_to_markdown` (or
+/// `adf_to_markdown` when the description field comes back as an ADF object,
+/// which can happen on Cloud regardless of API version).
+fn read_api_version_for(fmt: JiraBodyFormat) -> JiraApiVersion {
+    match fmt {
+        JiraBodyFormat::Adf => JiraApiVersion::V3,
+        JiraBodyFormat::Wiki | JiraBodyFormat::Markdown => JiraApiVersion::V2,
+    }
+}
+
+/// Reject `--body-format adf` on Data Center / Server with a typed
+/// `Error::Config`. Mirror of [`assert_adf_supported`] for read paths.
+fn assert_adf_read_supported(flavor: JiraFlavor, fmt: JiraBodyFormat) -> anyhow::Result<()> {
+    if fmt == JiraBodyFormat::Adf && flavor != JiraFlavor::Cloud {
+        return Err(crate::error::Error::Config(
+            "--body-format adf is not supported on Data Center / Server (v3 API not available)"
+                .into(),
+        )
+        .into());
+    }
+    Ok(())
+}
+
+/// Convert a Jira body field (`description` / comment `body`) to markdown if
+/// requested.
+///
+/// Auto-detects the body shape: a JSON string is treated as Jira wiki text
+/// and run through `wiki_to_markdown`; a JSON object with `"type": "doc"` is
+/// treated as an ADF document and run through `adf_to_markdown`. `null` is
+/// preserved. Anything else passes through unchanged so unexpected shapes
+/// don't get silently corrupted. The auto-detect makes the same handler work
+/// transparently across v2 (wiki strings) and v3 (ADF objects) Cloud
+/// responses.
+fn convert_body_field(value: &Value, render_directives: bool) -> anyhow::Result<Value> {
+    if let Some(text) = value.as_str() {
+        let opts = WikiConvertOpts { render_directives };
+        let md = wiki_to_markdown(text, opts)
+            .with_context(|| "failed to convert Jira wiki body to markdown")?;
+        Ok(Value::String(md))
+    } else if value.is_object() && value.get("type").and_then(Value::as_str) == Some("doc") {
+        let opts = AdfConvertOpts { render_directives };
+        let md = adf_to_markdown(value, opts)
+            .with_context(|| "failed to convert ADF body to markdown")?;
+        Ok(Value::String(md))
+    } else {
+        Ok(value.clone())
+    }
+}
+
+/// Walk an issue JSON and rewrite description + comment bodies into markdown
+/// when [`JiraBodyFormat::Markdown`] is requested. No-op for `Wiki` and
+/// `Adf` (raw passthrough).
+fn convert_issue_bodies(
+    issue: &mut Value,
+    fmt: JiraBodyFormat,
+    render_directives: bool,
+) -> anyhow::Result<()> {
+    if fmt != JiraBodyFormat::Markdown {
+        return Ok(());
+    }
+    if let Some(desc) = issue.pointer_mut("/fields/description") {
+        *desc = convert_body_field(desc, render_directives)?;
+    }
+    if let Some(comments) = issue.pointer_mut("/fields/comment/comments")
+        && let Some(arr) = comments.as_array_mut()
+    {
+        for c in arr.iter_mut() {
+            if let Some(body) = c.get_mut("body") {
+                *body = convert_body_field(body, render_directives)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Walk a comments-list response and rewrite each comment body into markdown
+/// when [`JiraBodyFormat::Markdown`] is requested. No-op for `Wiki` and `Adf`.
+fn convert_comments_bodies(
+    value: &mut Value,
+    fmt: JiraBodyFormat,
+    render_directives: bool,
+) -> anyhow::Result<()> {
+    if fmt != JiraBodyFormat::Markdown {
+        return Ok(());
+    }
+    if let Some(arr) = value.pointer_mut("/comments").and_then(Value::as_array_mut) {
+        for c in arr.iter_mut() {
+            if let Some(body) = c.get_mut("body") {
+                *body = convert_body_field(body, render_directives)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Walk a single-comment response and rewrite its `body` field into markdown
+/// when [`JiraBodyFormat::Markdown`] is requested. No-op for `Wiki` and `Adf`.
+fn convert_comment_body(
+    value: &mut Value,
+    fmt: JiraBodyFormat,
+    render_directives: bool,
+) -> anyhow::Result<()> {
+    if fmt != JiraBodyFormat::Markdown {
+        return Ok(());
+    }
+    if let Some(body) = value.get_mut("body") {
+        *body = convert_body_field(body, render_directives)?;
+    }
+    Ok(())
 }
 
 pub(super) fn today_date() -> String {
@@ -87,12 +264,13 @@ fn escape_jql(value: &str) -> String {
 
 /// Build the `fields` JSON object for an issue create request.
 ///
-/// `body` is the already-resolved (and possibly markdown-converted) description.
-/// HTTP I/O and stdin/file resolution happen at the caller; this helper is pure
-/// so it can be unit-tested.
+/// `description_value` is the already-resolved description payload — a JSON
+/// string when the user picked wiki/markdown input, a JSON object when they
+/// picked ADF input. HTTP I/O and stdin/file resolution happen at the caller;
+/// this helper is pure so it can be unit-tested.
 fn build_create_fields(
     args: &JiraCreateArgs,
-    description_body: Option<String>,
+    description_value: Option<Value>,
 ) -> anyhow::Result<Value> {
     let mut fields = json!({
         "project": { "key": &args.project },
@@ -100,8 +278,8 @@ fn build_create_fields(
         "summary": &args.summary,
     });
     if let Some(map) = fields.as_object_mut() {
-        if let Some(body) = description_body {
-            map.insert("description".into(), Value::String(body));
+        if let Some(body) = description_value {
+            map.insert("description".into(), body);
         }
         if let Some(assignee) = &args.assignee {
             map.insert("assignee".into(), json!({ "accountId": assignee }));
@@ -126,19 +304,20 @@ fn build_create_fields(
 
 /// Build the `fields` map for an issue update request.
 ///
-/// `description_body` is the already-resolved (and possibly markdown-converted)
-/// description; pass `None` to leave description unchanged. Returns an error if
-/// the resulting map is empty (the user passed `update` with no field flags).
+/// `description_value` is the already-resolved description payload (string
+/// for wiki/markdown input, JSON object for ADF input); pass `None` to leave
+/// description unchanged. Returns an error if the resulting map is empty
+/// (the user passed `update` with no field flags).
 fn build_update_fields(
     args: &JiraUpdateArgs,
-    description_body: Option<String>,
+    description_value: Option<Value>,
 ) -> anyhow::Result<serde_json::Map<String, Value>> {
     let mut fields = serde_json::Map::new();
     if let Some(summary) = &args.summary {
         fields.insert("summary".into(), Value::String(summary.clone()));
     }
-    if let Some(body) = description_body {
-        fields.insert("description".into(), Value::String(body));
+    if let Some(body) = description_value {
+        fields.insert("description".into(), body);
     }
     if let Some(assignee) = &args.assignee {
         fields.insert("assignee".into(), json!({ "accountId": assignee }));
@@ -572,7 +751,10 @@ async fn dispatch(
             }
         }
         JiraSubcommand::View(args) => {
-            let value = client.get_issue(&args.key, &[]).await?;
+            assert_adf_read_supported(client.flavor(), args.body_format)?;
+            let api_version = read_api_version_for(args.body_format);
+            let mut value = client.get_issue(&args.key, &[], api_version).await?;
+            convert_issue_bodies(&mut value, args.body_format, !args.no_directives)?;
             if matches!(format, OutputFormat::Console) {
                 flatten_issue(value)
             } else {
@@ -580,29 +762,41 @@ async fn dispatch(
             }
         }
         JiraSubcommand::Create(args) => {
-            let description_body = if let Some(desc) = &args.description {
-                Some(maybe_convert_markdown(
-                    read_body_arg(desc).context("failed to read --description body")?,
-                    &args.input_format,
-                ))
+            let description_value = if let Some(desc) = &args.description {
+                let raw = read_body_arg(desc).context("failed to read --description body")?;
+                let body = convert_input(raw, &args.input_format)?;
+                assert_adf_supported(client.flavor(), &body)?;
+                let version = api_version_for(&body);
+                Some((body_field_value(body), version))
             } else {
                 None
             };
-            let fields = build_create_fields(args, description_body)?;
-            client.create_issue(&json!({ "fields": fields })).await?
+            let api_version = description_value
+                .as_ref()
+                .map_or(JiraApiVersion::V2, |(_, v)| *v);
+            let description = description_value.map(|(v, _)| v);
+            let fields = build_create_fields(args, description)?;
+            client
+                .create_issue(&json!({ "fields": fields }), api_version)
+                .await?
         }
         JiraSubcommand::Update(args) => {
-            let description_body = if let Some(desc) = &args.description {
-                Some(maybe_convert_markdown(
-                    read_body_arg(desc).context("failed to read --description body")?,
-                    &args.input_format,
-                ))
+            let description_value = if let Some(desc) = &args.description {
+                let raw = read_body_arg(desc).context("failed to read --description body")?;
+                let body = convert_input(raw, &args.input_format)?;
+                assert_adf_supported(client.flavor(), &body)?;
+                let version = api_version_for(&body);
+                Some((body_field_value(body), version))
             } else {
                 None
             };
-            let fields = build_update_fields(args, description_body)?;
+            let api_version = description_value
+                .as_ref()
+                .map_or(JiraApiVersion::V2, |(_, v)| *v);
+            let description = description_value.map(|(v, _)| v);
+            let fields = build_update_fields(args, description)?;
             client
-                .update_issue(&args.key, &json!({ "fields": fields }))
+                .update_issue(&args.key, &json!({ "fields": fields }), api_version)
                 .await?;
             Value::String(format!("Issue {} updated", args.key))
         }
@@ -619,14 +813,27 @@ async fn dispatch(
             Value::String(format!("Issue {} assigned", args.key))
         }
         JiraSubcommand::Comment(args) => {
-            let body = maybe_convert_markdown(
-                read_body_arg(&args.body).context("failed to read comment body argument")?,
-                &args.input_format,
-            );
+            let raw = read_body_arg(&args.body).context("failed to read comment body argument")?;
+            let body = convert_input(raw, &args.input_format)?;
+            assert_adf_supported(client.flavor(), &body)?;
             client.add_comment(&args.key, &body).await?
         }
-        JiraSubcommand::Comments(args) => client.list_comments(&args.key).await?,
-        JiraSubcommand::CommentGet(args) => client.get_comment(&args.key, &args.comment_id).await?,
+        JiraSubcommand::Comments(args) => {
+            assert_adf_read_supported(client.flavor(), args.body_format)?;
+            let api_version = read_api_version_for(args.body_format);
+            let mut value = client.list_comments(&args.key, api_version).await?;
+            convert_comments_bodies(&mut value, args.body_format, !args.no_directives)?;
+            value
+        }
+        JiraSubcommand::CommentGet(args) => {
+            assert_adf_read_supported(client.flavor(), args.body_format)?;
+            let api_version = read_api_version_for(args.body_format);
+            let mut value = client
+                .get_comment(&args.key, &args.comment_id, api_version)
+                .await?;
+            convert_comment_body(&mut value, args.body_format, !args.no_directives)?;
+            value
+        }
         JiraSubcommand::CommentDelete(args) => {
             client.delete_comment(&args.key, &args.comment_id).await?;
             Value::String(format!(
@@ -672,10 +879,14 @@ async fn dispatch(
             ))
         }
         JiraSubcommand::Clone(args) => {
-            let source = client.get_issue(&args.key, &[]).await?;
+            // Clone preserves the source description shape — read and write
+            // through v2 since `get_issue(.., V2)` returns wiki-text
+            // descriptions and the v2 create endpoint accepts the same
+            // shape unchanged.
+            let source = client.get_issue(&args.key, &[], JiraApiVersion::V2).await?;
             let new_fields = build_clone_fields(&source, args.summary.as_deref())?;
             client
-                .create_issue(&json!({ "fields": new_fields }))
+                .create_issue(&json!({ "fields": new_fields }), JiraApiVersion::V2)
                 .await?
         }
         JiraSubcommand::Worklog(wl_cmd) => {
@@ -1148,16 +1359,25 @@ mod tests {
         );
     }
 
-    // ---- maybe_convert_markdown ----
+    // ---- convert_input ----
+
+    /// Helper: assert the converted body is the Wiki variant and return the
+    /// inner string. Panics with a clear message for ADF results.
+    fn assert_wiki(body: JiraBodyContent) -> String {
+        match body {
+            JiraBodyContent::Wiki(s) => s,
+            JiraBodyContent::Adf(adf) => panic!("expected Wiki, got Adf: {adf:?}"),
+        }
+    }
 
     #[test]
-    fn maybe_convert_markdown_wiki_passthrough() {
+    fn convert_input_wiki_passthrough() {
         // Wiki-format input must be returned byte-for-byte unchanged so the
         // user's hand-written wiki syntax (which contains characters like `*`
         // and `{` that the markdown converter would interpret) reaches Jira
         // as-is.
         let body = "h1. Hello\n\n*already bold*".to_string();
-        let result = maybe_convert_markdown(body.clone(), &JiraInputFormat::Wiki);
+        let result = assert_wiki(convert_input(body.clone(), &JiraInputFormat::Wiki).unwrap());
         assert_eq!(
             result, body,
             "Wiki input must pass through unchanged, got: {result:?}"
@@ -1165,10 +1385,11 @@ mod tests {
     }
 
     #[test]
-    fn maybe_convert_markdown_markdown_converts_heading() {
+    fn convert_input_markdown_converts_heading() {
         // Markdown input must run through the converter — the cheapest signal
         // that conversion happened is the presence of the wiki heading token.
-        let result = maybe_convert_markdown("# Hi".to_string(), &JiraInputFormat::Markdown);
+        let result =
+            assert_wiki(convert_input("# Hi".to_string(), &JiraInputFormat::Markdown).unwrap());
         assert!(
             result.contains("h1. Hi"),
             "expected wiki heading `h1. Hi` after markdown conversion, got: {result:?}"
@@ -1180,10 +1401,11 @@ mod tests {
     }
 
     #[test]
-    fn maybe_convert_markdown_markdown_converts_bold() {
+    fn convert_input_markdown_converts_bold() {
         // Locks in that bold conversion runs (`**x**` → `*x*`) when the input
         // format is Markdown. The wiki path would leave `**x**` literally.
-        let result = maybe_convert_markdown("**x**".to_string(), &JiraInputFormat::Markdown);
+        let result =
+            assert_wiki(convert_input("**x**".to_string(), &JiraInputFormat::Markdown).unwrap());
         assert!(
             result.contains("*x*") && !result.contains("**x**"),
             "expected `**x**` to convert to `*x*`, got: {result:?}"
@@ -1191,19 +1413,258 @@ mod tests {
     }
 
     #[test]
-    fn maybe_convert_markdown_empty_body_does_not_panic() {
+    fn convert_input_empty_body_does_not_panic() {
         // Edge case: empty body is legal (e.g. user passes `--description ""`).
         // Must not panic on either path.
-        let wiki = maybe_convert_markdown(String::new(), &JiraInputFormat::Wiki);
+        let wiki = assert_wiki(convert_input(String::new(), &JiraInputFormat::Wiki).unwrap());
         assert_eq!(wiki, "", "empty wiki body should pass through");
 
-        let md = maybe_convert_markdown(String::new(), &JiraInputFormat::Markdown);
+        let md = assert_wiki(convert_input(String::new(), &JiraInputFormat::Markdown).unwrap());
         // Markdown converter may emit a trailing newline for an empty doc;
         // accept either to keep the test resilient to converter trims.
         assert!(
             md.is_empty() || md == "\n",
             "empty markdown body should produce empty or single newline, got: {md:?}"
         );
+    }
+
+    #[test]
+    fn convert_input_adf_valid_json_yields_adf_variant() {
+        // Valid ADF JSON must be parsed and wrapped in JiraBodyContent::Adf so
+        // the caller knows to route through v3.
+        let adf = json!({"type": "doc", "version": 1, "content": []});
+        let result = convert_input(adf.to_string(), &JiraInputFormat::Adf).unwrap();
+        match result {
+            JiraBodyContent::Adf(v) => {
+                assert_eq!(v["type"], "doc");
+                assert_eq!(v["version"], 1);
+            }
+            JiraBodyContent::Wiki(_) => panic!("expected Adf variant, got Wiki"),
+        }
+    }
+
+    #[test]
+    fn convert_input_adf_invalid_json_returns_error() {
+        let err = convert_input("not json".to_string(), &JiraInputFormat::Adf).unwrap_err();
+        assert!(
+            err.to_string().contains("ADF input is not valid JSON"),
+            "expected ADF JSON parse error, got: {err}"
+        );
+    }
+
+    // ---- assert_adf_supported ----
+
+    #[test]
+    fn assert_adf_supported_wiki_on_data_center_ok() {
+        // Wiki input must work on every flavor — this guard only fires for
+        // the ADF variant.
+        let body = JiraBodyContent::Wiki("text".into());
+        assert!(assert_adf_supported(JiraFlavor::DataCenter, &body).is_ok());
+    }
+
+    #[test]
+    fn assert_adf_supported_adf_on_cloud_ok() {
+        let body = JiraBodyContent::Adf(json!({"type": "doc"}));
+        assert!(assert_adf_supported(JiraFlavor::Cloud, &body).is_ok());
+    }
+
+    #[test]
+    fn assert_adf_supported_adf_on_data_center_errors_with_config() {
+        let body = JiraBodyContent::Adf(json!({"type": "doc"}));
+        let err = assert_adf_supported(JiraFlavor::DataCenter, &body).unwrap_err();
+        // Must downcast to Error::Config so the exit code maps to 3.
+        let downcast = err.downcast_ref::<crate::error::Error>();
+        assert!(
+            matches!(downcast, Some(crate::error::Error::Config(_))),
+            "ADF on Data Center must return Error::Config, got: {downcast:?}"
+        );
+        assert!(
+            err.to_string().contains("ADF input is not supported"),
+            "error must mention ADF unsupported, got: {err}"
+        );
+    }
+
+    // ---- api_version_for / read_api_version_for ----
+
+    #[test]
+    fn api_version_for_wiki_is_v2() {
+        assert_eq!(
+            api_version_for(&JiraBodyContent::Wiki("x".into())),
+            JiraApiVersion::V2
+        );
+    }
+
+    #[test]
+    fn api_version_for_adf_is_v3() {
+        assert_eq!(
+            api_version_for(&JiraBodyContent::Adf(json!({"type": "doc"}))),
+            JiraApiVersion::V3
+        );
+    }
+
+    #[test]
+    fn read_api_version_wiki_and_markdown_use_v2() {
+        assert_eq!(
+            read_api_version_for(JiraBodyFormat::Wiki),
+            JiraApiVersion::V2
+        );
+        assert_eq!(
+            read_api_version_for(JiraBodyFormat::Markdown),
+            JiraApiVersion::V2
+        );
+    }
+
+    #[test]
+    fn read_api_version_adf_uses_v3() {
+        assert_eq!(
+            read_api_version_for(JiraBodyFormat::Adf),
+            JiraApiVersion::V3
+        );
+    }
+
+    // ---- body_field_value ----
+
+    #[test]
+    fn body_field_value_wiki_becomes_string() {
+        let v = body_field_value(JiraBodyContent::Wiki("hello".into()));
+        assert_eq!(v, json!("hello"));
+    }
+
+    #[test]
+    fn body_field_value_adf_passes_object_through() {
+        let adf = json!({"type": "doc", "version": 1});
+        let v = body_field_value(JiraBodyContent::Adf(adf.clone()));
+        assert_eq!(v, adf);
+    }
+
+    // ---- convert_body_field ----
+
+    #[test]
+    fn convert_body_field_wiki_string_becomes_markdown() {
+        let v = json!("h1. Hi");
+        let out = convert_body_field(&v, true).unwrap();
+        let s = out.as_str().expect("markdown should be a string");
+        assert!(
+            s.contains("# Hi"),
+            "wiki h1 must convert to md heading, got: {s:?}"
+        );
+    }
+
+    #[test]
+    fn convert_body_field_adf_doc_becomes_markdown() {
+        let adf = json!({
+            "type": "doc",
+            "version": 1,
+            "content": [
+                {"type": "paragraph", "content": [{"type": "text", "text": "hello"}]}
+            ]
+        });
+        let out = convert_body_field(&adf, true).unwrap();
+        let s = out.as_str().expect("markdown should be a string");
+        assert!(s.contains("hello"), "ADF doc must convert; got: {s:?}");
+    }
+
+    #[test]
+    fn convert_body_field_null_passes_through() {
+        let v = Value::Null;
+        let out = convert_body_field(&v, true).unwrap();
+        assert!(
+            out.is_null(),
+            "null body must remain null after conversion, got: {out:?}"
+        );
+    }
+
+    #[test]
+    fn convert_body_field_unknown_object_passes_through() {
+        // An object that is not an ADF doc (no `type: "doc"`) should pass
+        // through verbatim so we don't silently corrupt unexpected shapes.
+        let v = json!({"foo": "bar"});
+        let out = convert_body_field(&v, true).unwrap();
+        assert_eq!(out, v);
+    }
+
+    // ---- convert_issue_bodies ----
+
+    #[test]
+    fn convert_issue_bodies_wiki_format_is_noop() {
+        // Wiki / Adf both pass through untouched; only Markdown rewrites.
+        let mut issue = json!({
+            "fields": {
+                "description": "h1. Hi",
+                "comment": {"comments": [{"body": "h2. there"}]}
+            }
+        });
+        let before = issue.clone();
+        convert_issue_bodies(&mut issue, JiraBodyFormat::Wiki, true).unwrap();
+        assert_eq!(issue, before, "Wiki body_format must be a no-op");
+    }
+
+    #[test]
+    fn convert_issue_bodies_markdown_walks_description_and_comments() {
+        let mut issue = json!({
+            "fields": {
+                "description": "h1. Title",
+                "comment": {
+                    "comments": [
+                        {"id": "1", "body": "h2. Sub"},
+                        {"id": "2", "body": "plain"}
+                    ]
+                }
+            }
+        });
+        convert_issue_bodies(&mut issue, JiraBodyFormat::Markdown, true).unwrap();
+        let desc = issue
+            .pointer("/fields/description")
+            .and_then(Value::as_str)
+            .unwrap();
+        assert!(desc.contains("# Title"), "description must convert");
+        let c0 = issue
+            .pointer("/fields/comment/comments/0/body")
+            .and_then(Value::as_str)
+            .unwrap();
+        assert!(c0.contains("## Sub"), "first comment must convert");
+        let c1 = issue
+            .pointer("/fields/comment/comments/1/body")
+            .and_then(Value::as_str)
+            .unwrap();
+        assert!(c1.contains("plain"), "second comment must convert");
+    }
+
+    #[test]
+    fn convert_comments_bodies_markdown_walks_array() {
+        let mut value = json!({
+            "comments": [
+                {"id": "1", "body": "h1. one"},
+                {"id": "2", "body": "h1. two"}
+            ]
+        });
+        convert_comments_bodies(&mut value, JiraBodyFormat::Markdown, true).unwrap();
+        let b0 = value
+            .pointer("/comments/0/body")
+            .and_then(Value::as_str)
+            .unwrap();
+        let b1 = value
+            .pointer("/comments/1/body")
+            .and_then(Value::as_str)
+            .unwrap();
+        assert!(b0.contains("# one"), "first comment converts: {b0:?}");
+        assert!(b1.contains("# two"), "second comment converts: {b1:?}");
+    }
+
+    #[test]
+    fn convert_comment_body_markdown_rewrites_body() {
+        let mut value = json!({"id": "1", "body": "h1. solo"});
+        convert_comment_body(&mut value, JiraBodyFormat::Markdown, true).unwrap();
+        let s = value.get("body").and_then(Value::as_str).unwrap();
+        assert!(s.contains("# solo"), "body must convert, got: {s:?}");
+    }
+
+    #[test]
+    fn convert_comment_body_wiki_format_is_noop() {
+        let before = json!({"id": "1", "body": "h1. solo"});
+        let mut value = before.clone();
+        convert_comment_body(&mut value, JiraBodyFormat::Wiki, true).unwrap();
+        assert_eq!(value, before);
     }
 
     // ---- build_jql: filter flag coverage ----
@@ -1344,6 +1805,8 @@ mod tests {
         let cmd = JiraSubcommand::View(JiraViewArgs {
             key: "X-1".into(),
             web: false,
+            body_format: JiraBodyFormat::Wiki,
+            no_directives: false,
         });
         assert!(cmd_uses_pager(&cmd));
     }
@@ -1515,8 +1978,19 @@ mod tests {
         // The caller is responsible for resolving --description (literal/file/stdin)
         // and converting markdown if requested. The builder takes the result.
         let args = default_create_args();
-        let v = build_create_fields(&args, Some("the body".into())).unwrap();
+        let v = build_create_fields(&args, Some(json!("the body"))).unwrap();
         assert_eq!(v["description"], "the body");
+    }
+
+    #[test]
+    fn build_create_fields_with_adf_description_keeps_object_shape() {
+        // ADF input passes a JSON object through verbatim — the v3 API
+        // expects the description field to be an ADF doc object, not a
+        // string.
+        let args = default_create_args();
+        let adf = json!({"type": "doc", "version": 1, "content": []});
+        let v = build_create_fields(&args, Some(adf.clone())).unwrap();
+        assert_eq!(v["description"], adf);
     }
 
     #[test]
@@ -1585,8 +2059,18 @@ mod tests {
     #[test]
     fn build_update_fields_description_uses_passed_body() {
         let args = default_update_args();
-        let map = build_update_fields(&args, Some("body".into())).unwrap();
+        let map = build_update_fields(&args, Some(json!("body"))).unwrap();
         assert_eq!(map.get("description").and_then(Value::as_str), Some("body"));
+    }
+
+    #[test]
+    fn build_update_fields_with_adf_description_keeps_object_shape() {
+        // ADF on update mirrors create: the description field stays as the
+        // ADF doc object so the v3 endpoint accepts it.
+        let args = default_update_args();
+        let adf = json!({"type": "doc", "version": 1, "content": []});
+        let map = build_update_fields(&args, Some(adf.clone())).unwrap();
+        assert_eq!(map.get("description").unwrap(), &adf);
     }
 
     #[test]
@@ -1595,7 +2079,7 @@ mod tests {
         args.assignee = Some("a".into());
         args.priority = Some("Low".into());
         args.labels = Some("x,y".into());
-        let map = build_update_fields(&args, Some("body".into())).unwrap();
+        let map = build_update_fields(&args, Some(json!("body"))).unwrap();
         assert_eq!(map.get("assignee").unwrap(), &json!({"accountId": "a"}));
         assert_eq!(map.get("priority").unwrap(), &json!({"name": "Low"}));
         assert_eq!(map.get("labels").unwrap(), &json!(["x", "y"]));
@@ -1855,6 +2339,8 @@ domain = "example.atlassian.net"
         let cmd = JiraSubcommand::View(JiraViewArgs {
             key: "PROJ-1".into(),
             web: true,
+            body_format: JiraBodyFormat::Wiki,
+            no_directives: false,
         });
         run(
             &cmd,

@@ -1,0 +1,1787 @@
+//! Atlassian Document Format (ADF) JSON → markdown (with MyST-style directive
+//! extensions).
+//!
+//! ADF is the JSON tree format used by Confluence Cloud and Jira Cloud for
+//! rich text content. A document looks like
+//! `{"type": "doc", "version": 1, "content": [/* block nodes */]}`. Block
+//! nodes contain inline nodes; inline nodes carry an optional `marks` array
+//! for formatting (`strong`, `em`, `code`, `strike`, `link`, `underline`,
+//! `subsup`).
+//!
+//! # Conversion strategy
+//!
+//! 1. **Normalise the input.** Accept either a top-level `doc` node, a bare
+//!    content array, or a single block node, and reduce to a `&[Value]` slice.
+//! 2. **Recursive walker.** Each block dispatches on `"type"` and emits
+//!    markdown into a buffer. Inline nodes are rendered into a single-line
+//!    string and folded into the surrounding block.
+//! 3. **Marks.** Text nodes apply marks in a fixed outermost-to-innermost
+//!    order (`link → strong → em → strike → underline → code`) so that the
+//!    output is stable across runs.
+//!
+//! # Lossy mappings
+//!
+//! - **Panel `error`** — ADF supports `panelType: error` but markdown only
+//!   has `:::warning`, so error panels collapse to `:::warning`.
+//! - **Panel title** — ADF panels have no title attribute; the
+//!   `md_to_adf` converter prepends a strong-marked paragraph as a title.
+//!   On the way back we detect that exact shape (first child = paragraph
+//!   with a single strong-marked text node) and lift it into a
+//!   `title="..."` directive parameter. Anything else is treated as body.
+//! - **`underline` / `subsup`** — emitted as raw HTML (`<u>`, `<sub>`,
+//!   `<sup>`) since CommonMark has no native syntax.
+//! - **`inlineCard`** — synthetic `pageId:N` URLs (the marker
+//!   `md_to_adf` writes when the user supplied `:link{pageId=N}`) are
+//!   reversed into `:link[]{pageId=N}`. Anything else becomes
+//!   `:link[]{url=...}`.
+//! - **Unknown node types** are surfaced as `<!-- adf:unknown {…} -->`
+//!   comments so the caller can see what was dropped.
+
+use std::collections::BTreeMap;
+use std::fmt::Write as _;
+
+use serde_json::Value;
+use thiserror::Error;
+
+use crate::cli::commands::directives::render_attrs;
+
+// =====================================================================
+// Public API
+// =====================================================================
+
+/// Errors returned by [`adf_to_markdown`].
+#[derive(Debug, Error)]
+pub enum AdfToMdError {
+    /// The input was not a valid ADF document, content array, or block node.
+    #[error("malformed ADF: {0}")]
+    Malformed(String),
+}
+
+/// Conversion options for [`adf_to_markdown`].
+///
+/// `render_directives` controls whether ADF panels, expand wrappers and
+/// inline status / mention / emoji / inlineCard nodes become MyST-style
+/// directives (`true`, the default). When `false`, panel and expand wrappers
+/// are flattened to body content; status / emoji / mention / inlineCard
+/// inline nodes collapse to their display text only.
+#[derive(Debug, Clone, Copy)]
+pub struct ConvertOpts {
+    /// When `true` (the default), recognised nodes are converted to directive
+    /// syntax. When `false`, directives are stripped to their plain bodies.
+    pub render_directives: bool,
+}
+
+impl Default for ConvertOpts {
+    fn default() -> Self {
+        Self {
+            render_directives: true,
+        }
+    }
+}
+
+/// Convert an ADF JSON document to markdown with MyST-style directives.
+///
+/// Accepts either a top-level doc node (`{"type":"doc","version":1,"content":[...]}`)
+/// or a bare content array. Unknown node types fall through as paragraph
+/// passthroughs containing a JSON-comment placeholder so the caller can spot
+/// them.
+///
+/// Returns an error only when the input is not a recognisable ADF shape
+/// (e.g. raw `null`).
+///
+/// # Examples
+///
+/// ```ignore
+/// use atl::cli::commands::converters::adf_to_md::{adf_to_markdown, ConvertOpts};
+///
+/// let adf = serde_json::json!({
+///     "type": "doc",
+///     "version": 1,
+///     "content": [{
+///         "type": "paragraph",
+///         "content": [{"type": "text", "text": "hi"}],
+///     }],
+/// });
+/// let md = adf_to_markdown(&adf, ConvertOpts::default()).unwrap();
+/// assert_eq!(md.trim(), "hi");
+/// ```
+pub fn adf_to_markdown(adf: &Value, opts: ConvertOpts) -> Result<String, AdfToMdError> {
+    let content = normalise_input(adf)?;
+    let mut ctx = Ctx { opts };
+    let mut out = String::new();
+    render_blocks(&content, &mut out, &mut ctx);
+    Ok(normalize_blank_lines(&out))
+}
+
+// =====================================================================
+// Input normalisation
+// =====================================================================
+
+/// Reduce the various accepted input shapes to a single `Vec<&Value>` of
+/// block nodes.
+fn normalise_input(adf: &Value) -> Result<Vec<Value>, AdfToMdError> {
+    match adf {
+        Value::Null => Ok(Vec::new()),
+        Value::Array(arr) => Ok(arr.clone()),
+        Value::Object(map) => {
+            // Must have a "type" field for an object to be ADF.
+            let Some(t) = map.get("type").and_then(Value::as_str) else {
+                return Err(AdfToMdError::Malformed(
+                    "object without `type` field".to_string(),
+                ));
+            };
+            if t == "doc" {
+                let content = map
+                    .get("content")
+                    .and_then(Value::as_array)
+                    .cloned()
+                    .unwrap_or_default();
+                Ok(content)
+            } else {
+                // Single bare block node — wrap in a vec.
+                Ok(vec![adf.clone()])
+            }
+        }
+        _ => Err(AdfToMdError::Malformed(format!(
+            "expected object or array, got {adf}"
+        ))),
+    }
+}
+
+// =====================================================================
+// Walker state
+// =====================================================================
+
+#[derive(Debug, Clone, Copy)]
+struct Ctx {
+    opts: ConvertOpts,
+}
+
+// =====================================================================
+// Block rendering
+// =====================================================================
+
+fn render_blocks(content: &[Value], out: &mut String, ctx: &mut Ctx) {
+    for node in content {
+        render_block(node, out, ctx);
+    }
+}
+
+fn render_block(node: &Value, out: &mut String, ctx: &mut Ctx) {
+    let Some(ty) = node.get("type").and_then(Value::as_str) else {
+        return;
+    };
+    let content_opt = node.get("content").and_then(Value::as_array);
+    let content: &[Value] = content_opt.map(Vec::as_slice).unwrap_or(&[]);
+    match ty {
+        "paragraph" => {
+            let inline = render_inline_content(content, ctx);
+            push_block(out, &inline);
+        }
+        "heading" => {
+            let level = node
+                .get("attrs")
+                .and_then(|a| a.get("level"))
+                .and_then(Value::as_u64)
+                .unwrap_or(1)
+                .clamp(1, 6) as usize;
+            let inline = render_inline_content(content, ctx);
+            ensure_blank_line(out);
+            for _ in 0..level {
+                out.push('#');
+            }
+            out.push(' ');
+            out.push_str(inline.trim());
+            out.push_str("\n\n");
+        }
+        "bulletList" => {
+            ensure_blank_line(out);
+            render_list(content, false, 0, out, ctx);
+            out.push('\n');
+        }
+        "orderedList" => {
+            ensure_blank_line(out);
+            render_list(content, true, 0, out, ctx);
+            out.push('\n');
+        }
+        "codeBlock" => {
+            let language = node
+                .get("attrs")
+                .and_then(|a| a.get("language"))
+                .and_then(Value::as_str)
+                .unwrap_or("");
+            let body = collect_code_text(content);
+            ensure_blank_line(out);
+            out.push_str("```");
+            out.push_str(language);
+            out.push('\n');
+            out.push_str(&body);
+            if !body.ends_with('\n') {
+                out.push('\n');
+            }
+            out.push_str("```\n\n");
+        }
+        "blockquote" => {
+            let mut inner = String::new();
+            render_blocks(content, &mut inner, ctx);
+            ensure_blank_line(out);
+            for line in inner.trim_end_matches('\n').split('\n') {
+                out.push_str("> ");
+                out.push_str(line);
+                out.push('\n');
+            }
+            out.push('\n');
+        }
+        "rule" => {
+            ensure_blank_line(out);
+            out.push_str("---\n\n");
+        }
+        "table" => {
+            ensure_blank_line(out);
+            render_table(content, out, ctx);
+            out.push('\n');
+        }
+        "panel" => render_panel(node, content, out, ctx),
+        "expand" => render_expand(node, content, out, ctx),
+        "extension" => render_extension(node, out, ctx),
+        "mediaSingle" | "mediaGroup" => render_media_block(content, out),
+        // Inline-only nodes that occasionally show up at block level — drop or
+        // fold into a paragraph so we don't crash.
+        "hardBreak" => {
+            out.push_str("  \n");
+        }
+        _ => emit_unknown_block(node, out),
+    }
+}
+
+// =====================================================================
+// Lists
+// =====================================================================
+
+/// Render a list. `ordered` controls the marker (`- ` vs `1. `). `depth` is
+/// the nesting depth (0 = outermost).
+fn render_list(items: &[Value], ordered: bool, depth: usize, out: &mut String, ctx: &mut Ctx) {
+    let indent = "  ".repeat(depth);
+    let marker = if ordered { "1. " } else { "- " };
+    for item in items {
+        if item.get("type").and_then(Value::as_str) != Some("listItem") {
+            continue;
+        }
+        let kids = item.get("content").and_then(Value::as_array);
+        let Some(kids) = kids else {
+            out.push_str(&indent);
+            out.push_str(marker);
+            out.push('\n');
+            continue;
+        };
+
+        // First block: paragraph rendered inline; or fallback for non-paragraph.
+        let mut iter = kids.iter();
+        let first_inline = match iter.next() {
+            Some(first) if first.get("type").and_then(Value::as_str) == Some("paragraph") => {
+                let inner: &[Value] = first
+                    .get("content")
+                    .and_then(Value::as_array)
+                    .map(Vec::as_slice)
+                    .unwrap_or(&[]);
+                render_inline_content(inner, ctx)
+            }
+            Some(first) => {
+                // Non-paragraph first child — render as block into a buffer
+                // and fold it onto the marker line.
+                let mut buf = String::new();
+                render_block(first, &mut buf, ctx);
+                buf.trim().to_string()
+            }
+            None => String::new(),
+        };
+
+        out.push_str(&indent);
+        out.push_str(marker);
+        out.push_str(first_inline.trim_end());
+        out.push('\n');
+
+        // Subsequent blocks: nested lists at depth+1, others indented.
+        for child in iter {
+            let cty = child.get("type").and_then(Value::as_str).unwrap_or("");
+            if cty == "bulletList" || cty == "orderedList" {
+                let nested_items: &[Value] = child
+                    .get("content")
+                    .and_then(Value::as_array)
+                    .map(Vec::as_slice)
+                    .unwrap_or(&[]);
+                render_list(nested_items, cty == "orderedList", depth + 1, out, ctx);
+            } else if cty == "paragraph" {
+                let inner: &[Value] = child
+                    .get("content")
+                    .and_then(Value::as_array)
+                    .map(Vec::as_slice)
+                    .unwrap_or(&[]);
+                let inline = render_inline_content(inner, ctx);
+                if !inline.trim().is_empty() {
+                    out.push_str(&indent);
+                    out.push_str("  ");
+                    out.push_str(inline.trim());
+                    out.push('\n');
+                }
+            } else {
+                let mut buf = String::new();
+                render_block(child, &mut buf, ctx);
+                for line in buf.trim_end_matches('\n').split('\n') {
+                    if line.is_empty() {
+                        continue;
+                    }
+                    out.push_str(&indent);
+                    out.push_str("  ");
+                    out.push_str(line);
+                    out.push('\n');
+                }
+            }
+        }
+    }
+}
+
+// =====================================================================
+// Tables
+// =====================================================================
+
+fn render_table(rows: &[Value], out: &mut String, ctx: &mut Ctx) {
+    if rows.is_empty() {
+        return;
+    }
+    // Detect header row: any row whose cells contain at least one tableHeader.
+    let row_is_header = |row: &Value| -> bool {
+        row.get("content")
+            .and_then(Value::as_array)
+            .map(|cells| {
+                cells
+                    .iter()
+                    .any(|c| c.get("type").and_then(Value::as_str) == Some("tableHeader"))
+            })
+            .unwrap_or(false)
+    };
+
+    // Render each row's cells to inline strings.
+    let render_row = |row: &Value, ctx: &mut Ctx| -> Vec<String> {
+        let Some(cells) = row.get("content").and_then(Value::as_array) else {
+            return Vec::new();
+        };
+        cells
+            .iter()
+            .map(|c| {
+                // Each cell holds block content (typically a paragraph). Render
+                // each block into a string and join with `<br/>` for multi-line
+                // — but for v1 keep it simple: render the first paragraph's
+                // inline content, falling back to all-block render trimmed.
+                if let Some(kids) = c.get("content").and_then(Value::as_array) {
+                    let mut buf = String::new();
+                    for k in kids {
+                        if k.get("type").and_then(Value::as_str) == Some("paragraph") {
+                            let inner: &[Value] = k
+                                .get("content")
+                                .and_then(Value::as_array)
+                                .map(Vec::as_slice)
+                                .unwrap_or(&[]);
+                            let inline = render_inline_content(inner, ctx);
+                            if !buf.is_empty() {
+                                buf.push(' ');
+                            }
+                            buf.push_str(inline.trim());
+                        } else {
+                            let mut tmp = String::new();
+                            render_block(k, &mut tmp, ctx);
+                            let t = tmp.trim();
+                            if !t.is_empty() {
+                                if !buf.is_empty() {
+                                    buf.push(' ');
+                                }
+                                buf.push_str(t);
+                            }
+                        }
+                    }
+                    buf
+                } else {
+                    String::new()
+                }
+            })
+            .collect()
+    };
+
+    let mut rows_iter = rows.iter();
+    let first = rows_iter.next();
+    let (header_cells, body_rows): (Vec<String>, Vec<Vec<String>>) = match first {
+        Some(first_row) if row_is_header(first_row) => {
+            let header = render_row(first_row, ctx);
+            let body: Vec<Vec<String>> = rows_iter.map(|r| render_row(r, ctx)).collect();
+            (header, body)
+        }
+        Some(first_row) => {
+            // No header row — synthesise empty header from first row's column count.
+            let body: Vec<Vec<String>> = std::iter::once(first_row)
+                .chain(rows_iter)
+                .map(|r| render_row(r, ctx))
+                .collect();
+            let cols = body.first().map(Vec::len).unwrap_or(0);
+            (vec![String::new(); cols], body)
+        }
+        None => return,
+    };
+
+    let cols = header_cells
+        .len()
+        .max(body_rows.iter().map(Vec::len).max().unwrap_or(0));
+    if cols == 0 {
+        return;
+    }
+
+    let mut header = header_cells;
+    header.resize(cols, String::new());
+    out.push('|');
+    for cell in &header {
+        out.push(' ');
+        out.push_str(cell);
+        out.push_str(" |");
+    }
+    out.push('\n');
+    out.push('|');
+    for _ in 0..cols {
+        out.push_str(" --- |");
+    }
+    out.push('\n');
+
+    for mut row in body_rows {
+        row.resize(cols, String::new());
+        out.push('|');
+        for cell in &row {
+            out.push(' ');
+            out.push_str(cell);
+            out.push_str(" |");
+        }
+        out.push('\n');
+    }
+    out.push('\n');
+}
+
+// =====================================================================
+// Panels / expand / extensions
+// =====================================================================
+
+fn render_panel(node: &Value, body: &[Value], out: &mut String, ctx: &mut Ctx) {
+    let panel_type = node
+        .get("attrs")
+        .and_then(|a| a.get("panelType"))
+        .and_then(Value::as_str)
+        .unwrap_or("info");
+
+    // Map ADF panelType to our directive name. `error` falls back to
+    // `warning` because there's no `:::error` directive yet.
+    let directive_name = match panel_type {
+        "info" => "info",
+        "warning" | "error" => "warning",
+        "note" => "note",
+        "success" => "tip",
+        _ => "info",
+    };
+
+    if !ctx.opts.render_directives {
+        // Strip wrapper; render body as plain blocks.
+        render_blocks(body, out, ctx);
+        return;
+    }
+
+    // Detect title-paragraph: first child is a paragraph whose only inline
+    // child is a strong-marked text node.
+    let (title, real_body): (Option<String>, &[Value]) = match body.split_first() {
+        Some((first, rest)) if is_strong_only_paragraph(first) => {
+            let title = first
+                .get("content")
+                .and_then(Value::as_array)
+                .and_then(|arr| arr.first())
+                .and_then(|t| t.get("text"))
+                .and_then(Value::as_str)
+                .map(str::to_string);
+            (title, rest)
+        }
+        _ => (None, body),
+    };
+
+    let mut params: BTreeMap<String, String> = BTreeMap::new();
+    if let Some(t) = title
+        && !t.is_empty()
+    {
+        params.insert("title".to_string(), t);
+    }
+
+    // Render body into its own buffer first.
+    let mut body_buf = String::new();
+    render_blocks(real_body, &mut body_buf, ctx);
+    let body_md = body_buf.trim_end_matches('\n').to_string();
+
+    ensure_blank_line(out);
+    out.push_str(":::");
+    out.push_str(directive_name);
+    if !params.is_empty() {
+        out.push(' ');
+        out.push_str(&render_attrs(&params));
+    }
+    out.push('\n');
+    if !body_md.is_empty() {
+        out.push_str(&body_md);
+        out.push('\n');
+    }
+    out.push_str(":::\n\n");
+}
+
+/// Test whether a node is `paragraph` whose only inline child is a `text`
+/// node carrying a `strong` mark and nothing else.
+fn is_strong_only_paragraph(node: &Value) -> bool {
+    if node.get("type").and_then(Value::as_str) != Some("paragraph") {
+        return false;
+    }
+    let Some(content) = node.get("content").and_then(Value::as_array) else {
+        return false;
+    };
+    if content.len() != 1 {
+        return false;
+    }
+    let only = &content[0];
+    if only.get("type").and_then(Value::as_str) != Some("text") {
+        return false;
+    }
+    let Some(marks) = only.get("marks").and_then(Value::as_array) else {
+        return false;
+    };
+    if marks.len() != 1 {
+        return false;
+    }
+    marks[0].get("type").and_then(Value::as_str) == Some("strong")
+}
+
+fn render_expand(node: &Value, body: &[Value], out: &mut String, ctx: &mut Ctx) {
+    if !ctx.opts.render_directives {
+        render_blocks(body, out, ctx);
+        return;
+    }
+    let title = node
+        .get("attrs")
+        .and_then(|a| a.get("title"))
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let mut params: BTreeMap<String, String> = BTreeMap::new();
+    if !title.is_empty() {
+        params.insert("title".to_string(), title.to_string());
+    }
+
+    let mut body_buf = String::new();
+    render_blocks(body, &mut body_buf, ctx);
+    let body_md = body_buf.trim_end_matches('\n').to_string();
+
+    ensure_blank_line(out);
+    out.push_str(":::expand");
+    if !params.is_empty() {
+        out.push(' ');
+        out.push_str(&render_attrs(&params));
+    }
+    out.push('\n');
+    if !body_md.is_empty() {
+        out.push_str(&body_md);
+        out.push('\n');
+    }
+    out.push_str(":::\n\n");
+}
+
+fn render_extension(node: &Value, out: &mut String, ctx: &mut Ctx) {
+    let attrs = node.get("attrs");
+    let ext_key = attrs
+        .and_then(|a| a.get("extensionKey"))
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    let ext_type = attrs
+        .and_then(|a| a.get("extensionType"))
+        .and_then(Value::as_str)
+        .unwrap_or("");
+
+    if !ctx.opts.render_directives {
+        // Without directives, an extension is opaque — emit nothing.
+        return;
+    }
+
+    if ext_key == "toc" && ext_type == "com.atlassian.confluence.macro.core" {
+        let max_level = attrs
+            .and_then(|a| a.get("parameters"))
+            .and_then(|p| p.get("macroParams"))
+            .and_then(|m| m.get("maxLevel"))
+            .and_then(|m| m.get("value"))
+            .and_then(Value::as_str)
+            .map(str::to_string);
+        let mut params: BTreeMap<String, String> = BTreeMap::new();
+        if let Some(ml) = max_level {
+            params.insert("maxLevel".to_string(), ml);
+        }
+        ensure_blank_line(out);
+        out.push_str(":::toc");
+        if !params.is_empty() {
+            out.push(' ');
+            out.push_str(&render_attrs(&params));
+        }
+        out.push_str("\n:::\n\n");
+        return;
+    }
+
+    emit_unknown_block(node, out);
+}
+
+// =====================================================================
+// Media
+// =====================================================================
+
+fn render_media_block(content: &[Value], out: &mut String) {
+    for media in content {
+        let ty = media.get("type").and_then(Value::as_str).unwrap_or("");
+        if ty != "media" {
+            continue;
+        }
+        let attrs = media.get("attrs");
+        let url = attrs
+            .and_then(|a| a.get("url"))
+            .and_then(Value::as_str)
+            .map(str::to_string);
+        let alt = attrs
+            .and_then(|a| a.get("alt"))
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string();
+        let id = attrs
+            .and_then(|a| a.get("id"))
+            .and_then(Value::as_str)
+            .map(str::to_string);
+
+        ensure_blank_line(out);
+        match (url, id) {
+            (Some(u), _) => {
+                let _ = write!(out, "![{alt}]({u})");
+            }
+            (None, Some(i)) => {
+                let _ = write!(out, "![{alt}](attachment:{i})");
+            }
+            _ => {
+                out.push_str("![](");
+                out.push(')');
+            }
+        }
+        out.push_str("\n\n");
+    }
+}
+
+// =====================================================================
+// Inline rendering
+// =====================================================================
+
+fn render_inline_content(content: &[Value], ctx: &Ctx) -> String {
+    let mut buf = String::new();
+    for node in content {
+        render_inline_node(node, &mut buf, ctx);
+    }
+    buf
+}
+
+fn render_inline_node(node: &Value, out: &mut String, ctx: &Ctx) {
+    let Some(ty) = node.get("type").and_then(Value::as_str) else {
+        return;
+    };
+    match ty {
+        "text" => {
+            let text = node.get("text").and_then(Value::as_str).unwrap_or("");
+            let marks = node.get("marks").and_then(Value::as_array);
+            let rendered = apply_marks(text, marks);
+            out.push_str(&rendered);
+        }
+        "hardBreak" => out.push_str("  \n"),
+        "mention" => render_mention(node, out, ctx),
+        "emoji" => render_emoji(node, out, ctx),
+        "inlineCard" => render_inline_card(node, out, ctx),
+        "status" => render_status(node, out, ctx),
+        "media" => {
+            let url = node
+                .get("attrs")
+                .and_then(|a| a.get("url"))
+                .and_then(Value::as_str)
+                .unwrap_or("");
+            let alt = node
+                .get("attrs")
+                .and_then(|a| a.get("alt"))
+                .and_then(Value::as_str)
+                .unwrap_or("");
+            if !url.is_empty() {
+                let _ = write!(out, "![{alt}]({url})");
+            }
+        }
+        _ => {
+            // Unknown inline — surface as a comment so the user sees what was lost.
+            let raw = serde_json::to_string(node).unwrap_or_else(|_| "{}".to_string());
+            let _ = write!(out, "<!-- adf:unknown-inline {raw} -->");
+        }
+    }
+}
+
+/// Apply marks to a text run.
+///
+/// Mark order (outermost → innermost): `link → strong → em → strike →
+/// underline → code`. The text is escaped before any non-`code` mark is
+/// applied; if the marks include `code`, the inner text is taken verbatim.
+fn apply_marks(text: &str, marks: Option<&Vec<Value>>) -> String {
+    let marks = marks.cloned().unwrap_or_default();
+    let has = |kind: &str| {
+        marks
+            .iter()
+            .any(|m| m.get("type").and_then(Value::as_str) == Some(kind))
+    };
+    let find = |kind: &str| {
+        marks
+            .iter()
+            .find(|m| m.get("type").and_then(Value::as_str) == Some(kind))
+    };
+
+    let is_code = has("code");
+    let mut s = if is_code {
+        text.to_string()
+    } else {
+        escape_text(text)
+    };
+
+    if is_code {
+        s = format!("`{s}`");
+    }
+    // When em and strong are both present, use `_` for em so the combined
+    // form is `**_x_**` instead of the ambiguous `***x***`.
+    if has("em") {
+        if has("strong") {
+            s = format!("_{s}_");
+        } else {
+            s = format!("*{s}*");
+        }
+    }
+    if has("strong") {
+        s = format!("**{s}**");
+    }
+    if has("strike") {
+        s = format!("~~{s}~~");
+    }
+    if find("underline").is_some() {
+        s = format!("<u>{s}</u>");
+    }
+    if let Some(sub) = find("subsup") {
+        let kind = sub
+            .get("attrs")
+            .and_then(|a| a.get("type"))
+            .and_then(Value::as_str)
+            .unwrap_or("sub");
+        if kind == "sup" {
+            s = format!("<sup>{s}</sup>");
+        } else {
+            s = format!("<sub>{s}</sub>");
+        }
+    }
+    if let Some(link) = find("link") {
+        let href = link
+            .get("attrs")
+            .and_then(|a| a.get("href"))
+            .and_then(Value::as_str)
+            .unwrap_or("");
+        s = format!("[{s}]({href})");
+    }
+    s
+}
+
+fn render_mention(node: &Value, out: &mut String, ctx: &Ctx) {
+    let attrs = node.get("attrs");
+    let text = attrs
+        .and_then(|a| a.get("text"))
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string();
+    let id = attrs
+        .and_then(|a| a.get("id"))
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string();
+
+    if !ctx.opts.render_directives {
+        if !text.is_empty() {
+            out.push_str(&text);
+        } else if !id.is_empty() {
+            out.push('@');
+            out.push_str(&id);
+        }
+        return;
+    }
+
+    let display = if !text.is_empty() {
+        text.clone()
+    } else if !id.is_empty() {
+        format!("@{id}")
+    } else {
+        String::new()
+    };
+    let mut params: BTreeMap<String, String> = BTreeMap::new();
+    if !id.is_empty() {
+        params.insert("accountId".to_string(), id);
+    }
+    out.push_str(":mention[");
+    out.push_str(&display);
+    out.push(']');
+    if !params.is_empty() {
+        out.push('{');
+        out.push_str(&render_attrs(&params));
+        out.push('}');
+    }
+}
+
+fn render_emoji(node: &Value, out: &mut String, ctx: &Ctx) {
+    let attrs = node.get("attrs");
+    let short = attrs
+        .and_then(|a| a.get("shortName"))
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string();
+    let text = attrs
+        .and_then(|a| a.get("text"))
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string();
+
+    if !ctx.opts.render_directives {
+        if !text.is_empty() {
+            out.push_str(&text);
+        }
+        return;
+    }
+
+    // Strip leading/trailing `:` from the shortName.
+    let bare = short.trim_matches(':').to_string();
+    let mut params: BTreeMap<String, String> = BTreeMap::new();
+    if !bare.is_empty() {
+        params.insert("name".to_string(), bare);
+    }
+    out.push_str(":emoticon");
+    if !params.is_empty() {
+        out.push('{');
+        out.push_str(&render_attrs(&params));
+        out.push('}');
+    }
+}
+
+fn render_inline_card(node: &Value, out: &mut String, ctx: &Ctx) {
+    let url = node
+        .get("attrs")
+        .and_then(|a| a.get("url"))
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string();
+
+    if !ctx.opts.render_directives {
+        if !url.is_empty() {
+            out.push('<');
+            out.push_str(&url);
+            out.push('>');
+        }
+        return;
+    }
+
+    let mut params: BTreeMap<String, String> = BTreeMap::new();
+    // Reverse the `pageId:N` synthetic URL used by md_to_adf when the user
+    // supplied `:link{pageId=N}` — surface it as `pageId=N` again so the
+    // round-trip is lossless.
+    if let Some(rest) = url.strip_prefix("pageId:") {
+        params.insert("pageId".to_string(), rest.to_string());
+    } else if !url.is_empty() {
+        params.insert("url".to_string(), url);
+    }
+
+    out.push_str(":link[]");
+    if !params.is_empty() {
+        out.push('{');
+        out.push_str(&render_attrs(&params));
+        out.push('}');
+    }
+}
+
+fn render_status(node: &Value, out: &mut String, ctx: &Ctx) {
+    let attrs = node.get("attrs");
+    let text = attrs
+        .and_then(|a| a.get("text"))
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_string();
+    let raw_color = attrs
+        .and_then(|a| a.get("color"))
+        .and_then(Value::as_str)
+        .unwrap_or("neutral");
+
+    if !ctx.opts.render_directives {
+        if !text.is_empty() {
+            out.push_str(&text);
+        }
+        return;
+    }
+
+    // Map ADF colors back to the same set md_to_adf accepts. md_to_adf's
+    // forward map is the identity for {green, red, yellow, blue, purple} and
+    // collapses anything else to "neutral", so the inverse is the identity
+    // for the same set, with "neutral" passed through.
+    let color = match raw_color {
+        "green" | "red" | "yellow" | "blue" | "purple" | "neutral" => raw_color,
+        _ => "neutral",
+    };
+
+    let mut params: BTreeMap<String, String> = BTreeMap::new();
+    params.insert("color".to_string(), color.to_string());
+
+    out.push_str(":status[");
+    out.push_str(&text);
+    out.push(']');
+    out.push('{');
+    out.push_str(&render_attrs(&params));
+    out.push('}');
+}
+
+// =====================================================================
+// Text helpers
+// =====================================================================
+
+/// Escape markdown-special characters in plain text. We escape only those
+/// characters that would otherwise be re-interpreted by a markdown parser:
+///
+/// - `*`, `_`, `[`, `]`, `\` and `` ` `` are always escaped (inline emphasis,
+///   links, escapes, code).
+/// - `:` is escaped only when followed by an ASCII alphabetic character, to
+///   prevent re-triggering the inline-directive parser on round-trip
+///   (e.g. `:foo` would otherwise be tokenised as a directive open).
+fn escape_text(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let bytes = s.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        let b = bytes[i];
+        match b {
+            b'*' | b'_' | b'[' | b']' | b'\\' | b'`' => {
+                out.push('\\');
+                out.push(b as char);
+                i += 1;
+            }
+            b':' => {
+                let needs_escape = i + 1 < bytes.len() && bytes[i + 1].is_ascii_alphabetic();
+                if needs_escape {
+                    out.push('\\');
+                }
+                out.push(':');
+                i += 1;
+            }
+            _ => {
+                let ch_len = utf8_char_len(b);
+                let end = (i + ch_len).min(bytes.len());
+                if let Ok(s) = std::str::from_utf8(&bytes[i..end]) {
+                    out.push_str(s);
+                } else {
+                    out.push(b as char);
+                }
+                i = end;
+            }
+        }
+    }
+    out
+}
+
+fn utf8_char_len(b: u8) -> usize {
+    if b < 0xC0 {
+        1
+    } else if b < 0xE0 {
+        2
+    } else if b < 0xF0 {
+        3
+    } else {
+        4
+    }
+}
+
+/// Walk a code-block content array and concatenate the `text` field of each
+/// `text` node verbatim (no escaping — code blocks are literal).
+fn collect_code_text(content: &[Value]) -> String {
+    let mut buf = String::new();
+    for node in content {
+        if node.get("type").and_then(Value::as_str) == Some("text")
+            && let Some(s) = node.get("text").and_then(Value::as_str)
+        {
+            buf.push_str(s);
+        }
+    }
+    buf
+}
+
+/// Append `inline` as a paragraph block, ensuring it's preceded by a blank
+/// line and followed by `\n\n`. Empty / whitespace-only content is dropped.
+fn push_block(out: &mut String, inline: &str) {
+    let trimmed = inline.trim();
+    if trimmed.is_empty() {
+        return;
+    }
+    ensure_blank_line(out);
+    out.push_str(trimmed);
+    out.push_str("\n\n");
+}
+
+/// Make sure `out` ends with a blank line (or is empty / starts at column 0).
+fn ensure_blank_line(out: &mut String) {
+    if out.is_empty() {
+        return;
+    }
+    if !out.ends_with("\n\n") {
+        if out.ends_with('\n') {
+            out.push('\n');
+        } else {
+            out.push_str("\n\n");
+        }
+    }
+}
+
+/// Collapse 3+ consecutive newlines to 2 to keep output tidy.
+fn normalize_blank_lines(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut newline_run = 0_usize;
+    for c in s.chars() {
+        if c == '\n' {
+            newline_run += 1;
+            if newline_run <= 2 {
+                out.push('\n');
+            }
+        } else {
+            newline_run = 0;
+            out.push(c);
+        }
+    }
+    out
+}
+
+fn emit_unknown_block(node: &Value, out: &mut String) {
+    let raw = serde_json::to_string(node).unwrap_or_else(|_| "{}".to_string());
+    ensure_blank_line(out);
+    let _ = write!(out, "<!-- adf:unknown {raw} -->");
+    out.push_str("\n\n");
+}
+
+// =====================================================================
+// Tests
+// =====================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn convert(adf: &Value) -> String {
+        adf_to_markdown(adf, ConvertOpts::default()).expect("conversion succeeded")
+    }
+
+    fn convert_no_directives(adf: &Value) -> String {
+        adf_to_markdown(
+            adf,
+            ConvertOpts {
+                render_directives: false,
+            },
+        )
+        .expect("conversion succeeded")
+    }
+
+    fn doc(content: Value) -> Value {
+        json!({"type": "doc", "version": 1, "content": content})
+    }
+
+    // ---- ConvertOpts ----------------------------------------------------
+
+    #[test]
+    fn convert_opts_default_renders_directives() {
+        assert!(ConvertOpts::default().render_directives);
+    }
+
+    // ---- document wrapper -----------------------------------------------
+
+    #[test]
+    fn empty_doc_renders_to_empty_string() {
+        let adf = doc(json!([]));
+        let md = convert(&adf);
+        assert!(md.trim().is_empty(), "got: {md:?}");
+    }
+
+    #[test]
+    fn doc_with_one_paragraph() {
+        let adf = doc(json!([
+            {"type": "paragraph", "content": [{"type": "text", "text": "hi"}]}
+        ]));
+        let md = convert(&adf);
+        assert_eq!(md.trim(), "hi");
+    }
+
+    #[test]
+    fn bare_content_array_handled_like_doc() {
+        let adf = json!([
+            {"type": "paragraph", "content": [{"type": "text", "text": "hi"}]}
+        ]);
+        let md = convert(&adf);
+        assert_eq!(md.trim(), "hi");
+    }
+
+    #[test]
+    fn bare_block_node_handled() {
+        let adf = json!({
+            "type": "paragraph",
+            "content": [{"type": "text", "text": "lone"}]
+        });
+        let md = convert(&adf);
+        assert_eq!(md.trim(), "lone");
+    }
+
+    // ---- block nodes ----------------------------------------------------
+
+    #[test]
+    fn heading_levels_one_through_six() {
+        for level in 1u64..=6 {
+            let adf = doc(json!([
+                {
+                    "type": "heading",
+                    "attrs": {"level": level},
+                    "content": [{"type": "text", "text": "h"}]
+                }
+            ]));
+            let md = convert(&adf);
+            let prefix = "#".repeat(level as usize);
+            assert!(
+                md.contains(&format!("{prefix} h")),
+                "level {level} got: {md:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn heading_default_level_is_one() {
+        // Missing level falls back to 1.
+        let adf = doc(json!([
+            {"type": "heading", "content": [{"type": "text", "text": "x"}]}
+        ]));
+        let md = convert(&adf);
+        assert!(md.contains("# x"), "got: {md:?}");
+    }
+
+    #[test]
+    fn bullet_list_renders_dash() {
+        let adf = doc(json!([
+            {
+                "type": "bulletList",
+                "content": [
+                    {"type": "listItem", "content": [
+                        {"type": "paragraph", "content": [{"type": "text", "text": "a"}]}
+                    ]},
+                    {"type": "listItem", "content": [
+                        {"type": "paragraph", "content": [{"type": "text", "text": "b"}]}
+                    ]}
+                ]
+            }
+        ]));
+        let md = convert(&adf);
+        assert!(md.contains("- a"), "got: {md:?}");
+        assert!(md.contains("- b"), "got: {md:?}");
+    }
+
+    #[test]
+    fn ordered_list_uses_one_dot_prefix() {
+        let adf = doc(json!([
+            {
+                "type": "orderedList",
+                "content": [
+                    {"type": "listItem", "content": [
+                        {"type": "paragraph", "content": [{"type": "text", "text": "one"}]}
+                    ]},
+                    {"type": "listItem", "content": [
+                        {"type": "paragraph", "content": [{"type": "text", "text": "two"}]}
+                    ]}
+                ]
+            }
+        ]));
+        let md = convert(&adf);
+        assert!(md.contains("1. one"), "got: {md:?}");
+        assert!(md.contains("1. two"), "got: {md:?}");
+    }
+
+    #[test]
+    fn nested_list_indented() {
+        let adf = doc(json!([
+            {
+                "type": "bulletList",
+                "content": [
+                    {"type": "listItem", "content": [
+                        {"type": "paragraph", "content": [{"type": "text", "text": "outer"}]},
+                        {
+                            "type": "bulletList",
+                            "content": [
+                                {"type": "listItem", "content": [
+                                    {"type": "paragraph", "content": [{"type": "text", "text": "inner"}]}
+                                ]}
+                            ]
+                        }
+                    ]}
+                ]
+            }
+        ]));
+        let md = convert(&adf);
+        assert!(md.contains("- outer"), "got: {md:?}");
+        assert!(md.contains("  - inner"), "got: {md:?}");
+    }
+
+    #[test]
+    fn code_block_with_language() {
+        let adf = doc(json!([
+            {
+                "type": "codeBlock",
+                "attrs": {"language": "rust"},
+                "content": [{"type": "text", "text": "fn x(){}"}]
+            }
+        ]));
+        let md = convert(&adf);
+        assert!(md.contains("```rust"), "got: {md:?}");
+        assert!(md.contains("fn x(){}"), "got: {md:?}");
+        assert!(md.contains("```\n"), "got: {md:?}");
+    }
+
+    #[test]
+    fn code_block_without_language() {
+        let adf = doc(json!([
+            {
+                "type": "codeBlock",
+                "content": [{"type": "text", "text": "plain"}]
+            }
+        ]));
+        let md = convert(&adf);
+        assert!(md.contains("```\nplain"), "got: {md:?}");
+    }
+
+    #[test]
+    fn blockquote_renders_prefix() {
+        let adf = doc(json!([
+            {
+                "type": "blockquote",
+                "content": [
+                    {"type": "paragraph", "content": [{"type": "text", "text": "hi"}]}
+                ]
+            }
+        ]));
+        let md = convert(&adf);
+        assert!(md.contains("> hi"), "got: {md:?}");
+    }
+
+    #[test]
+    fn rule_renders_three_dashes() {
+        let adf = doc(json!([{"type": "rule"}]));
+        let md = convert(&adf);
+        assert!(md.contains("---"), "got: {md:?}");
+    }
+
+    #[test]
+    fn simple_table_with_header() {
+        let adf = doc(json!([
+            {
+                "type": "table",
+                "content": [
+                    {
+                        "type": "tableRow",
+                        "content": [
+                            {"type": "tableHeader", "content": [
+                                {"type": "paragraph", "content": [{"type": "text", "text": "A"}]}
+                            ]},
+                            {"type": "tableHeader", "content": [
+                                {"type": "paragraph", "content": [{"type": "text", "text": "B"}]}
+                            ]}
+                        ]
+                    },
+                    {
+                        "type": "tableRow",
+                        "content": [
+                            {"type": "tableCell", "content": [
+                                {"type": "paragraph", "content": [{"type": "text", "text": "1"}]}
+                            ]},
+                            {"type": "tableCell", "content": [
+                                {"type": "paragraph", "content": [{"type": "text", "text": "2"}]}
+                            ]}
+                        ]
+                    }
+                ]
+            }
+        ]));
+        let md = convert(&adf);
+        assert!(md.contains("| A | B |"), "got: {md:?}");
+        assert!(md.contains("| --- | --- |"), "got: {md:?}");
+        assert!(md.contains("| 1 | 2 |"), "got: {md:?}");
+    }
+
+    #[test]
+    fn media_single_external_url() {
+        let adf = doc(json!([
+            {
+                "type": "mediaSingle",
+                "content": [
+                    {
+                        "type": "media",
+                        "attrs": {"type": "external", "url": "http://x.png"}
+                    }
+                ]
+            }
+        ]));
+        let md = convert(&adf);
+        assert!(md.contains("![](http://x.png)"), "got: {md:?}");
+    }
+
+    // ---- inline marks ---------------------------------------------------
+
+    fn one_para(inline: Value) -> Value {
+        doc(json!([
+            {"type": "paragraph", "content": inline}
+        ]))
+    }
+
+    #[test]
+    fn plain_text() {
+        let adf = one_para(json!([{"type": "text", "text": "hello"}]));
+        let md = convert(&adf);
+        assert_eq!(md.trim(), "hello");
+    }
+
+    #[test]
+    fn strong_mark_emits_double_asterisk() {
+        let adf = one_para(json!([
+            {"type": "text", "text": "x", "marks": [{"type": "strong"}]}
+        ]));
+        let md = convert(&adf);
+        assert_eq!(md.trim(), "**x**");
+    }
+
+    #[test]
+    fn em_mark_emits_asterisk() {
+        let adf = one_para(json!([
+            {"type": "text", "text": "x", "marks": [{"type": "em"}]}
+        ]));
+        let md = convert(&adf);
+        assert_eq!(md.trim(), "*x*");
+    }
+
+    #[test]
+    fn code_mark_does_not_escape_inner_text() {
+        let adf = one_para(json!([
+            {"type": "text", "text": "a*b", "marks": [{"type": "code"}]}
+        ]));
+        let md = convert(&adf);
+        // Inside code, the `*` must NOT be escaped.
+        assert_eq!(md.trim(), "`a*b`");
+    }
+
+    #[test]
+    fn strike_mark_emits_double_tilde() {
+        let adf = one_para(json!([
+            {"type": "text", "text": "x", "marks": [{"type": "strike"}]}
+        ]));
+        let md = convert(&adf);
+        assert_eq!(md.trim(), "~~x~~");
+    }
+
+    #[test]
+    fn link_mark_emits_markdown_link() {
+        let adf = one_para(json!([
+            {
+                "type": "text",
+                "text": "x",
+                "marks": [{"type": "link", "attrs": {"href": "http://x"}}]
+            }
+        ]));
+        let md = convert(&adf);
+        assert_eq!(md.trim(), "[x](http://x)");
+    }
+
+    #[test]
+    fn combined_strong_and_em() {
+        let adf = one_para(json!([
+            {
+                "type": "text",
+                "text": "x",
+                "marks": [{"type": "strong"}, {"type": "em"}]
+            }
+        ]));
+        let md = convert(&adf);
+        // Strong outer, em inner: **_x_**
+        assert_eq!(md.trim(), "**_x_**");
+    }
+
+    #[test]
+    fn hard_break_emits_two_spaces_newline() {
+        let adf = one_para(json!([
+            {"type": "text", "text": "a"},
+            {"type": "hardBreak"},
+            {"type": "text", "text": "b"}
+        ]));
+        let md = convert(&adf);
+        assert!(md.contains("a  \nb"), "got: {md:?}");
+    }
+
+    #[test]
+    fn underline_emits_html_tag() {
+        let adf = one_para(json!([
+            {"type": "text", "text": "x", "marks": [{"type": "underline"}]}
+        ]));
+        let md = convert(&adf);
+        assert_eq!(md.trim(), "<u>x</u>");
+    }
+
+    // ---- block directives ----------------------------------------------
+
+    #[test]
+    fn panel_info() {
+        let adf = doc(json!([
+            {
+                "type": "panel",
+                "attrs": {"panelType": "info"},
+                "content": [
+                    {"type": "paragraph", "content": [{"type": "text", "text": "body"}]}
+                ]
+            }
+        ]));
+        let md = convert(&adf);
+        assert!(md.contains(":::info"), "got: {md:?}");
+        assert!(md.contains("body"), "got: {md:?}");
+        assert!(md.contains(":::\n"), "got: {md:?}");
+    }
+
+    #[test]
+    fn panel_with_strong_first_paragraph_as_title() {
+        let adf = doc(json!([
+            {
+                "type": "panel",
+                "attrs": {"panelType": "info"},
+                "content": [
+                    {
+                        "type": "paragraph",
+                        "content": [
+                            {"type": "text", "text": "Heads up", "marks": [{"type": "strong"}]}
+                        ]
+                    },
+                    {"type": "paragraph", "content": [{"type": "text", "text": "body"}]}
+                ]
+            }
+        ]));
+        let md = convert(&adf);
+        assert!(md.contains(":::info"), "got: {md:?}");
+        assert!(md.contains(r#"title="Heads up""#), "got: {md:?}");
+        assert!(md.contains("body"), "got: {md:?}");
+        // The title paragraph itself must NOT appear in the body as **Heads up**.
+        assert!(!md.contains("**Heads up**"), "got: {md:?}");
+    }
+
+    #[test]
+    fn panel_warning() {
+        let adf = doc(json!([
+            {
+                "type": "panel",
+                "attrs": {"panelType": "warning"},
+                "content": [
+                    {"type": "paragraph", "content": [{"type": "text", "text": "w"}]}
+                ]
+            }
+        ]));
+        let md = convert(&adf);
+        assert!(md.contains(":::warning"), "got: {md:?}");
+    }
+
+    #[test]
+    fn panel_note() {
+        let adf = doc(json!([
+            {
+                "type": "panel",
+                "attrs": {"panelType": "note"},
+                "content": [
+                    {"type": "paragraph", "content": [{"type": "text", "text": "n"}]}
+                ]
+            }
+        ]));
+        let md = convert(&adf);
+        assert!(md.contains(":::note"), "got: {md:?}");
+    }
+
+    #[test]
+    fn panel_success_maps_to_tip() {
+        // ADF "success" is the inverse of `:::tip` in md_to_adf.
+        let adf = doc(json!([
+            {
+                "type": "panel",
+                "attrs": {"panelType": "success"},
+                "content": [
+                    {"type": "paragraph", "content": [{"type": "text", "text": "yes"}]}
+                ]
+            }
+        ]));
+        let md = convert(&adf);
+        assert!(md.contains(":::tip"), "got: {md:?}");
+    }
+
+    #[test]
+    fn panel_error_falls_back_to_warning() {
+        // No `:::error` directive yet; collapse to `:::warning`.
+        let adf = doc(json!([
+            {
+                "type": "panel",
+                "attrs": {"panelType": "error"},
+                "content": [
+                    {"type": "paragraph", "content": [{"type": "text", "text": "boom"}]}
+                ]
+            }
+        ]));
+        let md = convert(&adf);
+        assert!(md.contains(":::warning"), "got: {md:?}");
+        assert!(md.contains("boom"), "got: {md:?}");
+    }
+
+    #[test]
+    fn expand_with_title() {
+        let adf = doc(json!([
+            {
+                "type": "expand",
+                "attrs": {"title": "Detail"},
+                "content": [
+                    {"type": "paragraph", "content": [{"type": "text", "text": "hi"}]}
+                ]
+            }
+        ]));
+        let md = convert(&adf);
+        assert!(md.contains(":::expand"), "got: {md:?}");
+        assert!(md.contains(r#"title=Detail"#), "got: {md:?}");
+        assert!(md.contains("hi"), "got: {md:?}");
+    }
+
+    #[test]
+    fn expand_without_title_omits_param() {
+        let adf = doc(json!([
+            {
+                "type": "expand",
+                "attrs": {"title": ""},
+                "content": [
+                    {"type": "paragraph", "content": [{"type": "text", "text": "hi"}]}
+                ]
+            }
+        ]));
+        let md = convert(&adf);
+        assert!(md.contains(":::expand\n"), "got: {md:?}");
+        assert!(!md.contains("title="), "got: {md:?}");
+    }
+
+    #[test]
+    fn extension_toc_emits_directive() {
+        let adf = doc(json!([
+            {
+                "type": "extension",
+                "attrs": {
+                    "extensionType": "com.atlassian.confluence.macro.core",
+                    "extensionKey": "toc",
+                    "parameters": {
+                        "macroParams": {
+                            "maxLevel": {"value": "3"}
+                        }
+                    }
+                }
+            }
+        ]));
+        let md = convert(&adf);
+        assert!(md.contains(":::toc"), "got: {md:?}");
+        assert!(md.contains("maxLevel=3"), "got: {md:?}");
+    }
+
+    #[test]
+    fn unknown_extension_passthrough_as_comment() {
+        let adf = doc(json!([
+            {
+                "type": "extension",
+                "attrs": {
+                    "extensionType": "some.other",
+                    "extensionKey": "frobinator"
+                }
+            }
+        ]));
+        let md = convert(&adf);
+        assert!(md.contains("<!-- adf:unknown"), "got: {md:?}");
+    }
+
+    // ---- inline directives ---------------------------------------------
+
+    #[test]
+    fn inline_status_directive() {
+        let adf = one_para(json!([
+            {"type": "status", "attrs": {"text": "DONE", "color": "green"}}
+        ]));
+        let md = convert(&adf);
+        assert!(md.contains(":status[DONE]"), "got: {md:?}");
+        assert!(md.contains("color=green"), "got: {md:?}");
+    }
+
+    #[test]
+    fn inline_emoji_directive() {
+        let adf = one_para(json!([
+            {"type": "emoji", "attrs": {"shortName": ":warning:"}}
+        ]));
+        let md = convert(&adf);
+        assert!(md.contains(":emoticon"), "got: {md:?}");
+        assert!(md.contains("name=warning"), "got: {md:?}");
+    }
+
+    #[test]
+    fn inline_mention_directive() {
+        let adf = one_para(json!([
+            {"type": "mention", "attrs": {"id": "abc", "text": "@john"}}
+        ]));
+        let md = convert(&adf);
+        assert!(md.contains(":mention[@john]"), "got: {md:?}");
+        assert!(md.contains("accountId=abc"), "got: {md:?}");
+    }
+
+    #[test]
+    fn inline_card_with_page_id_url_unwraps_to_page_id_param() {
+        let adf = one_para(json!([
+            {"type": "inlineCard", "attrs": {"url": "pageId:12345"}}
+        ]));
+        let md = convert(&adf);
+        assert!(md.contains(":link[]"), "got: {md:?}");
+        assert!(md.contains("pageId=12345"), "got: {md:?}");
+        assert!(!md.contains("url="), "got: {md:?}");
+    }
+
+    #[test]
+    fn inline_card_with_regular_url_uses_url_param() {
+        let adf = one_para(json!([
+            {"type": "inlineCard", "attrs": {"url": "https://example.com"}}
+        ]));
+        let md = convert(&adf);
+        assert!(md.contains(":link[]"), "got: {md:?}");
+        assert!(md.contains("url="), "got: {md:?}");
+        assert!(md.contains("https://example.com"), "got: {md:?}");
+    }
+
+    // ---- render_directives = false -------------------------------------
+
+    #[test]
+    fn no_directives_strips_panel_wrapper() {
+        let adf = doc(json!([
+            {
+                "type": "panel",
+                "attrs": {"panelType": "info"},
+                "content": [
+                    {"type": "paragraph", "content": [{"type": "text", "text": "body"}]}
+                ]
+            }
+        ]));
+        let md = convert_no_directives(&adf);
+        assert!(md.contains("body"), "got: {md:?}");
+        assert!(!md.contains(":::info"), "got: {md:?}");
+    }
+
+    #[test]
+    fn no_directives_strips_status_to_text() {
+        let adf = one_para(json!([
+            {"type": "text", "text": "before "},
+            {"type": "status", "attrs": {"text": "DONE", "color": "green"}},
+            {"type": "text", "text": " after"}
+        ]));
+        let md = convert_no_directives(&adf);
+        assert!(md.contains("DONE"), "got: {md:?}");
+        assert!(!md.contains(":status"), "got: {md:?}");
+    }
+
+    #[test]
+    fn no_directives_strips_mention_to_display_text() {
+        let adf = one_para(json!([
+            {"type": "mention", "attrs": {"id": "abc", "text": "@john"}}
+        ]));
+        let md = convert_no_directives(&adf);
+        assert!(md.contains("@john"), "got: {md:?}");
+        assert!(!md.contains(":mention"), "got: {md:?}");
+    }
+
+    // ---- edge cases ----------------------------------------------------
+
+    #[test]
+    fn null_input_renders_empty() {
+        let md = adf_to_markdown(&Value::Null, ConvertOpts::default()).unwrap();
+        assert!(md.is_empty());
+    }
+
+    #[test]
+    fn malformed_object_without_type_returns_err() {
+        let bad = json!({"version": 1, "content": []});
+        let err = adf_to_markdown(&bad, ConvertOpts::default()).unwrap_err();
+        match err {
+            AdfToMdError::Malformed(_) => {}
+        }
+    }
+
+    #[test]
+    fn paragraph_missing_content_renders_as_empty() {
+        let adf = doc(json!([
+            {"type": "paragraph"}
+        ]));
+        let md = convert(&adf);
+        assert!(md.trim().is_empty(), "got: {md:?}");
+    }
+
+    #[test]
+    fn unknown_block_type_passes_through_as_comment() {
+        let adf = doc(json!([
+            {"type": "thingamajig", "attrs": {"x": 1}}
+        ]));
+        let md = convert(&adf);
+        assert!(md.contains("<!-- adf:unknown"), "got: {md:?}");
+        assert!(md.contains("thingamajig"), "got: {md:?}");
+    }
+
+    #[test]
+    fn plain_text_special_characters_escaped() {
+        let adf = one_para(json!([
+            {"type": "text", "text": "a*b_c [d] :foo"}
+        ]));
+        let md = convert(&adf);
+        // Markdown specials must be escaped.
+        assert!(md.contains(r"a\*b\_c"), "got: {md:?}");
+        assert!(md.contains(r"\[d\]"), "got: {md:?}");
+        // `:foo` must be escaped to prevent re-triggering the inline directive parser.
+        assert!(md.contains(r"\:foo"), "got: {md:?}");
+    }
+
+    #[test]
+    fn invalid_input_type_returns_err() {
+        // A bare string is not a recognisable ADF shape.
+        let bad = json!("just a string");
+        let err = adf_to_markdown(&bad, ConvertOpts::default()).unwrap_err();
+        match err {
+            AdfToMdError::Malformed(_) => {}
+        }
+    }
+
+    // ---- round-trip soundness ------------------------------------------
+
+    #[test]
+    fn roundtrip_heading_via_md_to_adf() {
+        use crate::cli::commands::converters::md_to_adf::markdown_to_adf;
+        let adf = markdown_to_adf("# Hello").unwrap();
+        let md = adf_to_markdown(&adf, ConvertOpts::default()).unwrap();
+        assert!(md.starts_with("# Hello"), "got: {md:?}");
+    }
+
+    #[test]
+    fn roundtrip_info_panel_via_md_to_adf() {
+        use crate::cli::commands::converters::md_to_adf::markdown_to_adf;
+        let adf = markdown_to_adf(":::info\nbody\n:::").unwrap();
+        let md = adf_to_markdown(&adf, ConvertOpts::default()).unwrap();
+        assert!(md.contains(":::info"), "got: {md:?}");
+        assert!(md.contains("body"), "got: {md:?}");
+    }
+}

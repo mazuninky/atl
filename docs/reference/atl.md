@@ -8,7 +8,7 @@ Unified CLI for Atlassian Confluence and Jira
 
 **Usage**
 
-```
+```text
 Usage: atl [OPTIONS] <COMMAND>
 ```
 
@@ -45,7 +45,7 @@ Confluence operations
 
 **Usage**
 
-```
+```text
 Usage: atl confluence [OPTIONS] <COMMAND>
 ```
 
@@ -111,7 +111,7 @@ Read a page by ID
 
 **Usage**
 
-```
+```text
 Usage: atl confluence read [OPTIONS] <PAGE_ID>
 ```
 
@@ -145,7 +145,7 @@ Get page metadata
 
 **Usage**
 
-```
+```text
 Usage: atl confluence info [OPTIONS] <PAGE_ID>
 ```
 
@@ -170,7 +170,7 @@ Search pages with CQL
 
 **Usage**
 
-```
+```text
 Usage: atl confluence search [OPTIONS] <CQL>
 ```
 
@@ -197,7 +197,7 @@ List spaces
 
 **Usage**
 
-```
+```text
 Usage: atl confluence space [OPTIONS] <COMMAND>
 ```
 
@@ -240,7 +240,7 @@ List spaces
 
 **Usage**
 
-```
+```text
 Usage: atl confluence space list [OPTIONS]
 ```
 
@@ -266,7 +266,7 @@ Get space by ID
 
 **Usage**
 
-```
+```text
 Usage: atl confluence space get [OPTIONS] <SPACE_ID>
 ```
 
@@ -291,7 +291,7 @@ Create a space
 
 **Usage**
 
-```
+```text
 Usage: atl confluence space create [OPTIONS] --key <KEY> --name <NAME>
 ```
 
@@ -321,7 +321,7 @@ Delete a space
 
 **Usage**
 
-```
+```text
 Usage: atl confluence space delete [OPTIONS] <SPACE_ID>
 ```
 
@@ -346,7 +346,7 @@ List pages in space
 
 **Usage**
 
-```
+```text
 Usage: atl confluence space pages [OPTIONS] <SPACE_ID>
 ```
 
@@ -372,7 +372,7 @@ List blog posts in space
 
 **Usage**
 
-```
+```text
 Usage: atl confluence space blogposts [OPTIONS] <SPACE_ID>
 ```
 
@@ -398,7 +398,7 @@ List labels in space
 
 **Usage**
 
-```
+```text
 Usage: atl confluence space labels [OPTIONS] <SPACE_ID>
 ```
 
@@ -424,7 +424,7 @@ List space permissions
 
 **Usage**
 
-```
+```text
 Usage: atl confluence space permissions [OPTIONS] <SPACE_ID>
 ```
 
@@ -450,7 +450,7 @@ Available space permissions
 
 **Usage**
 
-```
+```text
 Usage: atl confluence space permissions-available [OPTIONS]
 ```
 
@@ -474,7 +474,7 @@ List labels of content in space
 
 **Usage**
 
-```
+```text
 Usage: atl confluence space content-labels [OPTIONS] <SPACE_ID>
 ```
 
@@ -500,7 +500,7 @@ List custom content in space
 
 **Usage**
 
-```
+```text
 Usage: atl confluence space custom-content [OPTIONS] --content-type <CONTENT_TYPE> <SPACE_ID>
 ```
 
@@ -527,7 +527,7 @@ List permitted operations for space
 
 **Usage**
 
-```
+```text
 Usage: atl confluence space operations [OPTIONS] <SPACE_ID>
 ```
 
@@ -552,7 +552,7 @@ Get space role assignments
 
 **Usage**
 
-```
+```text
 Usage: atl confluence space role-assignments [OPTIONS] <SPACE_ID>
 ```
 
@@ -578,7 +578,7 @@ Set space role assignments
 
 **Usage**
 
-```
+```text
 Usage: atl confluence space set-role-assignments [OPTIONS] --body <BODY> <SPACE_ID>
 ```
 
@@ -604,7 +604,7 @@ Space property management (v2)
 
 **Usage**
 
-```
+```text
 Usage: atl confluence space property [OPTIONS] <COMMAND>
 ```
 
@@ -635,7 +635,7 @@ List properties
 
 **Usage**
 
-```
+```text
 Usage: atl confluence space property list [OPTIONS] <ID>
 ```
 
@@ -660,7 +660,7 @@ Get a property by key
 
 **Usage**
 
-```
+```text
 Usage: atl confluence space property get [OPTIONS] <ID> <KEY>
 ```
 
@@ -686,7 +686,7 @@ Set (create/update) a property
 
 **Usage**
 
-```
+```text
 Usage: atl confluence space property set [OPTIONS] --value <VALUE> <ID> <KEY>
 ```
 
@@ -713,7 +713,7 @@ Delete a property
 
 **Usage**
 
-```
+```text
 Usage: atl confluence space property delete [OPTIONS] <ID> <KEY>
 ```
 
@@ -739,7 +739,7 @@ Space role management
 
 **Usage**
 
-```
+```text
 Usage: atl confluence space role [OPTIONS] <COMMAND>
 ```
 
@@ -772,7 +772,7 @@ List roles for a space
 
 **Usage**
 
-```
+```text
 Usage: atl confluence space role list [OPTIONS] <SPACE_ID>
 ```
 
@@ -798,7 +798,7 @@ Get a role by ID
 
 **Usage**
 
-```
+```text
 Usage: atl confluence space role get [OPTIONS] <SPACE_ID> <ROLE_ID>
 ```
 
@@ -824,7 +824,7 @@ Create a role
 
 **Usage**
 
-```
+```text
 Usage: atl confluence space role create [OPTIONS] --name <NAME> <SPACE_ID>
 ```
 
@@ -850,7 +850,7 @@ Update a role
 
 **Usage**
 
-```
+```text
 Usage: atl confluence space role update [OPTIONS] --name <NAME> <SPACE_ID> <ROLE_ID>
 ```
 
@@ -877,7 +877,7 @@ Delete a role
 
 **Usage**
 
-```
+```text
 Usage: atl confluence space role delete [OPTIONS] <SPACE_ID> <ROLE_ID>
 ```
 
@@ -903,7 +903,7 @@ Get space roles mode
 
 **Usage**
 
-```
+```text
 Usage: atl confluence space role mode [OPTIONS] <SPACE_ID>
 ```
 
@@ -928,7 +928,7 @@ List child pages
 
 **Usage**
 
-```
+```text
 Usage: atl confluence children [OPTIONS] <PAGE_ID>
 ```
 
@@ -956,7 +956,7 @@ Create a new page
 
 **Usage**
 
-```
+```text
 Usage: atl confluence create [OPTIONS] --title <TITLE> --body <BODY>
 ```
 
@@ -990,7 +990,7 @@ Update an existing page
 
 **Usage**
 
-```
+```text
 Usage: atl confluence update [OPTIONS] --title <TITLE> --body <BODY> --version <VERSION> <PAGE_ID>
 ```
 
@@ -1019,7 +1019,7 @@ Delete a page
 
 **Usage**
 
-```
+```text
 Usage: atl confluence delete [OPTIONS] <PAGE_ID>
 ```
 
@@ -1046,7 +1046,7 @@ Attachment operations
 
 **Usage**
 
-```
+```text
 Usage: atl confluence attachment [OPTIONS] <COMMAND>
 ```
 
@@ -1084,7 +1084,7 @@ List attachments for a page
 
 **Usage**
 
-```
+```text
 Usage: atl confluence attachment list [OPTIONS] <PAGE_ID>
 ```
 
@@ -1113,7 +1113,7 @@ Get attachment by ID (v2)
 
 **Usage**
 
-```
+```text
 Usage: atl confluence attachment get [OPTIONS] <ATTACHMENT_ID>
 ```
 
@@ -1138,7 +1138,7 @@ Upload an attachment to a page
 
 **Usage**
 
-```
+```text
 Usage: atl confluence attachment upload [OPTIONS] --file <FILE> <PAGE_ID>
 ```
 
@@ -1164,7 +1164,7 @@ Delete an attachment
 
 **Usage**
 
-```
+```text
 Usage: atl confluence attachment delete [OPTIONS] <ATTACHMENT_ID>
 ```
 
@@ -1189,7 +1189,7 @@ Download an attachment
 
 **Usage**
 
-```
+```text
 Usage: atl confluence attachment download [OPTIONS] --page-id <PAGE_ID> <ATTACHMENT_ID>
 ```
 
@@ -1216,7 +1216,7 @@ List attachment labels (v2)
 
 **Usage**
 
-```
+```text
 Usage: atl confluence attachment labels [OPTIONS] <ATTACHMENT_ID>
 ```
 
@@ -1242,7 +1242,7 @@ List attachment comments (v2)
 
 **Usage**
 
-```
+```text
 Usage: atl confluence attachment comments [OPTIONS] <ATTACHMENT_ID>
 ```
 
@@ -1268,7 +1268,7 @@ Attachment operations (v2)
 
 **Usage**
 
-```
+```text
 Usage: atl confluence attachment operations [OPTIONS] <ATTACHMENT_ID>
 ```
 
@@ -1293,7 +1293,7 @@ Attachment version history (v2)
 
 **Usage**
 
-```
+```text
 Usage: atl confluence attachment versions [OPTIONS] <ATTACHMENT_ID>
 ```
 
@@ -1319,7 +1319,7 @@ Get specific attachment version details (v2)
 
 **Usage**
 
-```
+```text
 Usage: atl confluence attachment version-details [OPTIONS] <ATTACHMENT_ID> <VERSION>
 ```
 
@@ -1344,7 +1344,7 @@ Attachment property management (v2)
 
 **Usage**
 
-```
+```text
 Usage: atl confluence attachment property [OPTIONS] <COMMAND>
 ```
 
@@ -1375,7 +1375,7 @@ List properties
 
 **Usage**
 
-```
+```text
 Usage: atl confluence attachment property list [OPTIONS] <ID>
 ```
 
@@ -1400,7 +1400,7 @@ Get a property by key
 
 **Usage**
 
-```
+```text
 Usage: atl confluence attachment property get [OPTIONS] <ID> <KEY>
 ```
 
@@ -1426,7 +1426,7 @@ Set (create/update) a property
 
 **Usage**
 
-```
+```text
 Usage: atl confluence attachment property set [OPTIONS] --value <VALUE> <ID> <KEY>
 ```
 
@@ -1453,7 +1453,7 @@ Delete a property
 
 **Usage**
 
-```
+```text
 Usage: atl confluence attachment property delete [OPTIONS] <ID> <KEY>
 ```
 
@@ -1479,7 +1479,7 @@ Find pages by title
 
 **Usage**
 
-```
+```text
 Usage: atl confluence find [OPTIONS] --title <TITLE>
 ```
 
@@ -1506,7 +1506,7 @@ Export a page with attachments to a local directory
 
 **Usage**
 
-```
+```text
 Usage: atl confluence export [OPTIONS] <PAGE_ID>
 ```
 
@@ -1534,7 +1534,7 @@ Copy a page tree to another space/parent
 
 **Usage**
 
-```
+```text
 Usage: atl confluence copy-tree [OPTIONS] <SOURCE_PAGE_ID>
 ```
 
@@ -1565,7 +1565,7 @@ Content property operations
 
 **Usage**
 
-```
+```text
 Usage: atl confluence property [OPTIONS] <COMMAND>
 ```
 
@@ -1596,7 +1596,7 @@ List all properties for a page
 
 **Usage**
 
-```
+```text
 Usage: atl confluence property list [OPTIONS] <PAGE_ID>
 ```
 
@@ -1621,7 +1621,7 @@ Get a specific property
 
 **Usage**
 
-```
+```text
 Usage: atl confluence property get [OPTIONS] <PAGE_ID> <KEY>
 ```
 
@@ -1647,7 +1647,7 @@ Set (create or update) a property
 
 **Usage**
 
-```
+```text
 Usage: atl confluence property set [OPTIONS] --value <VALUE> <PAGE_ID> <KEY>
 ```
 
@@ -1674,7 +1674,7 @@ Delete a property
 
 **Usage**
 
-```
+```text
 Usage: atl confluence property delete [OPTIONS] <PAGE_ID> <KEY>
 ```
 
@@ -1700,7 +1700,7 @@ Label management
 
 **Usage**
 
-```
+```text
 Usage: atl confluence label [OPTIONS] <COMMAND>
 ```
 
@@ -1733,7 +1733,7 @@ List labels for a page
 
 **Usage**
 
-```
+```text
 Usage: atl confluence label list [OPTIONS] <PAGE_ID>
 ```
 
@@ -1759,7 +1759,7 @@ Add labels to a page
 
 **Usage**
 
-```
+```text
 Usage: atl confluence label add [OPTIONS] <PAGE_ID> <LABELS>...
 ```
 
@@ -1785,7 +1785,7 @@ Remove a label from a page
 
 **Usage**
 
-```
+```text
 Usage: atl confluence label remove [OPTIONS] <PAGE_ID> <LABEL>
 ```
 
@@ -1811,7 +1811,7 @@ List pages for a label
 
 **Usage**
 
-```
+```text
 Usage: atl confluence label pages [OPTIONS] <LABEL_ID>
 ```
 
@@ -1837,7 +1837,7 @@ List blog posts for a label
 
 **Usage**
 
-```
+```text
 Usage: atl confluence label blogposts [OPTIONS] <LABEL_ID>
 ```
 
@@ -1863,7 +1863,7 @@ List attachments for a label
 
 **Usage**
 
-```
+```text
 Usage: atl confluence label attachments [OPTIONS] <LABEL_ID>
 ```
 
@@ -1889,7 +1889,7 @@ Blog post management
 
 **Usage**
 
-```
+```text
 Usage: atl confluence blog [OPTIONS] <COMMAND>
 ```
 
@@ -1934,7 +1934,7 @@ List blog posts
 
 **Usage**
 
-```
+```text
 Usage: atl confluence blog list [OPTIONS]
 ```
 
@@ -1960,7 +1960,7 @@ Read a blog post
 
 **Usage**
 
-```
+```text
 Usage: atl confluence blog read [OPTIONS] <BLOG_ID>
 ```
 
@@ -1992,7 +1992,7 @@ Create a blog post
 
 **Usage**
 
-```
+```text
 Usage: atl confluence blog create [OPTIONS] --title <TITLE> --body <BODY>
 ```
 
@@ -2022,7 +2022,7 @@ Update a blog post
 
 **Usage**
 
-```
+```text
 Usage: atl confluence blog update [OPTIONS] --title <TITLE> --body <BODY> --version <VERSION> <BLOG_ID>
 ```
 
@@ -2051,7 +2051,7 @@ Delete a blog post
 
 **Usage**
 
-```
+```text
 Usage: atl confluence blog delete [OPTIONS] <BLOG_ID>
 ```
 
@@ -2078,7 +2078,7 @@ List blog post attachments (v2)
 
 **Usage**
 
-```
+```text
 Usage: atl confluence blog attachments [OPTIONS] <BLOG_ID>
 ```
 
@@ -2104,7 +2104,7 @@ List blog post labels (v2)
 
 **Usage**
 
-```
+```text
 Usage: atl confluence blog labels [OPTIONS] <BLOG_ID>
 ```
 
@@ -2129,7 +2129,7 @@ List blog post footer comments (v2)
 
 **Usage**
 
-```
+```text
 Usage: atl confluence blog footer-comments [OPTIONS] <BLOG_ID>
 ```
 
@@ -2155,7 +2155,7 @@ List blog post inline comments (v2)
 
 **Usage**
 
-```
+```text
 Usage: atl confluence blog inline-comments [OPTIONS] <BLOG_ID>
 ```
 
@@ -2181,7 +2181,7 @@ List blog post versions (v2)
 
 **Usage**
 
-```
+```text
 Usage: atl confluence blog versions [OPTIONS] <BLOG_ID>
 ```
 
@@ -2207,7 +2207,7 @@ Blog post likes (v2)
 
 **Usage**
 
-```
+```text
 Usage: atl confluence blog likes [OPTIONS] <BLOG_ID>
 ```
 
@@ -2232,7 +2232,7 @@ Blog post operations (v2)
 
 **Usage**
 
-```
+```text
 Usage: atl confluence blog operations [OPTIONS] <BLOG_ID>
 ```
 
@@ -2257,7 +2257,7 @@ Get specific blog post version details (v2)
 
 **Usage**
 
-```
+```text
 Usage: atl confluence blog version-details [OPTIONS] <BLOG_ID> <VERSION>
 ```
 
@@ -2282,7 +2282,7 @@ Get like count for a blog post (v2)
 
 **Usage**
 
-```
+```text
 Usage: atl confluence blog likes-count [OPTIONS] <BLOG_ID>
 ```
 
@@ -2307,7 +2307,7 @@ Get users who liked a blog post (v2)
 
 **Usage**
 
-```
+```text
 Usage: atl confluence blog likes-users [OPTIONS] <BLOG_ID>
 ```
 
@@ -2332,7 +2332,7 @@ List custom content in a blog post (v2)
 
 **Usage**
 
-```
+```text
 Usage: atl confluence blog custom-content [OPTIONS] --content-type <CONTENT_TYPE> <BLOG_ID>
 ```
 
@@ -2359,7 +2359,7 @@ Redact content from a blog post (v2)
 
 **Usage**
 
-```
+```text
 Usage: atl confluence blog redact [OPTIONS] <BLOG_ID>
 ```
 
@@ -2384,7 +2384,7 @@ Blog post property management (v2)
 
 **Usage**
 
-```
+```text
 Usage: atl confluence blog property [OPTIONS] <COMMAND>
 ```
 
@@ -2415,7 +2415,7 @@ List properties
 
 **Usage**
 
-```
+```text
 Usage: atl confluence blog property list [OPTIONS] <ID>
 ```
 
@@ -2440,7 +2440,7 @@ Get a property by key
 
 **Usage**
 
-```
+```text
 Usage: atl confluence blog property get [OPTIONS] <ID> <KEY>
 ```
 
@@ -2466,7 +2466,7 @@ Set (create/update) a property
 
 **Usage**
 
-```
+```text
 Usage: atl confluence blog property set [OPTIONS] --value <VALUE> <ID> <KEY>
 ```
 
@@ -2493,7 +2493,7 @@ Delete a property
 
 **Usage**
 
-```
+```text
 Usage: atl confluence blog property delete [OPTIONS] <ID> <KEY>
 ```
 
@@ -2519,7 +2519,7 @@ Page version history
 
 **Usage**
 
-```
+```text
 Usage: atl confluence versions [OPTIONS] <PAGE_ID>
 ```
 
@@ -2545,7 +2545,7 @@ Get a specific page version
 
 **Usage**
 
-```
+```text
 Usage: atl confluence version-detail [OPTIONS] <PAGE_ID> <VERSION>
 ```
 
@@ -2570,7 +2570,7 @@ Page likes
 
 **Usage**
 
-```
+```text
 Usage: atl confluence likes [OPTIONS] <PAGE_ID>
 ```
 
@@ -2595,7 +2595,7 @@ Page operations/permissions
 
 **Usage**
 
-```
+```text
 Usage: atl confluence operations [OPTIONS] <PAGE_ID>
 ```
 
@@ -2620,7 +2620,7 @@ Page ancestors
 
 **Usage**
 
-```
+```text
 Usage: atl confluence ancestors [OPTIONS] <PAGE_ID>
 ```
 
@@ -2645,7 +2645,7 @@ Page descendants
 
 **Usage**
 
-```
+```text
 Usage: atl confluence descendants [OPTIONS] <PAGE_ID>
 ```
 
@@ -2671,7 +2671,7 @@ Footer comment management (v2)
 
 **Usage**
 
-```
+```text
 Usage: atl confluence footer-comment [OPTIONS] <COMMAND>
 ```
 
@@ -2711,7 +2711,7 @@ List footer comments for a page
 
 **Usage**
 
-```
+```text
 Usage: atl confluence footer-comment list [OPTIONS] <PAGE_ID>
 ```
 
@@ -2737,7 +2737,7 @@ Get a footer comment by ID
 
 **Usage**
 
-```
+```text
 Usage: atl confluence footer-comment get [OPTIONS] <COMMENT_ID>
 ```
 
@@ -2762,7 +2762,7 @@ Create a footer comment
 
 **Usage**
 
-```
+```text
 Usage: atl confluence footer-comment create [OPTIONS] --body <BODY> <PAGE_ID>
 ```
 
@@ -2788,7 +2788,7 @@ Update a footer comment
 
 **Usage**
 
-```
+```text
 Usage: atl confluence footer-comment update [OPTIONS] --body <BODY> --version <VERSION> <COMMENT_ID>
 ```
 
@@ -2814,7 +2814,7 @@ Delete a footer comment
 
 **Usage**
 
-```
+```text
 Usage: atl confluence footer-comment delete [OPTIONS] <COMMENT_ID>
 ```
 
@@ -2839,7 +2839,7 @@ List child comments
 
 **Usage**
 
-```
+```text
 Usage: atl confluence footer-comment children [OPTIONS] <COMMENT_ID>
 ```
 
@@ -2865,7 +2865,7 @@ List comment versions
 
 **Usage**
 
-```
+```text
 Usage: atl confluence footer-comment versions [OPTIONS] <COMMENT_ID>
 ```
 
@@ -2891,7 +2891,7 @@ Comment likes
 
 **Usage**
 
-```
+```text
 Usage: atl confluence footer-comment likes [OPTIONS] <COMMENT_ID>
 ```
 
@@ -2916,7 +2916,7 @@ Get permitted operations for a footer comment
 
 **Usage**
 
-```
+```text
 Usage: atl confluence footer-comment operations [OPTIONS] <COMMENT_ID>
 ```
 
@@ -2941,7 +2941,7 @@ Get like count for a footer comment
 
 **Usage**
 
-```
+```text
 Usage: atl confluence footer-comment likes-count [OPTIONS] <COMMENT_ID>
 ```
 
@@ -2966,7 +2966,7 @@ Get users who liked a footer comment
 
 **Usage**
 
-```
+```text
 Usage: atl confluence footer-comment likes-users [OPTIONS] <COMMENT_ID>
 ```
 
@@ -2991,7 +2991,7 @@ Get specific version details for a footer comment
 
 **Usage**
 
-```
+```text
 Usage: atl confluence footer-comment version-details [OPTIONS] <COMMENT_ID> <VERSION>
 ```
 
@@ -3016,7 +3016,7 @@ Footer comment property management (v2)
 
 **Usage**
 
-```
+```text
 Usage: atl confluence footer-comment property [OPTIONS] <COMMAND>
 ```
 
@@ -3047,7 +3047,7 @@ List properties
 
 **Usage**
 
-```
+```text
 Usage: atl confluence footer-comment property list [OPTIONS] <ID>
 ```
 
@@ -3072,7 +3072,7 @@ Get a property by key
 
 **Usage**
 
-```
+```text
 Usage: atl confluence footer-comment property get [OPTIONS] <ID> <KEY>
 ```
 
@@ -3098,7 +3098,7 @@ Set (create/update) a property
 
 **Usage**
 
-```
+```text
 Usage: atl confluence footer-comment property set [OPTIONS] --value <VALUE> <ID> <KEY>
 ```
 
@@ -3125,7 +3125,7 @@ Delete a property
 
 **Usage**
 
-```
+```text
 Usage: atl confluence footer-comment property delete [OPTIONS] <ID> <KEY>
 ```
 
@@ -3151,7 +3151,7 @@ Inline comment management (v2)
 
 **Usage**
 
-```
+```text
 Usage: atl confluence inline-comment [OPTIONS] <COMMAND>
 ```
 
@@ -3191,7 +3191,7 @@ List inline comments for a page
 
 **Usage**
 
-```
+```text
 Usage: atl confluence inline-comment list [OPTIONS] <PAGE_ID>
 ```
 
@@ -3218,7 +3218,7 @@ Get an inline comment by ID
 
 **Usage**
 
-```
+```text
 Usage: atl confluence inline-comment get [OPTIONS] <COMMENT_ID>
 ```
 
@@ -3243,7 +3243,7 @@ Create an inline comment
 
 **Usage**
 
-```
+```text
 Usage: atl confluence inline-comment create [OPTIONS] --body <BODY> --inline-marker-ref <INLINE_MARKER_REF> <PAGE_ID>
 ```
 
@@ -3271,7 +3271,7 @@ Update an inline comment
 
 **Usage**
 
-```
+```text
 Usage: atl confluence inline-comment update [OPTIONS] --body <BODY> --version <VERSION> <COMMENT_ID>
 ```
 
@@ -3298,7 +3298,7 @@ Delete an inline comment
 
 **Usage**
 
-```
+```text
 Usage: atl confluence inline-comment delete [OPTIONS] <COMMENT_ID>
 ```
 
@@ -3323,7 +3323,7 @@ List child comments
 
 **Usage**
 
-```
+```text
 Usage: atl confluence inline-comment children [OPTIONS] <COMMENT_ID>
 ```
 
@@ -3349,7 +3349,7 @@ List comment versions
 
 **Usage**
 
-```
+```text
 Usage: atl confluence inline-comment versions [OPTIONS] <COMMENT_ID>
 ```
 
@@ -3375,7 +3375,7 @@ Comment likes
 
 **Usage**
 
-```
+```text
 Usage: atl confluence inline-comment likes [OPTIONS] <COMMENT_ID>
 ```
 
@@ -3400,7 +3400,7 @@ Get permitted operations for an inline comment
 
 **Usage**
 
-```
+```text
 Usage: atl confluence inline-comment operations [OPTIONS] <COMMENT_ID>
 ```
 
@@ -3425,7 +3425,7 @@ Get like count for an inline comment
 
 **Usage**
 
-```
+```text
 Usage: atl confluence inline-comment likes-count [OPTIONS] <COMMENT_ID>
 ```
 
@@ -3450,7 +3450,7 @@ Get users who liked an inline comment
 
 **Usage**
 
-```
+```text
 Usage: atl confluence inline-comment likes-users [OPTIONS] <COMMENT_ID>
 ```
 
@@ -3475,7 +3475,7 @@ Get specific version details for an inline comment
 
 **Usage**
 
-```
+```text
 Usage: atl confluence inline-comment version-details [OPTIONS] <COMMENT_ID> <VERSION>
 ```
 
@@ -3500,7 +3500,7 @@ Inline comment property management (v2)
 
 **Usage**
 
-```
+```text
 Usage: atl confluence inline-comment property [OPTIONS] <COMMAND>
 ```
 
@@ -3531,7 +3531,7 @@ List properties
 
 **Usage**
 
-```
+```text
 Usage: atl confluence inline-comment property list [OPTIONS] <ID>
 ```
 
@@ -3556,7 +3556,7 @@ Get a property by key
 
 **Usage**
 
-```
+```text
 Usage: atl confluence inline-comment property get [OPTIONS] <ID> <KEY>
 ```
 
@@ -3582,7 +3582,7 @@ Set (create/update) a property
 
 **Usage**
 
-```
+```text
 Usage: atl confluence inline-comment property set [OPTIONS] --value <VALUE> <ID> <KEY>
 ```
 
@@ -3609,7 +3609,7 @@ Delete a property
 
 **Usage**
 
-```
+```text
 Usage: atl confluence inline-comment property delete [OPTIONS] <ID> <KEY>
 ```
 
@@ -3635,7 +3635,7 @@ Whiteboard management
 
 **Usage**
 
-```
+```text
 Usage: atl confluence whiteboard [OPTIONS] <COMMAND>
 ```
 
@@ -3670,7 +3670,7 @@ Create
 
 **Usage**
 
-```
+```text
 Usage: atl confluence whiteboard create [OPTIONS] --space-id <SPACE_ID>
 ```
 
@@ -3698,7 +3698,7 @@ Get by ID
 
 **Usage**
 
-```
+```text
 Usage: atl confluence whiteboard get [OPTIONS] <ID>
 ```
 
@@ -3723,7 +3723,7 @@ Delete
 
 **Usage**
 
-```
+```text
 Usage: atl confluence whiteboard delete [OPTIONS] <ID>
 ```
 
@@ -3748,7 +3748,7 @@ List ancestors
 
 **Usage**
 
-```
+```text
 Usage: atl confluence whiteboard ancestors [OPTIONS] <ID>
 ```
 
@@ -3773,7 +3773,7 @@ List descendants
 
 **Usage**
 
-```
+```text
 Usage: atl confluence whiteboard descendants [OPTIONS] <ID>
 ```
 
@@ -3799,7 +3799,7 @@ List direct children
 
 **Usage**
 
-```
+```text
 Usage: atl confluence whiteboard children [OPTIONS] <ID>
 ```
 
@@ -3825,7 +3825,7 @@ List operations
 
 **Usage**
 
-```
+```text
 Usage: atl confluence whiteboard operations [OPTIONS] <ID>
 ```
 
@@ -3850,7 +3850,7 @@ Content property operations
 
 **Usage**
 
-```
+```text
 Usage: atl confluence whiteboard property [OPTIONS] <COMMAND>
 ```
 
@@ -3881,7 +3881,7 @@ List properties
 
 **Usage**
 
-```
+```text
 Usage: atl confluence whiteboard property list [OPTIONS] <ID>
 ```
 
@@ -3906,7 +3906,7 @@ Get a property by key
 
 **Usage**
 
-```
+```text
 Usage: atl confluence whiteboard property get [OPTIONS] <ID> <KEY>
 ```
 
@@ -3932,7 +3932,7 @@ Set (create/update) a property
 
 **Usage**
 
-```
+```text
 Usage: atl confluence whiteboard property set [OPTIONS] --value <VALUE> <ID> <KEY>
 ```
 
@@ -3959,7 +3959,7 @@ Delete a property
 
 **Usage**
 
-```
+```text
 Usage: atl confluence whiteboard property delete [OPTIONS] <ID> <KEY>
 ```
 
@@ -3985,7 +3985,7 @@ Database management
 
 **Usage**
 
-```
+```text
 Usage: atl confluence database [OPTIONS] <COMMAND>
 ```
 
@@ -4020,7 +4020,7 @@ Create
 
 **Usage**
 
-```
+```text
 Usage: atl confluence database create [OPTIONS] --space-id <SPACE_ID>
 ```
 
@@ -4048,7 +4048,7 @@ Get by ID
 
 **Usage**
 
-```
+```text
 Usage: atl confluence database get [OPTIONS] <ID>
 ```
 
@@ -4073,7 +4073,7 @@ Delete
 
 **Usage**
 
-```
+```text
 Usage: atl confluence database delete [OPTIONS] <ID>
 ```
 
@@ -4098,7 +4098,7 @@ List ancestors
 
 **Usage**
 
-```
+```text
 Usage: atl confluence database ancestors [OPTIONS] <ID>
 ```
 
@@ -4123,7 +4123,7 @@ List descendants
 
 **Usage**
 
-```
+```text
 Usage: atl confluence database descendants [OPTIONS] <ID>
 ```
 
@@ -4149,7 +4149,7 @@ List direct children
 
 **Usage**
 
-```
+```text
 Usage: atl confluence database children [OPTIONS] <ID>
 ```
 
@@ -4175,7 +4175,7 @@ List operations
 
 **Usage**
 
-```
+```text
 Usage: atl confluence database operations [OPTIONS] <ID>
 ```
 
@@ -4200,7 +4200,7 @@ Content property operations
 
 **Usage**
 
-```
+```text
 Usage: atl confluence database property [OPTIONS] <COMMAND>
 ```
 
@@ -4231,7 +4231,7 @@ List properties
 
 **Usage**
 
-```
+```text
 Usage: atl confluence database property list [OPTIONS] <ID>
 ```
 
@@ -4256,7 +4256,7 @@ Get a property by key
 
 **Usage**
 
-```
+```text
 Usage: atl confluence database property get [OPTIONS] <ID> <KEY>
 ```
 
@@ -4282,7 +4282,7 @@ Set (create/update) a property
 
 **Usage**
 
-```
+```text
 Usage: atl confluence database property set [OPTIONS] --value <VALUE> <ID> <KEY>
 ```
 
@@ -4309,7 +4309,7 @@ Delete a property
 
 **Usage**
 
-```
+```text
 Usage: atl confluence database property delete [OPTIONS] <ID> <KEY>
 ```
 
@@ -4335,7 +4335,7 @@ Folder management
 
 **Usage**
 
-```
+```text
 Usage: atl confluence folder [OPTIONS] <COMMAND>
 ```
 
@@ -4370,7 +4370,7 @@ Create
 
 **Usage**
 
-```
+```text
 Usage: atl confluence folder create [OPTIONS] --space-id <SPACE_ID>
 ```
 
@@ -4398,7 +4398,7 @@ Get by ID
 
 **Usage**
 
-```
+```text
 Usage: atl confluence folder get [OPTIONS] <ID>
 ```
 
@@ -4423,7 +4423,7 @@ Delete
 
 **Usage**
 
-```
+```text
 Usage: atl confluence folder delete [OPTIONS] <ID>
 ```
 
@@ -4448,7 +4448,7 @@ List ancestors
 
 **Usage**
 
-```
+```text
 Usage: atl confluence folder ancestors [OPTIONS] <ID>
 ```
 
@@ -4473,7 +4473,7 @@ List descendants
 
 **Usage**
 
-```
+```text
 Usage: atl confluence folder descendants [OPTIONS] <ID>
 ```
 
@@ -4499,7 +4499,7 @@ List direct children
 
 **Usage**
 
-```
+```text
 Usage: atl confluence folder children [OPTIONS] <ID>
 ```
 
@@ -4525,7 +4525,7 @@ List operations
 
 **Usage**
 
-```
+```text
 Usage: atl confluence folder operations [OPTIONS] <ID>
 ```
 
@@ -4550,7 +4550,7 @@ Content property operations
 
 **Usage**
 
-```
+```text
 Usage: atl confluence folder property [OPTIONS] <COMMAND>
 ```
 
@@ -4581,7 +4581,7 @@ List properties
 
 **Usage**
 
-```
+```text
 Usage: atl confluence folder property list [OPTIONS] <ID>
 ```
 
@@ -4606,7 +4606,7 @@ Get a property by key
 
 **Usage**
 
-```
+```text
 Usage: atl confluence folder property get [OPTIONS] <ID> <KEY>
 ```
 
@@ -4632,7 +4632,7 @@ Set (create/update) a property
 
 **Usage**
 
-```
+```text
 Usage: atl confluence folder property set [OPTIONS] --value <VALUE> <ID> <KEY>
 ```
 
@@ -4659,7 +4659,7 @@ Delete a property
 
 **Usage**
 
-```
+```text
 Usage: atl confluence folder property delete [OPTIONS] <ID> <KEY>
 ```
 
@@ -4685,7 +4685,7 @@ Custom content management
 
 **Usage**
 
-```
+```text
 Usage: atl confluence custom-content [OPTIONS] <COMMAND>
 ```
 
@@ -4725,7 +4725,7 @@ List custom content
 
 **Usage**
 
-```
+```text
 Usage: atl confluence custom-content list [OPTIONS]
 ```
 
@@ -4752,7 +4752,7 @@ Get custom content by ID
 
 **Usage**
 
-```
+```text
 Usage: atl confluence custom-content get [OPTIONS] <ID>
 ```
 
@@ -4777,7 +4777,7 @@ Create custom content
 
 **Usage**
 
-```
+```text
 Usage: atl confluence custom-content create [OPTIONS] --content-type <CONTENT_TYPE> --space-id <SPACE_ID> --title <TITLE> --body <BODY>
 ```
 
@@ -4805,7 +4805,7 @@ Update custom content
 
 **Usage**
 
-```
+```text
 Usage: atl confluence custom-content update [OPTIONS] --version <VERSION> <ID>
 ```
 
@@ -4832,7 +4832,7 @@ Delete custom content
 
 **Usage**
 
-```
+```text
 Usage: atl confluence custom-content delete [OPTIONS] <ID>
 ```
 
@@ -4857,7 +4857,7 @@ List attachments
 
 **Usage**
 
-```
+```text
 Usage: atl confluence custom-content attachments [OPTIONS] <ID>
 ```
 
@@ -4883,7 +4883,7 @@ List children
 
 **Usage**
 
-```
+```text
 Usage: atl confluence custom-content children [OPTIONS] <ID>
 ```
 
@@ -4909,7 +4909,7 @@ List labels
 
 **Usage**
 
-```
+```text
 Usage: atl confluence custom-content labels [OPTIONS] <ID>
 ```
 
@@ -4935,7 +4935,7 @@ List comments
 
 **Usage**
 
-```
+```text
 Usage: atl confluence custom-content comments [OPTIONS] <ID>
 ```
 
@@ -4961,7 +4961,7 @@ List operations
 
 **Usage**
 
-```
+```text
 Usage: atl confluence custom-content operations [OPTIONS] <ID>
 ```
 
@@ -4986,7 +4986,7 @@ List versions
 
 **Usage**
 
-```
+```text
 Usage: atl confluence custom-content versions [OPTIONS] <ID>
 ```
 
@@ -5012,7 +5012,7 @@ Get specific version details
 
 **Usage**
 
-```
+```text
 Usage: atl confluence custom-content version-details [OPTIONS] <ID> <VERSION>
 ```
 
@@ -5037,7 +5037,7 @@ Custom content property management (v2)
 
 **Usage**
 
-```
+```text
 Usage: atl confluence custom-content property [OPTIONS] <COMMAND>
 ```
 
@@ -5068,7 +5068,7 @@ List properties
 
 **Usage**
 
-```
+```text
 Usage: atl confluence custom-content property list [OPTIONS] <ID>
 ```
 
@@ -5093,7 +5093,7 @@ Get a property by key
 
 **Usage**
 
-```
+```text
 Usage: atl confluence custom-content property get [OPTIONS] <ID> <KEY>
 ```
 
@@ -5119,7 +5119,7 @@ Set (create/update) a property
 
 **Usage**
 
-```
+```text
 Usage: atl confluence custom-content property set [OPTIONS] --value <VALUE> <ID> <KEY>
 ```
 
@@ -5146,7 +5146,7 @@ Delete a property
 
 **Usage**
 
-```
+```text
 Usage: atl confluence custom-content property delete [OPTIONS] <ID> <KEY>
 ```
 
@@ -5172,7 +5172,7 @@ Task management
 
 **Usage**
 
-```
+```text
 Usage: atl confluence task [OPTIONS] <COMMAND>
 ```
 
@@ -5202,7 +5202,7 @@ List tasks
 
 **Usage**
 
-```
+```text
 Usage: atl confluence task list [OPTIONS]
 ```
 
@@ -5231,7 +5231,7 @@ Get a task by ID
 
 **Usage**
 
-```
+```text
 Usage: atl confluence task get [OPTIONS] <TASK_ID>
 ```
 
@@ -5256,7 +5256,7 @@ Update a task (e.g. mark complete/incomplete)
 
 **Usage**
 
-```
+```text
 Usage: atl confluence task update [OPTIONS] --status <STATUS> <TASK_ID>
 ```
 
@@ -5282,7 +5282,7 @@ Admin key management
 
 **Usage**
 
-```
+```text
 Usage: atl confluence admin-key [OPTIONS] <COMMAND>
 ```
 
@@ -5312,7 +5312,7 @@ Get admin key status
 
 **Usage**
 
-```
+```text
 Usage: atl confluence admin-key get [OPTIONS]
 ```
 
@@ -5336,7 +5336,7 @@ Enable admin key
 
 **Usage**
 
-```
+```text
 Usage: atl confluence admin-key enable [OPTIONS]
 ```
 
@@ -5360,7 +5360,7 @@ Disable admin key
 
 **Usage**
 
-```
+```text
 Usage: atl confluence admin-key disable [OPTIONS]
 ```
 
@@ -5384,7 +5384,7 @@ Content classification management
 
 **Usage**
 
-```
+```text
 Usage: atl confluence classification [OPTIONS] <COMMAND>
 ```
 
@@ -5427,7 +5427,7 @@ List classification levels
 
 **Usage**
 
-```
+```text
 Usage: atl confluence classification list [OPTIONS]
 ```
 
@@ -5451,7 +5451,7 @@ Get classification for a page
 
 **Usage**
 
-```
+```text
 Usage: atl confluence classification get-page [OPTIONS] <ID>
 ```
 
@@ -5476,7 +5476,7 @@ Set classification for a page
 
 **Usage**
 
-```
+```text
 Usage: atl confluence classification set-page [OPTIONS] --classification-id <CLASSIFICATION_ID> <ID>
 ```
 
@@ -5502,7 +5502,7 @@ Reset classification for a page
 
 **Usage**
 
-```
+```text
 Usage: atl confluence classification reset-page [OPTIONS] <ID>
 ```
 
@@ -5527,7 +5527,7 @@ Get classification for a blog post
 
 **Usage**
 
-```
+```text
 Usage: atl confluence classification get-blogpost [OPTIONS] <ID>
 ```
 
@@ -5552,7 +5552,7 @@ Set classification for a blog post
 
 **Usage**
 
-```
+```text
 Usage: atl confluence classification set-blogpost [OPTIONS] --classification-id <CLASSIFICATION_ID> <ID>
 ```
 
@@ -5578,7 +5578,7 @@ Reset classification for a blog post
 
 **Usage**
 
-```
+```text
 Usage: atl confluence classification reset-blogpost [OPTIONS] <ID>
 ```
 
@@ -5603,7 +5603,7 @@ Get classification for a space
 
 **Usage**
 
-```
+```text
 Usage: atl confluence classification get-space [OPTIONS] <SPACE_ID>
 ```
 
@@ -5628,7 +5628,7 @@ Set classification for a space
 
 **Usage**
 
-```
+```text
 Usage: atl confluence classification set-space [OPTIONS] --classification-id <CLASSIFICATION_ID> <ID>
 ```
 
@@ -5654,7 +5654,7 @@ Reset classification for a space
 
 **Usage**
 
-```
+```text
 Usage: atl confluence classification reset-space [OPTIONS] <SPACE_ID>
 ```
 
@@ -5679,7 +5679,7 @@ Get classification for a database
 
 **Usage**
 
-```
+```text
 Usage: atl confluence classification get-database [OPTIONS] <ID>
 ```
 
@@ -5704,7 +5704,7 @@ Set classification for a database
 
 **Usage**
 
-```
+```text
 Usage: atl confluence classification set-database [OPTIONS] --classification-id <CLASSIFICATION_ID> <ID>
 ```
 
@@ -5730,7 +5730,7 @@ Reset classification for a database
 
 **Usage**
 
-```
+```text
 Usage: atl confluence classification reset-database [OPTIONS] <ID>
 ```
 
@@ -5755,7 +5755,7 @@ Get classification for a whiteboard
 
 **Usage**
 
-```
+```text
 Usage: atl confluence classification get-whiteboard [OPTIONS] <ID>
 ```
 
@@ -5780,7 +5780,7 @@ Set classification for a whiteboard
 
 **Usage**
 
-```
+```text
 Usage: atl confluence classification set-whiteboard [OPTIONS] --classification-id <CLASSIFICATION_ID> <ID>
 ```
 
@@ -5806,7 +5806,7 @@ Reset classification for a whiteboard
 
 **Usage**
 
-```
+```text
 Usage: atl confluence classification reset-whiteboard [OPTIONS] <ID>
 ```
 
@@ -5831,7 +5831,7 @@ Confluence user operations
 
 **Usage**
 
-```
+```text
 Usage: atl confluence user [OPTIONS] <COMMAND>
 ```
 
@@ -5861,7 +5861,7 @@ Bulk lookup users by account IDs
 
 **Usage**
 
-```
+```text
 Usage: atl confluence user bulk [OPTIONS] <ACCOUNT_IDS>...
 ```
 
@@ -5886,7 +5886,7 @@ Check user access
 
 **Usage**
 
-```
+```text
 Usage: atl confluence user check-access [OPTIONS] <EMAIL>
 ```
 
@@ -5911,7 +5911,7 @@ Invite users
 
 **Usage**
 
-```
+```text
 Usage: atl confluence user invite [OPTIONS] <EMAILS>...
 ```
 
@@ -5936,7 +5936,7 @@ Convert content IDs between formats
 
 **Usage**
 
-```
+```text
 Usage: atl confluence convert-ids [OPTIONS] <IDS>...
 ```
 
@@ -5961,7 +5961,7 @@ App property management
 
 **Usage**
 
-```
+```text
 Usage: atl confluence app-property [OPTIONS] <COMMAND>
 ```
 
@@ -5992,7 +5992,7 @@ List app properties (operates on the calling app's properties)
 
 **Usage**
 
-```
+```text
 Usage: atl confluence app-property list [OPTIONS]
 ```
 
@@ -6016,7 +6016,7 @@ Get an app property
 
 **Usage**
 
-```
+```text
 Usage: atl confluence app-property get [OPTIONS] <KEY>
 ```
 
@@ -6041,7 +6041,7 @@ Set an app property
 
 **Usage**
 
-```
+```text
 Usage: atl confluence app-property set [OPTIONS] --value <VALUE> <KEY>
 ```
 
@@ -6067,7 +6067,7 @@ Delete an app property
 
 **Usage**
 
-```
+```text
 Usage: atl confluence app-property delete [OPTIONS] <KEY>
 ```
 
@@ -6092,7 +6092,7 @@ List pages (v2)
 
 **Usage**
 
-```
+```text
 Usage: atl confluence page-list [OPTIONS]
 ```
 
@@ -6121,7 +6121,7 @@ Update page title only
 
 **Usage**
 
-```
+```text
 Usage: atl confluence update-title [OPTIONS] --title <TITLE> --version <VERSION> <PAGE_ID>
 ```
 
@@ -6147,7 +6147,7 @@ Get like count for a page
 
 **Usage**
 
-```
+```text
 Usage: atl confluence likes-count [OPTIONS] <PAGE_ID>
 ```
 
@@ -6172,7 +6172,7 @@ Get users who liked a page
 
 **Usage**
 
-```
+```text
 Usage: atl confluence likes-users [OPTIONS] <PAGE_ID>
 ```
 
@@ -6197,7 +6197,7 @@ List custom content in a page
 
 **Usage**
 
-```
+```text
 Usage: atl confluence page-custom-content [OPTIONS] --content-type <CONTENT_TYPE> <PAGE_ID>
 ```
 
@@ -6224,7 +6224,7 @@ Redact content from a page
 
 **Usage**
 
-```
+```text
 Usage: atl confluence redact [OPTIONS] <PAGE_ID>
 ```
 
@@ -6249,7 +6249,7 @@ Jira operations
 
 **Usage**
 
-```
+```text
 Usage: atl jira [OPTIONS] <COMMAND>
 ```
 
@@ -6340,6 +6340,8 @@ Usage: atl jira [OPTIONS] <COMMAND>
 - `bulk-create` — Bulk create issues from a JSON array
 - `archive` — Archive one or more issues
 - `unarchive` — Unarchive one or more issues
+- `issue` — Issue subcommands (check field completeness, …)
+- `automation` — Manage Jira Cloud automation rules
 
 #### atl jira search
 
@@ -6347,7 +6349,7 @@ Search issues with JQL
 
 **Usage**
 
-```
+```text
 Usage: atl jira search [OPTIONS] [JQL]
 ```
 
@@ -6390,7 +6392,7 @@ View an issue
 
 **Usage**
 
-```
+```text
 Usage: atl jira view [OPTIONS] <KEY>
 ```
 
@@ -6418,7 +6420,7 @@ Create a new issue
 
 **Usage**
 
-```
+```text
 Usage: atl jira create [OPTIONS] --project <PROJECT> --issue-type <ISSUE_TYPE> --summary <SUMMARY>
 ```
 
@@ -6454,7 +6456,7 @@ Update an issue
 
 **Usage**
 
-```
+```text
 Usage: atl jira update [OPTIONS] <KEY>
 ```
 
@@ -6488,7 +6490,7 @@ Delete an issue
 
 **Usage**
 
-```
+```text
 Usage: atl jira delete [OPTIONS] <KEY>
 ```
 
@@ -6514,7 +6516,7 @@ Transition an issue to another status
 
 **Usage**
 
-```
+```text
 Usage: atl jira move [OPTIONS] --transition <TRANSITION> <KEY>
 ```
 
@@ -6540,7 +6542,7 @@ Assign an issue
 
 **Usage**
 
-```
+```text
 Usage: atl jira assign [OPTIONS] <KEY> <ACCOUNT_ID>
 ```
 
@@ -6566,7 +6568,7 @@ Add a comment to an issue
 
 **Usage**
 
-```
+```text
 Usage: atl jira comment [OPTIONS] <KEY> <BODY>
 ```
 
@@ -6593,7 +6595,7 @@ List comments for an issue
 
 **Usage**
 
-```
+```text
 Usage: atl jira comments [OPTIONS] <KEY>
 ```
 
@@ -6620,7 +6622,7 @@ Get a specific comment
 
 **Usage**
 
-```
+```text
 Usage: atl jira comment-get [OPTIONS] <KEY> <COMMENT_ID>
 ```
 
@@ -6648,7 +6650,7 @@ Delete a comment
 
 **Usage**
 
-```
+```text
 Usage: atl jira comment-delete [OPTIONS] <KEY> <COMMENT_ID>
 ```
 
@@ -6674,7 +6676,7 @@ List available transitions for an issue
 
 **Usage**
 
-```
+```text
 Usage: atl jira transitions [OPTIONS] <KEY>
 ```
 
@@ -6699,7 +6701,7 @@ Project management
 
 **Usage**
 
-```
+```text
 Usage: atl jira project [OPTIONS] <COMMAND>
 ```
 
@@ -6736,7 +6738,7 @@ List all projects
 
 **Usage**
 
-```
+```text
 Usage: atl jira project list [OPTIONS]
 ```
 
@@ -6760,7 +6762,7 @@ Get project details
 
 **Usage**
 
-```
+```text
 Usage: atl jira project get [OPTIONS] <PROJECT_KEY>
 ```
 
@@ -6785,7 +6787,7 @@ Create a project
 
 **Usage**
 
-```
+```text
 Usage: atl jira project create [OPTIONS] --key <KEY> --name <NAME> --project-type-key <PROJECT_TYPE_KEY> --lead <LEAD>
 ```
 
@@ -6814,7 +6816,7 @@ Update a project
 
 **Usage**
 
-```
+```text
 Usage: atl jira project update [OPTIONS] <KEY>
 ```
 
@@ -6842,7 +6844,7 @@ Delete a project
 
 **Usage**
 
-```
+```text
 Usage: atl jira project delete [OPTIONS] <PROJECT_KEY>
 ```
 
@@ -6867,7 +6869,7 @@ List statuses for a project
 
 **Usage**
 
-```
+```text
 Usage: atl jira project statuses [OPTIONS] <PROJECT_KEY>
 ```
 
@@ -6892,7 +6894,7 @@ List roles for a project
 
 **Usage**
 
-```
+```text
 Usage: atl jira project roles [OPTIONS] <PROJECT_KEY>
 ```
 
@@ -6917,7 +6919,7 @@ Archive a project
 
 **Usage**
 
-```
+```text
 Usage: atl jira project archive [OPTIONS] <PROJECT_KEY>
 ```
 
@@ -6942,7 +6944,7 @@ Restore a project
 
 **Usage**
 
-```
+```text
 Usage: atl jira project restore [OPTIONS] <PROJECT_KEY>
 ```
 
@@ -6967,7 +6969,7 @@ List features for a project
 
 **Usage**
 
-```
+```text
 Usage: atl jira project features [OPTIONS] <PROJECT_KEY>
 ```
 
@@ -6992,7 +6994,7 @@ Board management
 
 **Usage**
 
-```
+```text
 Usage: atl jira board [OPTIONS] <COMMAND>
 ```
 
@@ -7024,7 +7026,7 @@ List boards
 
 **Usage**
 
-```
+```text
 Usage: atl jira board list [OPTIONS]
 ```
 
@@ -7049,7 +7051,7 @@ Get board details
 
 **Usage**
 
-```
+```text
 Usage: atl jira board get [OPTIONS] <BOARD_ID>
 ```
 
@@ -7074,7 +7076,7 @@ Get board configuration
 
 **Usage**
 
-```
+```text
 Usage: atl jira board config [OPTIONS] <BOARD_ID>
 ```
 
@@ -7099,7 +7101,7 @@ List all issues on a board
 
 **Usage**
 
-```
+```text
 Usage: atl jira board issues [OPTIONS] <BOARD_ID>
 ```
 
@@ -7127,7 +7129,7 @@ List backlog issues for a board
 
 **Usage**
 
-```
+```text
 Usage: atl jira board backlog [OPTIONS] <BOARD_ID>
 ```
 
@@ -7155,7 +7157,7 @@ Sprint management
 
 **Usage**
 
-```
+```text
 Usage: atl jira sprint [OPTIONS] <COMMAND>
 ```
 
@@ -7189,7 +7191,7 @@ List sprints for a board
 
 **Usage**
 
-```
+```text
 Usage: atl jira sprint list [OPTIONS] <BOARD_ID>
 ```
 
@@ -7215,7 +7217,7 @@ Get sprint details
 
 **Usage**
 
-```
+```text
 Usage: atl jira sprint get [OPTIONS] <SPRINT_ID>
 ```
 
@@ -7240,7 +7242,7 @@ List issues in a sprint
 
 **Usage**
 
-```
+```text
 Usage: atl jira sprint issues [OPTIONS] <SPRINT_ID>
 ```
 
@@ -7268,7 +7270,7 @@ Create a sprint
 
 **Usage**
 
-```
+```text
 Usage: atl jira sprint create [OPTIONS] --board-id <BOARD_ID> --name <NAME>
 ```
 
@@ -7297,7 +7299,7 @@ Update a sprint
 
 **Usage**
 
-```
+```text
 Usage: atl jira sprint update [OPTIONS] <SPRINT_ID>
 ```
 
@@ -7327,7 +7329,7 @@ Delete a sprint
 
 **Usage**
 
-```
+```text
 Usage: atl jira sprint delete [OPTIONS] <SPRINT_ID>
 ```
 
@@ -7352,7 +7354,7 @@ Move issues to a sprint
 
 **Usage**
 
-```
+```text
 Usage: atl jira sprint move [OPTIONS] <SPRINT_ID> <ISSUES>...
 ```
 
@@ -7378,7 +7380,7 @@ Move issues to backlog
 
 **Usage**
 
-```
+```text
 Usage: atl jira backlog-move [OPTIONS] <ISSUES>...
 ```
 
@@ -7403,7 +7405,7 @@ Show current user info
 
 **Usage**
 
-```
+```text
 Usage: atl jira me [OPTIONS]
 ```
 
@@ -7427,7 +7429,7 @@ Epic management
 
 **Usage**
 
-```
+```text
 Usage: atl jira epic [OPTIONS] <COMMAND>
 ```
 
@@ -7459,7 +7461,7 @@ List epics for a board
 
 **Usage**
 
-```
+```text
 Usage: atl jira epic list [OPTIONS] <BOARD_ID>
 ```
 
@@ -7484,7 +7486,7 @@ Get epic details
 
 **Usage**
 
-```
+```text
 Usage: atl jira epic get [OPTIONS] <EPIC_ID_OR_KEY>
 ```
 
@@ -7509,7 +7511,7 @@ List issues in an epic
 
 **Usage**
 
-```
+```text
 Usage: atl jira epic issues [OPTIONS] <EPIC_ID_OR_KEY>
 ```
 
@@ -7536,7 +7538,7 @@ Move issues into an epic
 
 **Usage**
 
-```
+```text
 Usage: atl jira epic add [OPTIONS] <EPIC_KEY> <ISSUES>...
 ```
 
@@ -7562,7 +7564,7 @@ Remove issues from their epic
 
 **Usage**
 
-```
+```text
 Usage: atl jira epic remove [OPTIONS] <ISSUES>...
 ```
 
@@ -7587,7 +7589,7 @@ Link two issues
 
 **Usage**
 
-```
+```text
 Usage: atl jira link [OPTIONS] --link-type <LINK_TYPE> <INWARD_KEY> <OUTWARD_KEY>
 ```
 
@@ -7614,7 +7616,7 @@ Issue link type management
 
 **Usage**
 
-```
+```text
 Usage: atl jira link-type [OPTIONS] <COMMAND>
 ```
 
@@ -7646,7 +7648,7 @@ List all issue link types
 
 **Usage**
 
-```
+```text
 Usage: atl jira link-type list [OPTIONS]
 ```
 
@@ -7670,7 +7672,7 @@ Get an issue link type by ID
 
 **Usage**
 
-```
+```text
 Usage: atl jira link-type get [OPTIONS] <ID>
 ```
 
@@ -7695,7 +7697,7 @@ Create an issue link type
 
 **Usage**
 
-```
+```text
 Usage: atl jira link-type create [OPTIONS] --name <NAME> --inward <INWARD> --outward <OUTWARD>
 ```
 
@@ -7722,7 +7724,7 @@ Update an issue link type
 
 **Usage**
 
-```
+```text
 Usage: atl jira link-type update [OPTIONS] <ID>
 ```
 
@@ -7750,7 +7752,7 @@ Delete an issue link type
 
 **Usage**
 
-```
+```text
 Usage: atl jira link-type delete [OPTIONS] <ID>
 ```
 
@@ -7775,7 +7777,7 @@ Get an issue link by ID
 
 **Usage**
 
-```
+```text
 Usage: atl jira issue-link-get [OPTIONS] <ID>
 ```
 
@@ -7800,7 +7802,7 @@ Delete an issue link by ID
 
 **Usage**
 
-```
+```text
 Usage: atl jira issue-link-delete [OPTIONS] <ID>
 ```
 
@@ -7825,7 +7827,7 @@ Add a remote link to an issue
 
 **Usage**
 
-```
+```text
 Usage: atl jira remote-link [OPTIONS] <KEY> <URL>
 ```
 
@@ -7852,7 +7854,7 @@ List remote links for an issue
 
 **Usage**
 
-```
+```text
 Usage: atl jira remote-links [OPTIONS] <KEY>
 ```
 
@@ -7877,7 +7879,7 @@ Delete a remote link
 
 **Usage**
 
-```
+```text
 Usage: atl jira remote-link-delete [OPTIONS] <KEY> <LINK_ID>
 ```
 
@@ -7903,7 +7905,7 @@ Clone an issue
 
 **Usage**
 
-```
+```text
 Usage: atl jira clone [OPTIONS] <KEY>
 ```
 
@@ -7929,7 +7931,7 @@ Worklog management
 
 **Usage**
 
-```
+```text
 Usage: atl jira worklog [OPTIONS] <COMMAND>
 ```
 
@@ -7959,7 +7961,7 @@ List worklogs for an issue
 
 **Usage**
 
-```
+```text
 Usage: atl jira worklog list [OPTIONS] <KEY>
 ```
 
@@ -7984,7 +7986,7 @@ Add a worklog entry
 
 **Usage**
 
-```
+```text
 Usage: atl jira worklog add [OPTIONS] --time-spent <TIME_SPENT> <KEY>
 ```
 
@@ -8012,7 +8014,7 @@ Delete a worklog entry
 
 **Usage**
 
-```
+```text
 Usage: atl jira worklog delete [OPTIONS] <KEY> <WORKLOG_ID>
 ```
 
@@ -8038,7 +8040,7 @@ Saved filter management
 
 **Usage**
 
-```
+```text
 Usage: atl jira filter [OPTIONS] <COMMAND>
 ```
 
@@ -8070,7 +8072,7 @@ List filters
 
 **Usage**
 
-```
+```text
 Usage: atl jira filter list [OPTIONS]
 ```
 
@@ -8097,7 +8099,7 @@ Get a filter by ID
 
 **Usage**
 
-```
+```text
 Usage: atl jira filter get [OPTIONS] <ID>
 ```
 
@@ -8122,7 +8124,7 @@ Create a new filter
 
 **Usage**
 
-```
+```text
 Usage: atl jira filter create [OPTIONS] --name <NAME> --jql <JQL>
 ```
 
@@ -8150,7 +8152,7 @@ Update a filter
 
 **Usage**
 
-```
+```text
 Usage: atl jira filter update [OPTIONS] <ID>
 ```
 
@@ -8179,7 +8181,7 @@ Delete a filter
 
 **Usage**
 
-```
+```text
 Usage: atl jira filter delete [OPTIONS] <ID>
 ```
 
@@ -8204,7 +8206,7 @@ Attach a file to an issue
 
 **Usage**
 
-```
+```text
 Usage: atl jira attach [OPTIONS] --file <FILE> <KEY>
 ```
 
@@ -8230,7 +8232,7 @@ Watch an issue
 
 **Usage**
 
-```
+```text
 Usage: atl jira watch [OPTIONS] <KEY>
 ```
 
@@ -8255,7 +8257,7 @@ Unwatch an issue
 
 **Usage**
 
-```
+```text
 Usage: atl jira unwatch [OPTIONS] <KEY>
 ```
 
@@ -8280,7 +8282,7 @@ List watchers for an issue
 
 **Usage**
 
-```
+```text
 Usage: atl jira watchers [OPTIONS] <KEY>
 ```
 
@@ -8305,7 +8307,7 @@ Vote for an issue
 
 **Usage**
 
-```
+```text
 Usage: atl jira vote [OPTIONS] <KEY>
 ```
 
@@ -8330,7 +8332,7 @@ Remove your vote from an issue
 
 **Usage**
 
-```
+```text
 Usage: atl jira unvote [OPTIONS] <KEY>
 ```
 
@@ -8355,7 +8357,7 @@ View issue changelog (history of changes)
 
 **Usage**
 
-```
+```text
 Usage: atl jira changelog [OPTIONS] <KEY>
 ```
 
@@ -8383,7 +8385,7 @@ Component management
 
 **Usage**
 
-```
+```text
 Usage: atl jira component [OPTIONS] <COMMAND>
 ```
 
@@ -8415,7 +8417,7 @@ List components for a project
 
 **Usage**
 
-```
+```text
 Usage: atl jira component list [OPTIONS] <PROJECT_KEY>
 ```
 
@@ -8440,7 +8442,7 @@ Get a component by ID
 
 **Usage**
 
-```
+```text
 Usage: atl jira component get [OPTIONS] <ID>
 ```
 
@@ -8465,7 +8467,7 @@ Create a component
 
 **Usage**
 
-```
+```text
 Usage: atl jira component create [OPTIONS] --project <PROJECT> --name <NAME>
 ```
 
@@ -8493,7 +8495,7 @@ Update a component
 
 **Usage**
 
-```
+```text
 Usage: atl jira component update [OPTIONS] <ID>
 ```
 
@@ -8522,7 +8524,7 @@ Delete a component
 
 **Usage**
 
-```
+```text
 Usage: atl jira component delete [OPTIONS] <ID>
 ```
 
@@ -8547,7 +8549,7 @@ Version management
 
 **Usage**
 
-```
+```text
 Usage: atl jira version [OPTIONS] <COMMAND>
 ```
 
@@ -8580,7 +8582,7 @@ List versions for a project
 
 **Usage**
 
-```
+```text
 Usage: atl jira version list [OPTIONS] <PROJECT_KEY>
 ```
 
@@ -8605,7 +8607,7 @@ Get a version by ID
 
 **Usage**
 
-```
+```text
 Usage: atl jira version get [OPTIONS] <ID>
 ```
 
@@ -8630,7 +8632,7 @@ Create a version
 
 **Usage**
 
-```
+```text
 Usage: atl jira version create [OPTIONS] --project <PROJECT> --name <NAME>
 ```
 
@@ -8658,7 +8660,7 @@ Update a version
 
 **Usage**
 
-```
+```text
 Usage: atl jira version update [OPTIONS] <ID>
 ```
 
@@ -8689,7 +8691,7 @@ Delete a version
 
 **Usage**
 
-```
+```text
 Usage: atl jira version delete [OPTIONS] <ID>
 ```
 
@@ -8714,7 +8716,7 @@ Mark a version as released
 
 **Usage**
 
-```
+```text
 Usage: atl jira version release [OPTIONS] <ID>
 ```
 
@@ -8740,7 +8742,7 @@ Dashboard management
 
 **Usage**
 
-```
+```text
 Usage: atl jira dashboard [OPTIONS] <COMMAND>
 ```
 
@@ -8777,7 +8779,7 @@ List dashboards
 
 **Usage**
 
-```
+```text
 Usage: atl jira dashboard list [OPTIONS]
 ```
 
@@ -8801,7 +8803,7 @@ Get a dashboard by ID
 
 **Usage**
 
-```
+```text
 Usage: atl jira dashboard get [OPTIONS] <ID>
 ```
 
@@ -8826,7 +8828,7 @@ Create a dashboard
 
 **Usage**
 
-```
+```text
 Usage: atl jira dashboard create [OPTIONS] --name <NAME>
 ```
 
@@ -8852,7 +8854,7 @@ Update a dashboard
 
 **Usage**
 
-```
+```text
 Usage: atl jira dashboard update [OPTIONS] <ID>
 ```
 
@@ -8879,7 +8881,7 @@ Delete a dashboard
 
 **Usage**
 
-```
+```text
 Usage: atl jira dashboard delete [OPTIONS] <ID>
 ```
 
@@ -8904,7 +8906,7 @@ Copy a dashboard
 
 **Usage**
 
-```
+```text
 Usage: atl jira dashboard copy [OPTIONS] <ID>
 ```
 
@@ -8930,7 +8932,7 @@ List gadgets on a dashboard
 
 **Usage**
 
-```
+```text
 Usage: atl jira dashboard gadgets [OPTIONS] <ID>
 ```
 
@@ -8955,7 +8957,7 @@ Add a gadget to a dashboard
 
 **Usage**
 
-```
+```text
 Usage: atl jira dashboard add-gadget [OPTIONS] --uri <URI> <DASHBOARD_ID>
 ```
 
@@ -8983,7 +8985,7 @@ Update a gadget on a dashboard
 
 **Usage**
 
-```
+```text
 Usage: atl jira dashboard update-gadget [OPTIONS] <DASHBOARD_ID> <GADGET_ID>
 ```
 
@@ -9011,7 +9013,7 @@ Remove a gadget from a dashboard
 
 **Usage**
 
-```
+```text
 Usage: atl jira dashboard remove-gadget [OPTIONS] <DASHBOARD_ID> <GADGET_ID>
 ```
 
@@ -9037,7 +9039,7 @@ Field management
 
 **Usage**
 
-```
+```text
 Usage: atl jira field [OPTIONS] <COMMAND>
 ```
 
@@ -9062,6 +9064,8 @@ Usage: atl jira field [OPTIONS] <COMMAND>
 - `delete` — Delete a custom field
 - `trash` — Move a custom field to trash
 - `restore` — Restore a custom field from trash
+- `context` — Manage custom field contexts
+- `options` — Manage select-list options for a custom field context
 
 ##### atl jira field list
 
@@ -9069,7 +9073,7 @@ List all fields
 
 **Usage**
 
-```
+```text
 Usage: atl jira field list [OPTIONS]
 ```
 
@@ -9094,7 +9098,7 @@ Create a custom field
 
 **Usage**
 
-```
+```text
 Usage: atl jira field create [OPTIONS] --name <NAME> --type <TYPE>
 ```
 
@@ -9122,7 +9126,7 @@ Delete a custom field
 
 **Usage**
 
-```
+```text
 Usage: atl jira field delete [OPTIONS] <ID>
 ```
 
@@ -9147,7 +9151,7 @@ Move a custom field to trash
 
 **Usage**
 
-```
+```text
 Usage: atl jira field trash [OPTIONS] <ID>
 ```
 
@@ -9172,7 +9176,7 @@ Restore a custom field from trash
 
 **Usage**
 
-```
+```text
 Usage: atl jira field restore [OPTIONS] <ID>
 ```
 
@@ -9191,13 +9195,480 @@ Usage: atl jira field restore [OPTIONS] <ID>
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
 - `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
+##### atl jira field context
+
+Manage custom field contexts
+
+**Usage**
+
+```text
+Usage: atl jira field context [OPTIONS] <FIELD_ID> <COMMAND>
+```
+
+**Options**
+
+- `<FIELD_ID>` — Custom field ID (e.g. "customfield_10010")
+- `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
+- `--quiet, -q` — Suppress all output except errors
+- `--config` — Path to configuration file
+- `--profile, -p` — Profile name to use
+- `--format, -F` — Output format
+- `--no-color` — Disable colored output
+- `--no-pager` — Do not pipe long output through a pager
+- `--jq` — Query output with a jq expression
+- `--template` — Format output with a minijinja template
+- `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
+
+**Subcommands**
+
+- `list` — List contexts for the field
+- `create` — Create a context
+- `update` — Update a context
+- `delete` — Delete a context
+- `projects` — List projects mapped to a context
+- `add-projects` — Add projects to a context
+- `remove-projects` — Remove projects from a context
+- `issue-types` — List issue types mapped to a context
+- `add-issue-types` — Add issue types to a context
+- `remove-issue-types` — Remove issue types from a context
+
+###### atl jira field context list
+
+List contexts for the field
+
+**Usage**
+
+```text
+Usage: atl jira field context <FIELD_ID> list [OPTIONS]
+```
+
+**Options**
+
+- `--limit, -l` — Max results per page
+- `--all` — Fetch all results (auto-paginate)
+- `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
+- `--quiet, -q` — Suppress all output except errors
+- `--config` — Path to configuration file
+- `--profile, -p` — Profile name to use
+- `--format, -F` — Output format
+- `--no-color` — Disable colored output
+- `--no-pager` — Do not pipe long output through a pager
+- `--jq` — Query output with a jq expression
+- `--template` — Format output with a minijinja template
+- `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
+
+###### atl jira field context create
+
+Create a context
+
+**Usage**
+
+```text
+Usage: atl jira field context <FIELD_ID> create [OPTIONS] --name <NAME>
+```
+
+**Options**
+
+- `--name, -n` — Context name
+- `--description, -d` — Description
+- `--issue-type-id` — Issue type ID(s) the context applies to (repeatable)
+- `--project-id` — Project ID(s) the context applies to (repeatable)
+- `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
+- `--quiet, -q` — Suppress all output except errors
+- `--config` — Path to configuration file
+- `--profile, -p` — Profile name to use
+- `--format, -F` — Output format
+- `--no-color` — Disable colored output
+- `--no-pager` — Do not pipe long output through a pager
+- `--jq` — Query output with a jq expression
+- `--template` — Format output with a minijinja template
+- `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
+
+###### atl jira field context update
+
+Update a context
+
+**Usage**
+
+```text
+Usage: atl jira field context <FIELD_ID> update [OPTIONS] <CONTEXT_ID>
+```
+
+**Options**
+
+- `<CONTEXT_ID>` — Context ID
+- `--name, -n` — New name
+- `--description, -d` — New description
+- `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
+- `--quiet, -q` — Suppress all output except errors
+- `--config` — Path to configuration file
+- `--profile, -p` — Profile name to use
+- `--format, -F` — Output format
+- `--no-color` — Disable colored output
+- `--no-pager` — Do not pipe long output through a pager
+- `--jq` — Query output with a jq expression
+- `--template` — Format output with a minijinja template
+- `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
+
+###### atl jira field context delete
+
+Delete a context
+
+**Usage**
+
+```text
+Usage: atl jira field context <FIELD_ID> delete [OPTIONS] <CONTEXT_ID>
+```
+
+**Options**
+
+- `<CONTEXT_ID>` — Context ID
+- `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
+- `--quiet, -q` — Suppress all output except errors
+- `--config` — Path to configuration file
+- `--profile, -p` — Profile name to use
+- `--format, -F` — Output format
+- `--no-color` — Disable colored output
+- `--no-pager` — Do not pipe long output through a pager
+- `--jq` — Query output with a jq expression
+- `--template` — Format output with a minijinja template
+- `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
+
+###### atl jira field context projects
+
+List projects mapped to a context
+
+**Usage**
+
+```text
+Usage: atl jira field context <FIELD_ID> projects [OPTIONS] <CONTEXT_ID>
+```
+
+**Options**
+
+- `<CONTEXT_ID>` — Context ID
+- `--limit, -l` — Max results per page
+- `--all` — Fetch all results (auto-paginate)
+- `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
+- `--quiet, -q` — Suppress all output except errors
+- `--config` — Path to configuration file
+- `--profile, -p` — Profile name to use
+- `--format, -F` — Output format
+- `--no-color` — Disable colored output
+- `--no-pager` — Do not pipe long output through a pager
+- `--jq` — Query output with a jq expression
+- `--template` — Format output with a minijinja template
+- `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
+
+###### atl jira field context add-projects
+
+Add projects to a context
+
+**Usage**
+
+```text
+Usage: atl jira field context <FIELD_ID> add-projects [OPTIONS] --project-id <ID> <CONTEXT_ID>
+```
+
+**Options**
+
+- `<CONTEXT_ID>` — Context ID
+- `--project-id` — Project ID(s) (repeatable, at least one)
+- `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
+- `--quiet, -q` — Suppress all output except errors
+- `--config` — Path to configuration file
+- `--profile, -p` — Profile name to use
+- `--format, -F` — Output format
+- `--no-color` — Disable colored output
+- `--no-pager` — Do not pipe long output through a pager
+- `--jq` — Query output with a jq expression
+- `--template` — Format output with a minijinja template
+- `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
+
+###### atl jira field context remove-projects
+
+Remove projects from a context
+
+**Usage**
+
+```text
+Usage: atl jira field context <FIELD_ID> remove-projects [OPTIONS] --project-id <ID> <CONTEXT_ID>
+```
+
+**Options**
+
+- `<CONTEXT_ID>` — Context ID
+- `--project-id` — Project ID(s) (repeatable, at least one)
+- `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
+- `--quiet, -q` — Suppress all output except errors
+- `--config` — Path to configuration file
+- `--profile, -p` — Profile name to use
+- `--format, -F` — Output format
+- `--no-color` — Disable colored output
+- `--no-pager` — Do not pipe long output through a pager
+- `--jq` — Query output with a jq expression
+- `--template` — Format output with a minijinja template
+- `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
+
+###### atl jira field context issue-types
+
+List issue types mapped to a context
+
+**Usage**
+
+```text
+Usage: atl jira field context <FIELD_ID> issue-types [OPTIONS] <CONTEXT_ID>
+```
+
+**Options**
+
+- `<CONTEXT_ID>` — Context ID
+- `--limit, -l` — Max results per page
+- `--all` — Fetch all results (auto-paginate)
+- `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
+- `--quiet, -q` — Suppress all output except errors
+- `--config` — Path to configuration file
+- `--profile, -p` — Profile name to use
+- `--format, -F` — Output format
+- `--no-color` — Disable colored output
+- `--no-pager` — Do not pipe long output through a pager
+- `--jq` — Query output with a jq expression
+- `--template` — Format output with a minijinja template
+- `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
+
+###### atl jira field context add-issue-types
+
+Add issue types to a context
+
+**Usage**
+
+```text
+Usage: atl jira field context <FIELD_ID> add-issue-types [OPTIONS] --issue-type-id <ID> <CONTEXT_ID>
+```
+
+**Options**
+
+- `<CONTEXT_ID>` — Context ID
+- `--issue-type-id` — Issue type ID(s) (repeatable, at least one)
+- `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
+- `--quiet, -q` — Suppress all output except errors
+- `--config` — Path to configuration file
+- `--profile, -p` — Profile name to use
+- `--format, -F` — Output format
+- `--no-color` — Disable colored output
+- `--no-pager` — Do not pipe long output through a pager
+- `--jq` — Query output with a jq expression
+- `--template` — Format output with a minijinja template
+- `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
+
+###### atl jira field context remove-issue-types
+
+Remove issue types from a context
+
+**Usage**
+
+```text
+Usage: atl jira field context <FIELD_ID> remove-issue-types [OPTIONS] --issue-type-id <ID> <CONTEXT_ID>
+```
+
+**Options**
+
+- `<CONTEXT_ID>` — Context ID
+- `--issue-type-id` — Issue type ID(s) (repeatable, at least one)
+- `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
+- `--quiet, -q` — Suppress all output except errors
+- `--config` — Path to configuration file
+- `--profile, -p` — Profile name to use
+- `--format, -F` — Output format
+- `--no-color` — Disable colored output
+- `--no-pager` — Do not pipe long output through a pager
+- `--jq` — Query output with a jq expression
+- `--template` — Format output with a minijinja template
+- `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
+
+##### atl jira field options
+
+Manage select-list options for a custom field context
+
+**Usage**
+
+```text
+Usage: atl jira field options [OPTIONS] <FIELD_ID> <CONTEXT_ID> <COMMAND>
+```
+
+**Options**
+
+- `<FIELD_ID>` — Custom field ID (e.g. "customfield_10010")
+- `<CONTEXT_ID>` — Context ID
+- `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
+- `--quiet, -q` — Suppress all output except errors
+- `--config` — Path to configuration file
+- `--profile, -p` — Profile name to use
+- `--format, -F` — Output format
+- `--no-color` — Disable colored output
+- `--no-pager` — Do not pipe long output through a pager
+- `--jq` — Query output with a jq expression
+- `--template` — Format output with a minijinja template
+- `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
+
+**Subcommands**
+
+- `list` — List options in the context
+- `add` — Add one or more options
+- `update` — Update a single option
+- `delete` — Delete a single option
+- `reorder` — Reorder options within the context
+
+###### atl jira field options list
+
+List options in the context
+
+**Usage**
+
+```text
+Usage: atl jira field options <FIELD_ID> <CONTEXT_ID> list [OPTIONS]
+```
+
+**Options**
+
+- `--limit, -l` — Max results per page
+- `--all` — Fetch all results (auto-paginate)
+- `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
+- `--quiet, -q` — Suppress all output except errors
+- `--config` — Path to configuration file
+- `--profile, -p` — Profile name to use
+- `--format, -F` — Output format
+- `--no-color` — Disable colored output
+- `--no-pager` — Do not pipe long output through a pager
+- `--jq` — Query output with a jq expression
+- `--template` — Format output with a minijinja template
+- `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
+
+###### atl jira field options add
+
+Add one or more options
+
+**Usage**
+
+```text
+Usage: atl jira field options <FIELD_ID> <CONTEXT_ID> add [OPTIONS] --value <VALUE>
+```
+
+**Options**
+
+- `--value` — Option value(s) — repeat to add multiple in one call
+- `--disabled` — Mark the new options as disabled
+- `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
+- `--quiet, -q` — Suppress all output except errors
+- `--config` — Path to configuration file
+- `--profile, -p` — Profile name to use
+- `--format, -F` — Output format
+- `--no-color` — Disable colored output
+- `--no-pager` — Do not pipe long output through a pager
+- `--jq` — Query output with a jq expression
+- `--template` — Format output with a minijinja template
+- `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
+
+###### atl jira field options update
+
+Update a single option
+
+**Usage**
+
+```text
+Usage: atl jira field options <FIELD_ID> <CONTEXT_ID> update [OPTIONS] <OPTION_ID>
+```
+
+**Options**
+
+- `<OPTION_ID>` — Option ID
+- `--value` — New option value
+- `--disabled` — Whether the option is disabled
+- `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
+- `--quiet, -q` — Suppress all output except errors
+- `--config` — Path to configuration file
+- `--profile, -p` — Profile name to use
+- `--format, -F` — Output format
+- `--no-color` — Disable colored output
+- `--no-pager` — Do not pipe long output through a pager
+- `--jq` — Query output with a jq expression
+- `--template` — Format output with a minijinja template
+- `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
+
+###### atl jira field options delete
+
+Delete a single option
+
+**Usage**
+
+```text
+Usage: atl jira field options <FIELD_ID> <CONTEXT_ID> delete [OPTIONS] <OPTION_ID>
+```
+
+**Options**
+
+- `<OPTION_ID>` — Option ID
+- `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
+- `--quiet, -q` — Suppress all output except errors
+- `--config` — Path to configuration file
+- `--profile, -p` — Profile name to use
+- `--format, -F` — Output format
+- `--no-color` — Disable colored output
+- `--no-pager` — Do not pipe long output through a pager
+- `--jq` — Query output with a jq expression
+- `--template` — Format output with a minijinja template
+- `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
+
+###### atl jira field options reorder
+
+Reorder options within the context
+
+**Usage**
+
+```text
+Usage: atl jira field options <FIELD_ID> <CONTEXT_ID> reorder [OPTIONS] <--after <ID>|--position <POSITION>> <OPTION_IDS>...
+```
+
+**Options**
+
+- `<OPTION_IDS>` — Option IDs to move (in the order they should appear)
+- `--after` — Insert the moved options after this option ID
+- `--position` — Move the options to a fixed position
+- `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
+- `--quiet, -q` — Suppress all output except errors
+- `--config` — Path to configuration file
+- `--profile, -p` — Profile name to use
+- `--format, -F` — Output format
+- `--no-color` — Disable colored output
+- `--no-pager` — Do not pipe long output through a pager
+- `--jq` — Query output with a jq expression
+- `--template` — Format output with a minijinja template
+- `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
+
 #### atl jira user
 
 User operations
 
 **Usage**
 
-```
+```text
 Usage: atl jira user [OPTIONS] <COMMAND>
 ```
 
@@ -9230,7 +9701,7 @@ Search users
 
 **Usage**
 
-```
+```text
 Usage: atl jira user search [OPTIONS] <QUERY>
 ```
 
@@ -9256,7 +9727,7 @@ Get user by account ID
 
 **Usage**
 
-```
+```text
 Usage: atl jira user get [OPTIONS] <ACCOUNT_ID>
 ```
 
@@ -9281,7 +9752,7 @@ List all users
 
 **Usage**
 
-```
+```text
 Usage: atl jira user list [OPTIONS]
 ```
 
@@ -9307,7 +9778,7 @@ Create a user
 
 **Usage**
 
-```
+```text
 Usage: atl jira user create [OPTIONS] --email <EMAIL>
 ```
 
@@ -9334,7 +9805,7 @@ Delete a user
 
 **Usage**
 
-```
+```text
 Usage: atl jira user delete [OPTIONS] <ACCOUNT_ID>
 ```
 
@@ -9359,7 +9830,7 @@ List users assignable to an issue
 
 **Usage**
 
-```
+```text
 Usage: atl jira user assignable [OPTIONS] <ISSUE_KEY>
 ```
 
@@ -9385,7 +9856,7 @@ Group management
 
 **Usage**
 
-```
+```text
 Usage: atl jira group [OPTIONS] <COMMAND>
 ```
 
@@ -9420,7 +9891,7 @@ List groups
 
 **Usage**
 
-```
+```text
 Usage: atl jira group list [OPTIONS]
 ```
 
@@ -9444,7 +9915,7 @@ Get group details
 
 **Usage**
 
-```
+```text
 Usage: atl jira group get [OPTIONS] <NAME>
 ```
 
@@ -9469,7 +9940,7 @@ Create a group
 
 **Usage**
 
-```
+```text
 Usage: atl jira group create [OPTIONS] <NAME>
 ```
 
@@ -9494,7 +9965,7 @@ Delete a group
 
 **Usage**
 
-```
+```text
 Usage: atl jira group delete [OPTIONS] <NAME>
 ```
 
@@ -9519,7 +9990,7 @@ List group members
 
 **Usage**
 
-```
+```text
 Usage: atl jira group members [OPTIONS] <NAME>
 ```
 
@@ -9545,7 +10016,7 @@ Add a user to a group
 
 **Usage**
 
-```
+```text
 Usage: atl jira group add-user [OPTIONS] <NAME> <ACCOUNT_ID>
 ```
 
@@ -9571,7 +10042,7 @@ Remove a user from a group
 
 **Usage**
 
-```
+```text
 Usage: atl jira group remove-user [OPTIONS] <NAME> <ACCOUNT_ID>
 ```
 
@@ -9597,7 +10068,7 @@ Search groups
 
 **Usage**
 
-```
+```text
 Usage: atl jira group search [OPTIONS] <QUERY>
 ```
 
@@ -9623,7 +10094,7 @@ Send a notification about an issue
 
 **Usage**
 
-```
+```text
 Usage: atl jira notify [OPTIONS] --subject <SUBJECT> --body <BODY> <KEY>
 ```
 
@@ -9651,7 +10122,7 @@ Get issue creation metadata
 
 **Usage**
 
-```
+```text
 Usage: atl jira create-meta [OPTIONS]
 ```
 
@@ -9677,7 +10148,7 @@ Get issue edit metadata
 
 **Usage**
 
-```
+```text
 Usage: atl jira edit-meta [OPTIONS] <KEY>
 ```
 
@@ -9702,7 +10173,7 @@ Issue type management
 
 **Usage**
 
-```
+```text
 Usage: atl jira issue-type [OPTIONS] <COMMAND>
 ```
 
@@ -9734,7 +10205,7 @@ List all issue types
 
 **Usage**
 
-```
+```text
 Usage: atl jira issue-type list [OPTIONS]
 ```
 
@@ -9758,7 +10229,7 @@ Get an issue type by ID
 
 **Usage**
 
-```
+```text
 Usage: atl jira issue-type get [OPTIONS] <ID>
 ```
 
@@ -9783,7 +10254,7 @@ Create an issue type
 
 **Usage**
 
-```
+```text
 Usage: atl jira issue-type create [OPTIONS] --name <NAME>
 ```
 
@@ -9810,7 +10281,7 @@ Update an issue type
 
 **Usage**
 
-```
+```text
 Usage: atl jira issue-type update [OPTIONS] <ID>
 ```
 
@@ -9837,7 +10308,7 @@ Delete an issue type
 
 **Usage**
 
-```
+```text
 Usage: atl jira issue-type delete [OPTIONS] <ID>
 ```
 
@@ -9862,7 +10333,7 @@ Priority management
 
 **Usage**
 
-```
+```text
 Usage: atl jira priority [OPTIONS] <COMMAND>
 ```
 
@@ -9894,7 +10365,7 @@ List all priorities
 
 **Usage**
 
-```
+```text
 Usage: atl jira priority list [OPTIONS]
 ```
 
@@ -9918,7 +10389,7 @@ Get a priority by ID
 
 **Usage**
 
-```
+```text
 Usage: atl jira priority get [OPTIONS] <ID>
 ```
 
@@ -9943,7 +10414,7 @@ Create a priority
 
 **Usage**
 
-```
+```text
 Usage: atl jira priority create [OPTIONS] --name <NAME>
 ```
 
@@ -9970,7 +10441,7 @@ Update a priority
 
 **Usage**
 
-```
+```text
 Usage: atl jira priority update [OPTIONS] <ID>
 ```
 
@@ -9998,7 +10469,7 @@ Delete a priority
 
 **Usage**
 
-```
+```text
 Usage: atl jira priority delete [OPTIONS] <ID>
 ```
 
@@ -10023,7 +10494,7 @@ Resolution management
 
 **Usage**
 
-```
+```text
 Usage: atl jira resolution [OPTIONS] <COMMAND>
 ```
 
@@ -10055,7 +10526,7 @@ List all resolutions
 
 **Usage**
 
-```
+```text
 Usage: atl jira resolution list [OPTIONS]
 ```
 
@@ -10079,7 +10550,7 @@ Get a resolution by ID
 
 **Usage**
 
-```
+```text
 Usage: atl jira resolution get [OPTIONS] <ID>
 ```
 
@@ -10104,7 +10575,7 @@ Create a resolution
 
 **Usage**
 
-```
+```text
 Usage: atl jira resolution create [OPTIONS] --name <NAME>
 ```
 
@@ -10130,7 +10601,7 @@ Update a resolution
 
 **Usage**
 
-```
+```text
 Usage: atl jira resolution update [OPTIONS] <ID>
 ```
 
@@ -10157,7 +10628,7 @@ Delete a resolution
 
 **Usage**
 
-```
+```text
 Usage: atl jira resolution delete [OPTIONS] <ID>
 ```
 
@@ -10182,7 +10653,7 @@ Status management
 
 **Usage**
 
-```
+```text
 Usage: atl jira status [OPTIONS] <COMMAND>
 ```
 
@@ -10212,7 +10683,7 @@ List all statuses
 
 **Usage**
 
-```
+```text
 Usage: atl jira status list [OPTIONS]
 ```
 
@@ -10236,7 +10707,7 @@ Get a status by ID
 
 **Usage**
 
-```
+```text
 Usage: atl jira status get [OPTIONS] <ID>
 ```
 
@@ -10261,7 +10732,7 @@ List status categories
 
 **Usage**
 
-```
+```text
 Usage: atl jira status categories [OPTIONS]
 ```
 
@@ -10285,7 +10756,7 @@ Screen management
 
 **Usage**
 
-```
+```text
 Usage: atl jira screen [OPTIONS] <COMMAND>
 ```
 
@@ -10318,7 +10789,7 @@ List screens
 
 **Usage**
 
-```
+```text
 Usage: atl jira screen list [OPTIONS]
 ```
 
@@ -10342,7 +10813,7 @@ Get a screen by ID
 
 **Usage**
 
-```
+```text
 Usage: atl jira screen get [OPTIONS] <ID>
 ```
 
@@ -10367,7 +10838,7 @@ Create a screen
 
 **Usage**
 
-```
+```text
 Usage: atl jira screen create [OPTIONS] --name <NAME>
 ```
 
@@ -10393,7 +10864,7 @@ Delete a screen
 
 **Usage**
 
-```
+```text
 Usage: atl jira screen delete [OPTIONS] <ID>
 ```
 
@@ -10418,7 +10889,7 @@ List tabs for a screen
 
 **Usage**
 
-```
+```text
 Usage: atl jira screen tabs [OPTIONS] <ID>
 ```
 
@@ -10443,7 +10914,7 @@ List fields for a screen tab
 
 **Usage**
 
-```
+```text
 Usage: atl jira screen fields [OPTIONS] <SCREEN_ID> <TAB_ID>
 ```
 
@@ -10469,7 +10940,7 @@ Workflow management
 
 **Usage**
 
-```
+```text
 Usage: atl jira workflow [OPTIONS] <COMMAND>
 ```
 
@@ -10498,7 +10969,7 @@ List all
 
 **Usage**
 
-```
+```text
 Usage: atl jira workflow list [OPTIONS]
 ```
 
@@ -10522,7 +10993,7 @@ Get by ID
 
 **Usage**
 
-```
+```text
 Usage: atl jira workflow get [OPTIONS] <ID>
 ```
 
@@ -10547,7 +11018,7 @@ Workflow scheme management
 
 **Usage**
 
-```
+```text
 Usage: atl jira workflow-scheme [OPTIONS] <COMMAND>
 ```
 
@@ -10579,7 +11050,7 @@ List all
 
 **Usage**
 
-```
+```text
 Usage: atl jira workflow-scheme list [OPTIONS]
 ```
 
@@ -10603,7 +11074,7 @@ Get by ID
 
 **Usage**
 
-```
+```text
 Usage: atl jira workflow-scheme get [OPTIONS] <ID>
 ```
 
@@ -10628,7 +11099,7 @@ Create
 
 **Usage**
 
-```
+```text
 Usage: atl jira workflow-scheme create [OPTIONS] --name <NAME>
 ```
 
@@ -10654,7 +11125,7 @@ Update
 
 **Usage**
 
-```
+```text
 Usage: atl jira workflow-scheme update [OPTIONS] <ID>
 ```
 
@@ -10681,7 +11152,7 @@ Delete
 
 **Usage**
 
-```
+```text
 Usage: atl jira workflow-scheme delete [OPTIONS] <ID>
 ```
 
@@ -10706,7 +11177,7 @@ Permission scheme management
 
 **Usage**
 
-```
+```text
 Usage: atl jira permission-scheme [OPTIONS] <COMMAND>
 ```
 
@@ -10738,7 +11209,7 @@ List all
 
 **Usage**
 
-```
+```text
 Usage: atl jira permission-scheme list [OPTIONS]
 ```
 
@@ -10762,7 +11233,7 @@ Get by ID
 
 **Usage**
 
-```
+```text
 Usage: atl jira permission-scheme get [OPTIONS] <ID>
 ```
 
@@ -10787,7 +11258,7 @@ Create
 
 **Usage**
 
-```
+```text
 Usage: atl jira permission-scheme create [OPTIONS] --name <NAME>
 ```
 
@@ -10813,7 +11284,7 @@ Update
 
 **Usage**
 
-```
+```text
 Usage: atl jira permission-scheme update [OPTIONS] <ID>
 ```
 
@@ -10840,7 +11311,7 @@ Delete
 
 **Usage**
 
-```
+```text
 Usage: atl jira permission-scheme delete [OPTIONS] <ID>
 ```
 
@@ -10865,7 +11336,7 @@ Notification scheme management
 
 **Usage**
 
-```
+```text
 Usage: atl jira notification-scheme [OPTIONS] <COMMAND>
 ```
 
@@ -10897,7 +11368,7 @@ List all
 
 **Usage**
 
-```
+```text
 Usage: atl jira notification-scheme list [OPTIONS]
 ```
 
@@ -10921,7 +11392,7 @@ Get by ID
 
 **Usage**
 
-```
+```text
 Usage: atl jira notification-scheme get [OPTIONS] <ID>
 ```
 
@@ -10946,7 +11417,7 @@ Create
 
 **Usage**
 
-```
+```text
 Usage: atl jira notification-scheme create [OPTIONS] --name <NAME>
 ```
 
@@ -10972,7 +11443,7 @@ Update
 
 **Usage**
 
-```
+```text
 Usage: atl jira notification-scheme update [OPTIONS] <ID>
 ```
 
@@ -10999,7 +11470,7 @@ Delete
 
 **Usage**
 
-```
+```text
 Usage: atl jira notification-scheme delete [OPTIONS] <ID>
 ```
 
@@ -11024,7 +11495,7 @@ Issue security scheme management
 
 **Usage**
 
-```
+```text
 Usage: atl jira issue-security-scheme [OPTIONS] <COMMAND>
 ```
 
@@ -11056,7 +11527,7 @@ List all
 
 **Usage**
 
-```
+```text
 Usage: atl jira issue-security-scheme list [OPTIONS]
 ```
 
@@ -11080,7 +11551,7 @@ Get by ID
 
 **Usage**
 
-```
+```text
 Usage: atl jira issue-security-scheme get [OPTIONS] <ID>
 ```
 
@@ -11105,7 +11576,7 @@ Create
 
 **Usage**
 
-```
+```text
 Usage: atl jira issue-security-scheme create [OPTIONS] --name <NAME>
 ```
 
@@ -11131,7 +11602,7 @@ Update
 
 **Usage**
 
-```
+```text
 Usage: atl jira issue-security-scheme update [OPTIONS] <ID>
 ```
 
@@ -11158,7 +11629,7 @@ Delete
 
 **Usage**
 
-```
+```text
 Usage: atl jira issue-security-scheme delete [OPTIONS] <ID>
 ```
 
@@ -11183,7 +11654,7 @@ Field configuration management
 
 **Usage**
 
-```
+```text
 Usage: atl jira field-config [OPTIONS] <COMMAND>
 ```
 
@@ -11214,7 +11685,7 @@ List all
 
 **Usage**
 
-```
+```text
 Usage: atl jira field-config list [OPTIONS]
 ```
 
@@ -11238,7 +11709,7 @@ Get by ID
 
 **Usage**
 
-```
+```text
 Usage: atl jira field-config get [OPTIONS] <ID>
 ```
 
@@ -11263,7 +11734,7 @@ Create
 
 **Usage**
 
-```
+```text
 Usage: atl jira field-config create [OPTIONS] --name <NAME>
 ```
 
@@ -11289,7 +11760,7 @@ Delete
 
 **Usage**
 
-```
+```text
 Usage: atl jira field-config delete [OPTIONS] <ID>
 ```
 
@@ -11314,7 +11785,7 @@ Issue type scheme management
 
 **Usage**
 
-```
+```text
 Usage: atl jira issue-type-scheme [OPTIONS] <COMMAND>
 ```
 
@@ -11346,7 +11817,7 @@ List issue type schemes
 
 **Usage**
 
-```
+```text
 Usage: atl jira issue-type-scheme list [OPTIONS]
 ```
 
@@ -11370,7 +11841,7 @@ Get an issue type scheme by ID
 
 **Usage**
 
-```
+```text
 Usage: atl jira issue-type-scheme get [OPTIONS] <ID>
 ```
 
@@ -11395,7 +11866,7 @@ Create an issue type scheme
 
 **Usage**
 
-```
+```text
 Usage: atl jira issue-type-scheme create [OPTIONS] --name <NAME>
 ```
 
@@ -11422,7 +11893,7 @@ Update an issue type scheme
 
 **Usage**
 
-```
+```text
 Usage: atl jira issue-type-scheme update [OPTIONS] <ID>
 ```
 
@@ -11449,7 +11920,7 @@ Delete an issue type scheme
 
 **Usage**
 
-```
+```text
 Usage: atl jira issue-type-scheme delete [OPTIONS] <ID>
 ```
 
@@ -11474,7 +11945,7 @@ Standalone role management
 
 **Usage**
 
-```
+```text
 Usage: atl jira role [OPTIONS] <COMMAND>
 ```
 
@@ -11505,7 +11976,7 @@ List all roles
 
 **Usage**
 
-```
+```text
 Usage: atl jira role list [OPTIONS]
 ```
 
@@ -11529,7 +12000,7 @@ Get a role by ID
 
 **Usage**
 
-```
+```text
 Usage: atl jira role get [OPTIONS] <ID>
 ```
 
@@ -11554,7 +12025,7 @@ Create a role
 
 **Usage**
 
-```
+```text
 Usage: atl jira role create [OPTIONS] --name <NAME>
 ```
 
@@ -11580,7 +12051,7 @@ Delete a role
 
 **Usage**
 
-```
+```text
 Usage: atl jira role delete [OPTIONS] <ID>
 ```
 
@@ -11605,7 +12076,7 @@ Announcement banner
 
 **Usage**
 
-```
+```text
 Usage: atl jira banner [OPTIONS] <COMMAND>
 ```
 
@@ -11634,7 +12105,7 @@ Get the announcement banner
 
 **Usage**
 
-```
+```text
 Usage: atl jira banner get [OPTIONS]
 ```
 
@@ -11658,7 +12129,7 @@ Set the announcement banner
 
 **Usage**
 
-```
+```text
 Usage: atl jira banner set [OPTIONS] --message <MESSAGE>
 ```
 
@@ -11685,7 +12156,7 @@ View system configuration
 
 **Usage**
 
-```
+```text
 Usage: atl jira configuration [OPTIONS]
 ```
 
@@ -11709,7 +12180,7 @@ Async task management
 
 **Usage**
 
-```
+```text
 Usage: atl jira task [OPTIONS] <COMMAND>
 ```
 
@@ -11738,7 +12209,7 @@ Get an async task by ID
 
 **Usage**
 
-```
+```text
 Usage: atl jira task get [OPTIONS] <ID>
 ```
 
@@ -11763,7 +12234,7 @@ Cancel an async task
 
 **Usage**
 
-```
+```text
 Usage: atl jira task cancel [OPTIONS] <ID>
 ```
 
@@ -11788,7 +12259,7 @@ Attachment administration
 
 **Usage**
 
-```
+```text
 Usage: atl jira attachment [OPTIONS] <COMMAND>
 ```
 
@@ -11818,7 +12289,7 @@ Get an attachment by ID
 
 **Usage**
 
-```
+```text
 Usage: atl jira attachment get [OPTIONS] <ID>
 ```
 
@@ -11843,7 +12314,7 @@ Delete an attachment
 
 **Usage**
 
-```
+```text
 Usage: atl jira attachment delete [OPTIONS] <ID>
 ```
 
@@ -11868,7 +12339,7 @@ Get attachment upload metadata/settings
 
 **Usage**
 
-```
+```text
 Usage: atl jira attachment meta [OPTIONS]
 ```
 
@@ -11892,7 +12363,7 @@ Project category management
 
 **Usage**
 
-```
+```text
 Usage: atl jira project-category [OPTIONS] <COMMAND>
 ```
 
@@ -11924,7 +12395,7 @@ List project categories
 
 **Usage**
 
-```
+```text
 Usage: atl jira project-category list [OPTIONS]
 ```
 
@@ -11948,7 +12419,7 @@ Get a project category by ID
 
 **Usage**
 
-```
+```text
 Usage: atl jira project-category get [OPTIONS] <ID>
 ```
 
@@ -11973,7 +12444,7 @@ Create a project category
 
 **Usage**
 
-```
+```text
 Usage: atl jira project-category create [OPTIONS] --name <NAME>
 ```
 
@@ -11999,7 +12470,7 @@ Update a project category
 
 **Usage**
 
-```
+```text
 Usage: atl jira project-category update [OPTIONS] <ID>
 ```
 
@@ -12026,7 +12497,7 @@ Delete a project category
 
 **Usage**
 
-```
+```text
 Usage: atl jira project-category delete [OPTIONS] <ID>
 ```
 
@@ -12051,7 +12522,7 @@ Show server information
 
 **Usage**
 
-```
+```text
 Usage: atl jira server-info [OPTIONS]
 ```
 
@@ -12075,7 +12546,7 @@ Webhook management
 
 **Usage**
 
-```
+```text
 Usage: atl jira webhook [OPTIONS] <COMMAND>
 ```
 
@@ -12106,7 +12577,7 @@ List webhooks
 
 **Usage**
 
-```
+```text
 Usage: atl jira webhook list [OPTIONS]
 ```
 
@@ -12130,7 +12601,7 @@ Get a webhook by ID
 
 **Usage**
 
-```
+```text
 Usage: atl jira webhook get [OPTIONS] <ID>
 ```
 
@@ -12155,7 +12626,7 @@ Create a webhook
 
 **Usage**
 
-```
+```text
 Usage: atl jira webhook create [OPTIONS] --name <NAME> --url <URL> --events <EVENTS>
 ```
 
@@ -12183,7 +12654,7 @@ Delete a webhook
 
 **Usage**
 
-```
+```text
 Usage: atl jira webhook delete [OPTIONS] <ID>
 ```
 
@@ -12208,7 +12679,7 @@ View audit records
 
 **Usage**
 
-```
+```text
 Usage: atl jira audit-records [OPTIONS]
 ```
 
@@ -12237,7 +12708,7 @@ List all permissions
 
 **Usage**
 
-```
+```text
 Usage: atl jira permissions [OPTIONS]
 ```
 
@@ -12261,7 +12732,7 @@ List my permissions
 
 **Usage**
 
-```
+```text
 Usage: atl jira my-permissions [OPTIONS]
 ```
 
@@ -12285,7 +12756,7 @@ List all labels
 
 **Usage**
 
-```
+```text
 Usage: atl jira labels [OPTIONS]
 ```
 
@@ -12311,7 +12782,7 @@ Bulk create issues from a JSON array
 
 **Usage**
 
-```
+```text
 Usage: atl jira bulk-create [OPTIONS] --input <INPUT>
 ```
 
@@ -12336,7 +12807,7 @@ Archive one or more issues
 
 **Usage**
 
-```
+```text
 Usage: atl jira archive [OPTIONS] <KEYS>...
 ```
 
@@ -12361,7 +12832,7 @@ Unarchive one or more issues
 
 **Usage**
 
-```
+```text
 Usage: atl jira unarchive [OPTIONS] <KEYS>...
 ```
 
@@ -12380,13 +12851,279 @@ Usage: atl jira unarchive [OPTIONS] <KEYS>...
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
 - `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
+#### atl jira issue
+
+Issue subcommands (check field completeness, …)
+
+**Usage**
+
+```text
+Usage: atl jira issue [OPTIONS] <COMMAND>
+```
+
+**Options**
+
+- `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
+- `--quiet, -q` — Suppress all output except errors
+- `--config` — Path to configuration file
+- `--profile, -p` — Profile name to use
+- `--format, -F` — Output format
+- `--no-color` — Disable colored output
+- `--no-pager` — Do not pipe long output through a pager
+- `--jq` — Query output with a jq expression
+- `--template` — Format output with a minijinja template
+- `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
+
+**Subcommands**
+
+- `check` — Verify an issue has values for required/warning fields
+
+##### atl jira issue check
+
+Verify an issue has values for required/warning fields
+
+**Usage**
+
+```text
+Usage: atl jira issue check [OPTIONS] <KEY>
+```
+
+**Options**
+
+- `<KEY>` — Issue key (e.g. PROJ-123)
+- `--require` — Field that must be set; missing fails the command. Repeatable; comma-lists allowed
+- `--warn` — Field reported as a warning when missing (never fails). Repeatable; comma-lists allowed
+- `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
+- `--quiet, -q` — Suppress all output except errors
+- `--config` — Path to configuration file
+- `--profile, -p` — Profile name to use
+- `--format, -F` — Output format
+- `--no-color` — Disable colored output
+- `--no-pager` — Do not pipe long output through a pager
+- `--jq` — Query output with a jq expression
+- `--template` — Format output with a minijinja template
+- `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
+
+#### atl jira automation
+
+Manage Jira Cloud automation rules
+
+**Usage**
+
+```text
+Usage: atl jira automation [OPTIONS] <COMMAND>
+```
+
+**Options**
+
+- `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
+- `--quiet, -q` — Suppress all output except errors
+- `--config` — Path to configuration file
+- `--profile, -p` — Profile name to use
+- `--format, -F` — Output format
+- `--no-color` — Disable colored output
+- `--no-pager` — Do not pipe long output through a pager
+- `--jq` — Query output with a jq expression
+- `--template` — Format output with a minijinja template
+- `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
+
+**Subcommands**
+
+- `list` — List automation rules
+- `get` — Get full definition of a rule by UUID
+- `create` — Create a new rule from a JSON body (`<literal>`, `@file`, or `-` for stdin)
+- `update` — Update an existing rule with a JSON body
+- `enable` — Enable a rule
+- `disable` — Disable a rule
+- `delete` — Delete a rule (must be disabled first per Atlassian)
+
+##### atl jira automation list
+
+List automation rules
+
+**Usage**
+
+```text
+Usage: atl jira automation list [OPTIONS]
+```
+
+**Options**
+
+- `--limit, -l` — Max results per page
+- `--cursor` — Pagination cursor returned by a previous `list` call
+- `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
+- `--quiet, -q` — Suppress all output except errors
+- `--config` — Path to configuration file
+- `--profile, -p` — Profile name to use
+- `--format, -F` — Output format
+- `--no-color` — Disable colored output
+- `--no-pager` — Do not pipe long output through a pager
+- `--jq` — Query output with a jq expression
+- `--template` — Format output with a minijinja template
+- `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
+
+##### atl jira automation get
+
+Get full definition of a rule by UUID
+
+**Usage**
+
+```text
+Usage: atl jira automation get [OPTIONS] <UUID>
+```
+
+**Options**
+
+- `<UUID>` — Rule UUID
+- `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
+- `--quiet, -q` — Suppress all output except errors
+- `--config` — Path to configuration file
+- `--profile, -p` — Profile name to use
+- `--format, -F` — Output format
+- `--no-color` — Disable colored output
+- `--no-pager` — Do not pipe long output through a pager
+- `--jq` — Query output with a jq expression
+- `--template` — Format output with a minijinja template
+- `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
+
+##### atl jira automation create
+
+Create a new rule from a JSON body (`<literal>`, `@file`, or `-` for stdin)
+
+**Usage**
+
+```text
+Usage: atl jira automation create [OPTIONS] --body <BODY>
+```
+
+**Options**
+
+- `--body, -b` — JSON rule definition. Literal string, `@path/to/file.json`, or `-` for stdin
+- `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
+- `--quiet, -q` — Suppress all output except errors
+- `--config` — Path to configuration file
+- `--profile, -p` — Profile name to use
+- `--format, -F` — Output format
+- `--no-color` — Disable colored output
+- `--no-pager` — Do not pipe long output through a pager
+- `--jq` — Query output with a jq expression
+- `--template` — Format output with a minijinja template
+- `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
+
+##### atl jira automation update
+
+Update an existing rule with a JSON body
+
+**Usage**
+
+```text
+Usage: atl jira automation update [OPTIONS] --body <BODY> <UUID>
+```
+
+**Options**
+
+- `<UUID>` — Rule UUID
+- `--body, -b` — JSON rule definition. Literal string, `@path/to/file.json`, or `-` for stdin
+- `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
+- `--quiet, -q` — Suppress all output except errors
+- `--config` — Path to configuration file
+- `--profile, -p` — Profile name to use
+- `--format, -F` — Output format
+- `--no-color` — Disable colored output
+- `--no-pager` — Do not pipe long output through a pager
+- `--jq` — Query output with a jq expression
+- `--template` — Format output with a minijinja template
+- `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
+
+##### atl jira automation enable
+
+Enable a rule
+
+**Usage**
+
+```text
+Usage: atl jira automation enable [OPTIONS] <UUID>
+```
+
+**Options**
+
+- `<UUID>` — Rule UUID
+- `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
+- `--quiet, -q` — Suppress all output except errors
+- `--config` — Path to configuration file
+- `--profile, -p` — Profile name to use
+- `--format, -F` — Output format
+- `--no-color` — Disable colored output
+- `--no-pager` — Do not pipe long output through a pager
+- `--jq` — Query output with a jq expression
+- `--template` — Format output with a minijinja template
+- `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
+
+##### atl jira automation disable
+
+Disable a rule
+
+**Usage**
+
+```text
+Usage: atl jira automation disable [OPTIONS] <UUID>
+```
+
+**Options**
+
+- `<UUID>` — Rule UUID
+- `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
+- `--quiet, -q` — Suppress all output except errors
+- `--config` — Path to configuration file
+- `--profile, -p` — Profile name to use
+- `--format, -F` — Output format
+- `--no-color` — Disable colored output
+- `--no-pager` — Do not pipe long output through a pager
+- `--jq` — Query output with a jq expression
+- `--template` — Format output with a minijinja template
+- `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
+
+##### atl jira automation delete
+
+Delete a rule (must be disabled first per Atlassian)
+
+**Usage**
+
+```text
+Usage: atl jira automation delete [OPTIONS] <UUID>
+```
+
+**Options**
+
+- `<UUID>` — Rule UUID
+- `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
+- `--quiet, -q` — Suppress all output except errors
+- `--config` — Path to configuration file
+- `--profile, -p` — Profile name to use
+- `--format, -F` — Output format
+- `--no-color` — Disable colored output
+- `--no-pager` — Do not pipe long output through a pager
+- `--jq` — Query output with a jq expression
+- `--template` — Format output with a minijinja template
+- `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
+
 ### atl init
 
 Initialize configuration file
 
 **Usage**
 
-```
+```text
 Usage: atl init [OPTIONS]
 ```
 
@@ -12410,7 +13147,7 @@ Manage configuration profiles
 
 **Usage**
 
-```
+```text
 Usage: atl config [OPTIONS] <COMMAND>
 ```
 
@@ -12442,7 +13179,7 @@ List all profiles
 
 **Usage**
 
-```
+```text
 Usage: atl config list [OPTIONS]
 ```
 
@@ -12466,7 +13203,7 @@ Show profile details
 
 **Usage**
 
-```
+```text
 Usage: atl config show [OPTIONS] [NAME]
 ```
 
@@ -12491,7 +13228,7 @@ Delete a profile
 
 **Usage**
 
-```
+```text
 Usage: atl config delete [OPTIONS] <NAME>
 ```
 
@@ -12516,7 +13253,7 @@ Set the default profile
 
 **Usage**
 
-```
+```text
 Usage: atl config set-default [OPTIONS] <NAME>
 ```
 
@@ -12541,7 +13278,7 @@ Set default project/workspace for a profile
 
 **Usage**
 
-```
+```text
 Usage: atl config set-defaults [OPTIONS] <--project <PROJECT>|--space <SPACE>> [PROFILE]
 ```
 
@@ -12567,7 +13304,7 @@ Generate shell completion scripts
 
 **Usage**
 
-```
+```text
 Usage: atl completions [OPTIONS] <SHELL>
 ```
 
@@ -12592,7 +13329,7 @@ Manage the atl binary itself (check/update)
 
 **Usage**
 
-```
+```text
 Usage: atl self [OPTIONS] <COMMAND>
 ```
 
@@ -12621,7 +13358,7 @@ Check for a newer release without downloading
 
 **Usage**
 
-```
+```text
 Usage: atl self check [OPTIONS]
 ```
 
@@ -12645,7 +13382,7 @@ Download and replace the current binary with the latest release
 
 **Usage**
 
-```
+```text
 Usage: atl self update [OPTIONS]
 ```
 
@@ -12671,7 +13408,7 @@ Make an authenticated REST request against Confluence or Jira
 
 **Usage**
 
-```
+```text
 Usage: atl api [OPTIONS] --service <SERVICE> <ENDPOINT>
 ```
 
@@ -12706,7 +13443,7 @@ Open a Confluence page or Jira issue in the default browser
 
 **Usage**
 
-```
+```text
 Usage: atl browse [OPTIONS] <TARGET>
 ```
 
@@ -12732,7 +13469,7 @@ Manage user-defined command aliases
 
 **Usage**
 
-```
+```text
 Usage: atl alias [OPTIONS] <COMMAND>
 ```
 
@@ -12762,7 +13499,7 @@ Create or update an alias
 
 **Usage**
 
-```
+```text
 Usage: atl alias set [OPTIONS] <NAME> <EXPANSION>
 ```
 
@@ -12788,7 +13525,7 @@ List all configured aliases
 
 **Usage**
 
-```
+```text
 Usage: atl alias list [OPTIONS]
 ```
 
@@ -12812,7 +13549,7 @@ Delete an alias
 
 **Usage**
 
-```
+```text
 Usage: atl alias delete [OPTIONS] <NAME>
 ```
 
@@ -12837,7 +13574,7 @@ Manage authentication — login, logout, status, token
 
 **Usage**
 
-```
+```text
 Usage: atl auth [OPTIONS] <COMMAND>
 ```
 
@@ -12868,7 +13605,7 @@ Log in to Confluence or Jira and store the token in the OS keyring
 
 **Usage**
 
-```
+```text
 Usage: atl auth login [OPTIONS]
 ```
 
@@ -12898,7 +13635,7 @@ Remove stored credentials for a profile/service
 
 **Usage**
 
-```
+```text
 Usage: atl auth logout [OPTIONS]
 ```
 
@@ -12923,7 +13660,7 @@ Show which profiles/services are authenticated
 
 **Usage**
 
-```
+```text
 Usage: atl auth status [OPTIONS]
 ```
 
@@ -12948,7 +13685,7 @@ Print the resolved API token to stdout
 
 **Usage**
 
-```
+```text
 Usage: atl auth token [OPTIONS]
 ```
 

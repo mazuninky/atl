@@ -1,0 +1,14 @@
+target
+dist
+.git
+.github
+.claude
+docs
+tests
+README.md
+CHANGELOG.md
+*.md
+.editorconfig
+.gitignore
+lefthook.yml
+scripts

@@ -83,6 +83,11 @@ pub struct ApiArgs {
     #[arg(long)]
     pub paginate: bool,
 
+    /// Maximum number of pages to fetch when --paginate is set. Defaults to
+    /// 1000. Use 0 for no limit (not recommended).
+    #[arg(long, value_name = "N", default_value_t = 1000)]
+    pub max_pages: u32,
+
     /// Print the constructed request to stderr and exit without sending.
     #[arg(long)]
     pub preview: bool,

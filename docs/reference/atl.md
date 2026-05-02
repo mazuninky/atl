@@ -12677,6 +12677,7 @@ Usage: atl api [OPTIONS] --service <SERVICE> <ENDPOINT>
 - `--input` — Read the request body verbatim from a file, or `-` for stdin. Mutually exclusive with `--field` / `--raw-field`
 - `--query` — Query parameter in the form `KEY=VALUE`. Repeatable. No short form because `-q` is reserved for `--quiet`
 - `--paginate` — Auto-follow pagination until the server reports no more pages
+- `--max-pages` — Maximum number of pages to fetch when --paginate is set. Defaults to 1000. Use 0 for no limit (not recommended)
 - `--preview` — Print the constructed request to stderr and exit without sending
 - `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
 - `--quiet, -q` — Suppress all output except errors

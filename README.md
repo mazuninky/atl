@@ -37,6 +37,16 @@ sudo install -m 0755 atl /usr/local/bin/atl
 
 Prebuilt artifacts are available for Linux (x86_64), macOS (arm64), and Windows (x86_64). On Windows, download from the [releases page](https://github.com/mazuninky/atl/releases/latest) manually and verify with `gh attestation verify` the same way.
 
+### Homebrew (macOS arm64, Linux x86_64)
+
+A Homebrew tap is published at [`mazuninky/homebrew-tap`](https://github.com/mazuninky/homebrew-tap). The formula installs the binary, man pages, and shell completions for `bash`, `zsh`, and `fish`:
+
+```sh
+brew install mazuninky/tap/atl
+```
+
+The formula tracks the latest release and is bumped automatically by the release workflow. When installed through Homebrew, `atl self update` is disabled by design — use `brew upgrade atl` instead.
+
 ### Quick install via the install script
 
 For convenience on a trusted workstation, [`scripts/install.sh`](scripts/install.sh) automates download + checksum verification + extraction. **Note:** this pattern pipes a remote shell script into `sh` and executes it with your user's privileges. Pin to a specific version, or review the script first, before running on any machine that handles secrets:
@@ -170,7 +180,29 @@ atl api --service jira -X POST rest/api/2/issue \
 
 ## Use in GitHub Actions
 
-Each release publishes a multi-arch image (`linux/amd64`, `linux/arm64`) to GHCR with build provenance and SBOM attached, and a separate signed [build provenance attestation](https://docs.github.com/en/actions/security-for-github-actions/using-artifact-attestations) issued through GitHub. Pin by digest for reproducibility:
+### `setup-atl` action
+
+The fastest way to use `atl` from a workflow is the [`mazuninky/setup-atl`](https://github.com/mazuninky/setup-atl) action, which downloads the right release asset for the runner, verifies its SHA256, and adds the binary to `PATH`:
+
+```yaml
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: mazuninky/setup-atl@v1
+        with:
+          version: latest          # or pin: "2026.18.4"
+      - run: atl jira search "assignee = currentUser() AND status = Open" -F json
+        env:
+          ATL_API_TOKEN: ${{ secrets.ATL_TOKEN }}
+          ATL_PROFILE: work
+```
+
+Supports `ubuntu-*` (x86_64), `macos-*` (arm64), and `windows-*` (x86_64). See the action's [README](https://github.com/mazuninky/setup-atl#readme) for inputs and outputs.
+
+### Container image
+
+Each release also publishes a multi-arch image (`linux/amd64`, `linux/arm64`) to GHCR with build provenance and SBOM attached, and a separate signed [build provenance attestation](https://docs.github.com/en/actions/security-for-github-actions/using-artifact-attestations) issued through GitHub. Pin by digest for reproducibility:
 
 ```yaml
 jobs:

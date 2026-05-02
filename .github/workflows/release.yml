@@ -178,3 +178,141 @@ jobs:
           files: |
             dist/atl-*
           fail_on_unmatched_files: true
+
+  bump-homebrew-tap:
+    name: bump-homebrew-tap
+    needs: [verify-version, release]
+    runs-on: ubuntu-latest
+    # Skipped automatically when HOMEBREW_TAP_TOKEN is unset (e.g. on a fork).
+    # The token must be a PAT (or fine-grained token) with `contents: write`
+    # and `pull-requests: write` scope on mazuninky/homebrew-tap.
+    if: ${{ !github.event.repository.fork }}
+    permissions:
+      contents: read
+    steps:
+      - name: Check token presence
+        id: gate
+        env:
+          TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "HOMEBREW_TAP_TOKEN not set — skipping homebrew-tap bump." >&2
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout homebrew-tap
+        if: steps.gate.outputs.skip != 'true'
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          repository: mazuninky/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: tap
+
+      - name: Fetch release sha256 sidecars
+        if: steps.gate.outputs.skip != 'true'
+        env:
+          VERSION: ${{ needs.verify-version.outputs.version }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          mkdir -p shasums
+          for target in aarch64-apple-darwin x86_64-unknown-linux-gnu; do
+            asset="atl-${VERSION}-${target}.tar.gz.sha256"
+            gh release download "v${VERSION}" \
+              --repo "${GH_REPO}" \
+              --pattern "${asset}" \
+              --dir shasums
+            # Sidecar layout: "<sha>  <filename>". Validate format defensively.
+            line=$(cat "shasums/${asset}")
+            sha=$(printf '%s\n' "$line" | awk '{print $1}')
+            if ! printf '%s' "$sha" | grep -Eq '^[0-9a-f]{64}$'; then
+              echo "::error::Unexpected sha256 sidecar format for ${asset}: $line" >&2
+              exit 1
+            fi
+            printf '%s' "$sha" > "shasums/${target}.sha"
+          done
+
+      - name: Render formula
+        if: steps.gate.outputs.skip != 'true'
+        env:
+          VERSION: ${{ needs.verify-version.outputs.version }}
+        run: |
+          set -euo pipefail
+          DARWIN_SHA=$(cat shasums/aarch64-apple-darwin.sha)
+          LINUX_SHA=$(cat shasums/x86_64-unknown-linux-gnu.sha)
+          cat > tap/Formula/atl.rb <<EOF
+          class Atl < Formula
+            desc "Unified CLI for Atlassian Jira & Confluence"
+            homepage "https://github.com/mazuninky/atl"
+            license "MIT"
+
+            on_macos do
+              on_arm do
+                url "https://github.com/mazuninky/atl/releases/download/v${VERSION}/atl-${VERSION}-aarch64-apple-darwin.tar.gz"
+                sha256 "${DARWIN_SHA}"
+              end
+            end
+
+            on_linux do
+              on_intel do
+                url "https://github.com/mazuninky/atl/releases/download/v${VERSION}/atl-${VERSION}-x86_64-unknown-linux-gnu.tar.gz"
+                sha256 "${LINUX_SHA}"
+              end
+            end
+
+            def install
+              bin.install "atl"
+              man1.install Dir["man/*.1"]
+              bash_completion.install "completions/atl.bash" => "atl"
+              zsh_completion.install "completions/_atl"
+              fish_completion.install "completions/atl.fish"
+            end
+
+            test do
+              assert_match version.to_s, shell_output("#{bin}/atl --version")
+            end
+          end
+          EOF
+
+      - name: Open pull request
+        if: steps.gate.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          VERSION: ${{ needs.verify-version.outputs.version }}
+          SOURCE_REPO: ${{ github.repository }}
+        working-directory: tap
+        run: |
+          set -euo pipefail
+          BRANCH="bump-atl-${VERSION}"
+          git config user.name "atl-release-bot"
+          git config user.email "atl-release-bot@users.noreply.github.com"
+
+          # Idempotency: if a previous run already pushed this branch, reset it
+          # to the current master and replay the formula change on top.
+          git fetch origin "${BRANCH}" 2>/dev/null || true
+          git checkout -B "${BRANCH}"
+
+          git add Formula/atl.rb
+          if git diff --cached --quiet; then
+            echo "Formula already at v${VERSION}; nothing to do."
+            exit 0
+          fi
+
+          git commit -m "atl ${VERSION}"
+          git push --force-with-lease origin "${BRANCH}"
+
+          BODY=$(printf 'Auto-generated bump for atl %s.\n\nRelease: https://github.com/%s/releases/tag/v%s' \
+            "${VERSION}" "${SOURCE_REPO}" "${VERSION}")
+
+          if existing=$(gh pr view "${BRANCH}" --json number --jq '.number' 2>/dev/null); then
+            gh pr edit "${existing}" --title "atl ${VERSION}" --body "${BODY}"
+          else
+            gh pr create \
+              --title "atl ${VERSION}" \
+              --body "${BODY}" \
+              --base master \
+              --head "${BRANCH}"
+          fi

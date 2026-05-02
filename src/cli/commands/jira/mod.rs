@@ -91,17 +91,27 @@ fn assert_adf_supported(flavor: JiraFlavor, body: &JiraBodyContent) -> anyhow::R
     Ok(())
 }
 
-/// Map a read-side [`JiraBodyFormat`] to the [`JiraApiVersion`] the client
-/// must call to fetch a body in that format.
+/// Map a read-side [`JiraBodyFormat`] (plus deployment flavor) to the
+/// [`JiraApiVersion`] the client must call to fetch a body in that format.
 ///
-/// `Adf` requires v3 (Cloud only); `Wiki` and `Markdown` both fetch wiki text
-/// from v2 — `Markdown` then runs the result through `wiki_to_markdown` (or
-/// `adf_to_markdown` when the description field comes back as an ADF object,
-/// which can happen on Cloud regardless of API version).
-fn read_api_version_for(fmt: JiraBodyFormat) -> JiraApiVersion {
-    match fmt {
-        JiraBodyFormat::Adf => JiraApiVersion::V3,
-        JiraBodyFormat::Wiki | JiraBodyFormat::Markdown => JiraApiVersion::V2,
+/// Routing decisions:
+///
+/// - `Adf` always picks v3 (Cloud only — see [`assert_adf_read_supported`]).
+/// - `Wiki` always picks v2 (the wiki dialect lives there on every flavor).
+/// - `Markdown` on Cloud picks v3 so the body comes back as canonical ADF and
+///   we can convert via `adf_to_markdown`. Cloud's v2 endpoint downgrades ADF
+///   to a non-standard wiki dialect (loses panel `panelType`, encodes status
+///   colours as `{color:#…}*[ … ]*{color}`, sometimes emits inline
+///   single-line `{code:…}…{code}`), and `wiki_to_markdown` then has to
+///   reverse-engineer the intent. Going through v3 sidesteps the lossy hop.
+/// - `Markdown` on Data Center / Server stays on v2 — v3 isn't available
+///   there, and DC's v2 wiki output is the canonical wiki dialect that
+///   `wiki_to_markdown` was originally written against.
+fn read_api_version_for(fmt: JiraBodyFormat, flavor: JiraFlavor) -> JiraApiVersion {
+    match (fmt, flavor) {
+        (JiraBodyFormat::Adf, _) => JiraApiVersion::V3,
+        (JiraBodyFormat::Markdown, JiraFlavor::Cloud) => JiraApiVersion::V3,
+        (JiraBodyFormat::Markdown, _) | (JiraBodyFormat::Wiki, _) => JiraApiVersion::V2,
     }
 }
 
@@ -823,7 +833,7 @@ async fn dispatch(
         }
         JiraSubcommand::View(args) => {
             assert_adf_read_supported(client.flavor(), args.body_format)?;
-            let api_version = read_api_version_for(args.body_format);
+            let api_version = read_api_version_for(args.body_format, client.flavor());
             let mut value = client.get_issue(&args.key, &[], api_version).await?;
             convert_issue_bodies(&mut value, args.body_format, !args.no_directives)?;
             if matches!(format, OutputFormat::Console) {
@@ -894,14 +904,14 @@ async fn dispatch(
         }
         JiraSubcommand::Comments(args) => {
             assert_adf_read_supported(client.flavor(), args.body_format)?;
-            let api_version = read_api_version_for(args.body_format);
+            let api_version = read_api_version_for(args.body_format, client.flavor());
             let mut value = client.list_comments(&args.key, api_version).await?;
             convert_comments_bodies(&mut value, args.body_format, !args.no_directives)?;
             value
         }
         JiraSubcommand::CommentGet(args) => {
             assert_adf_read_supported(client.flavor(), args.body_format)?;
-            let api_version = read_api_version_for(args.body_format);
+            let api_version = read_api_version_for(args.body_format, client.flavor());
             let mut value = client
                 .get_comment(&args.key, &args.comment_id, api_version)
                 .await?;
@@ -1587,21 +1597,48 @@ mod tests {
     }
 
     #[test]
-    fn read_api_version_wiki_and_markdown_use_v2() {
+    fn read_api_version_wiki_uses_v2_on_both_flavors() {
         assert_eq!(
-            read_api_version_for(JiraBodyFormat::Wiki),
+            read_api_version_for(JiraBodyFormat::Wiki, JiraFlavor::Cloud),
             JiraApiVersion::V2
         );
         assert_eq!(
-            read_api_version_for(JiraBodyFormat::Markdown),
+            read_api_version_for(JiraBodyFormat::Wiki, JiraFlavor::DataCenter),
             JiraApiVersion::V2
         );
     }
 
     #[test]
-    fn read_api_version_adf_uses_v3() {
+    fn default_markdown_on_cloud_reads_via_v3_adf() {
+        // On Cloud the default Markdown read goes through v3 (ADF) so the
+        // body is canonical ADF rather than Cloud's lossy v2 wiki downgrade.
+        // See `read_api_version_for` doc-comment for the full rationale.
         assert_eq!(
-            read_api_version_for(JiraBodyFormat::Adf),
+            read_api_version_for(JiraBodyFormat::Markdown, JiraFlavor::Cloud),
+            JiraApiVersion::V3
+        );
+    }
+
+    #[test]
+    fn default_markdown_on_server_reads_via_v2_wiki() {
+        // Data Center / Server has no v3 endpoint, so Markdown stays on v2.
+        assert_eq!(
+            read_api_version_for(JiraBodyFormat::Markdown, JiraFlavor::DataCenter),
+            JiraApiVersion::V2
+        );
+    }
+
+    #[test]
+    fn body_format_adf_picks_v3_regardless_of_flavor() {
+        // The dispatcher decision itself is flavor-independent for ADF;
+        // `assert_adf_read_supported` is the layer that rejects ADF on DC
+        // before this routing call ever happens.
+        assert_eq!(
+            read_api_version_for(JiraBodyFormat::Adf, JiraFlavor::Cloud),
+            JiraApiVersion::V3
+        );
+        assert_eq!(
+            read_api_version_for(JiraBodyFormat::Adf, JiraFlavor::DataCenter),
             JiraApiVersion::V3
         );
     }

@@ -198,6 +198,14 @@ fn consume_one_block(lines: &[&str], i: usize, out: &mut Vec<Block>) -> usize {
         return i + 1;
     }
 
+    // Inline single-line `{code[:lang]}content{code}` form (Cloud sometimes
+    // emits this when downgrading ADF code blocks to wiki). Must be checked
+    // before `parse_code_open` because the inline form has trailing content
+    // on the same line as the opening token.
+    if let Some((lang, body)) = parse_inline_code_block(line) {
+        out.push(Block::Code { lang, body });
+        return i + 1;
+    }
     // {code} / {code:lang}
     if let Some(lang) = parse_code_open(line) {
         return consume_code_block(lines, i + 1, lang, out);
@@ -210,9 +218,9 @@ fn consume_one_block(lines: &[&str], i: usize, out: &mut Vec<Block>) -> usize {
     if line.trim() == "{quote}" {
         return consume_quote_block(lines, i + 1, out);
     }
-    // {name} / {name:params} for paired block macros (info/warning/note/tip)
+    // {name} / {name:params} for paired block macros (info/warning/note/tip/panel)
     if let Some((name, params, _)) = parse_macro_open(line) {
-        if matches!(name.as_str(), "info" | "warning" | "note" | "tip") {
+        if matches!(name.as_str(), "info" | "warning" | "note" | "tip" | "panel") {
             return consume_macro_block(lines, i + 1, name, params, out);
         }
         if name == "toc" {
@@ -287,6 +295,85 @@ fn parse_code_open(line: &str) -> Option<Option<String>> {
         return Some(Some(lang));
     }
     None
+}
+
+/// Detect a one-line `{code[:lang]}body{code}` macro on the same line.
+///
+/// Cloud occasionally emits this single-line form when downgrading an ADF
+/// `codeBlock` to wiki text — instead of the conventional multi-line block:
+///
+/// ```text
+/// {code:python}
+/// print('x')
+/// {code}
+/// ```
+///
+/// it produces `{code:python}print('x'){code}` on one line. Returns the
+/// language (`None` when absent or `{code}body{code}`) and the trimmed
+/// body. Multi-line forms (where the close `{code}` is on a different line,
+/// or where the open token has trailing content but no close) return `None`
+/// so the multi-line walker handles them.
+fn parse_inline_code_block(line: &str) -> Option<(Option<String>, String)> {
+    let trimmed = line.trim();
+
+    // Find the open token boundary: either `{code}` immediately or
+    // `{code:...}` where `...` does not contain `}`.
+    let (lang, after_open_idx) = if let Some(rest) = trimmed.strip_prefix("{code}") {
+        (None, trimmed.len() - rest.len())
+    } else if let Some(rest) = trimmed.strip_prefix("{code:") {
+        let close = rest.find('}')?;
+        let raw_lang = &rest[..close];
+        let lang_str = raw_lang.split('|').next().unwrap_or("").trim().to_string();
+        let lang = if lang_str.is_empty() {
+            None
+        } else {
+            Some(lang_str)
+        };
+        // `{code:` is 6 bytes; +close+1 for the `}`.
+        (lang, 6 + close + 1)
+    } else {
+        return None;
+    };
+
+    let after_open = &trimmed[after_open_idx..];
+
+    // The body must end at the first `{code}` and the rest of the line must
+    // be empty / whitespace. If `{code}` is not on this line, we're in the
+    // multi-line case — return None and let `consume_code_block` handle it.
+    let close_idx = after_open.find("{code}")?;
+    let body = &after_open[..close_idx];
+    let after_close = &after_open[close_idx + "{code}".len()..];
+    if !after_close.trim().is_empty() {
+        return None;
+    }
+
+    // Reject the empty-body form `{code}{code}` — there's nothing to render
+    // and the multi-line walker handles `{code}\n{code}` more usefully.
+    if body.is_empty() {
+        return None;
+    }
+
+    Some((lang, body.trim().to_string()))
+}
+
+/// Map a Jira Cloud panel hex `bgColor` to the closest MyST directive name.
+///
+/// When Cloud Server-side downgrades an ADF `panel` node to wiki text it
+/// emits `{panel:bgColor=#XXXXXX}…{panel}` and loses the original
+/// `panelType`. We recover the intent by mapping the hex back to the
+/// directive name. Hex codes are case-insensitive — the caller does not
+/// need to lowercase before passing in.
+///
+/// Returns `None` for unknown colors so the caller can fall back to the
+/// raw `:::panel{bgColor="#…"}` form, which preserves the round-trip.
+fn panel_bgcolor_to_directive(hex: &str) -> Option<&'static str> {
+    match hex.to_ascii_lowercase().as_str() {
+        "#deebff" => Some("info"),
+        "#fffae6" | "#ffebe6" => Some("warning"),
+        "#e3fcef" => Some("tip"),
+        "#eae6ff" => Some("note"),
+        _ => None,
+    }
 }
 
 /// Parse a paired-macro open line `{name}` or `{name:k=v|k=v}`. Returns the
@@ -556,6 +643,7 @@ fn consume_paragraph(lines: &[&str], start: usize, out: &mut Vec<Block>) -> usiz
             && (parse_heading(line).is_some()
                 || is_horizontal_rule(line)
                 || parse_code_open(line).is_some()
+                || parse_inline_code_block(line).is_some()
                 || line.trim() == "{noformat}"
                 || line.trim() == "{quote}"
                 || is_table_line(line)
@@ -576,7 +664,10 @@ fn consume_paragraph(lines: &[&str], start: usize, out: &mut Vec<Block>) -> usiz
 
 fn is_block_macro_open(line: &str) -> bool {
     if let Some((name, _, _)) = parse_macro_open(line) {
-        matches!(name.as_str(), "info" | "warning" | "note" | "tip" | "toc")
+        matches!(
+            name.as_str(),
+            "info" | "warning" | "note" | "tip" | "panel" | "toc"
+        )
     } else {
         false
     }
@@ -796,14 +887,41 @@ fn render_macro_block(
         out.push('\n');
         return;
     }
+
+    // Cloud-after-ADF panel recovery: when we see a `panel` macro with a
+    // recognised `bgColor`, map it to the closest directive name and drop
+    // the now-redundant attribute. Unknown bgColors / no-attr panels fall
+    // through to the verbatim `:::panel{bgColor="…"}` form so a downstream
+    // md→storage/adf converter can still round-trip the raw color.
+    let (rendered_name, rendered_params): (&str, BTreeMap<String, String>) = if name == "panel" {
+        match params.get("bgColor").and_then(|h| {
+            // Only consider `bgColor` values that look like a hex code; an
+            // unrelated string value should not be mapped.
+            if h.starts_with('#') {
+                panel_bgcolor_to_directive(h)
+            } else {
+                None
+            }
+        }) {
+            Some(directive) => {
+                let mut filtered = params.clone();
+                filtered.remove("bgColor");
+                (directive, filtered)
+            }
+            None => ("panel", params.clone()),
+        }
+    } else {
+        (name, params.clone())
+    };
+
     let mut inner = String::new();
     render_blocks(body, &mut inner, opts);
     ensure_blank_line(out);
     out.push_str(":::");
-    out.push_str(name);
-    if !params.is_empty() {
+    out.push_str(rendered_name);
+    if !rendered_params.is_empty() {
         out.push(' ');
-        out.push_str(&render_attrs(params));
+        out.push_str(&render_attrs(&rendered_params));
     }
     out.push('\n');
     out.push_str(inner.trim_end_matches('\n'));
@@ -848,6 +966,18 @@ fn render_inline(text: &str, opts: &ConvertOpts) -> String {
             let body = &text[i + 2..end];
             out.push_str(&wrap_in_code_span(body));
             i = end + 2;
+            continue;
+        }
+
+        // Cloud-after-ADF status heuristic: `{color:#HHHHHH}*[ TEXT ]*{color}`
+        // — Cloud's ADF→wiki downgrade emits this for an ADF status node.
+        // Match the whole pattern before falling through to the regular
+        // `{color:…}` color macro (which we don't otherwise translate).
+        if b == b'{'
+            && let Some((rendered, consumed)) = try_parse_color_status_heuristic(&text[i..], opts)
+        {
+            out.push_str(&rendered);
+            i += consumed;
             continue;
         }
 
@@ -1182,6 +1312,103 @@ fn try_parse_inline_macro(text: &str, opts: &ConvertOpts) -> Option<(String, usi
     }
 
     None
+}
+
+/// Map a status-lozenge hex color to its conventional name.
+///
+/// Cloud's ADF→wiki downgrade emits a small set of fixed hex codes when it
+/// rasterises a status node. We map both the "primary" and "darker" variants
+/// of each Atlassian palette swatch back to the same name so the output is
+/// stable. Unknown hex codes return `None` and the caller preserves the raw
+/// hex as a quoted attr to keep the round-trip lossless.
+fn status_hex_to_color_name(hex: &str) -> Option<&'static str> {
+    match hex.to_ascii_lowercase().as_str() {
+        "#36b37e" | "#00875a" => Some("green"),
+        "#de350b" | "#bf2600" => Some("red"),
+        "#ff991f" | "#ff8b00" => Some("yellow"),
+        "#0052cc" | "#0747a6" => Some("blue"),
+        "#42526e" | "#7a869a" => Some("neutral"),
+        "#5243aa" | "#403294" => Some("purple"),
+        _ => None,
+    }
+}
+
+/// Recognise the literal `{color:#HHHHHH}*[ TEXT ]*{color}` pattern produced
+/// by Cloud's ADF→wiki downgrade for an ADF status node.
+///
+/// `text` must start with `{` (caller has already checked). The match has to
+/// be exact:
+///
+/// - Open: `{color:#HHHHHH}` where `HHHHHH` is exactly 6 hex digits.
+/// - Body: `*[ TEXT ]*` — bold around a bracketed label. Whitespace inside
+///   the brackets is allowed (the canonical Cloud emission has
+///   `[ DONE ]`); the brackets themselves are not optional.
+/// - Close: `{color}` immediately after the closing `*`.
+///
+/// Anything else returns `None` so a regular `{color:#xxx}plain text{color}`
+/// passage is left unchanged.
+fn try_parse_color_status_heuristic(text: &str, opts: &ConvertOpts) -> Option<(String, usize)> {
+    // Open: `{color:#HHHHHH}` — keep it strict so partial matches don't
+    // accidentally trigger.
+    let after_open_prefix = text.strip_prefix("{color:#")?;
+    let close_brace = after_open_prefix.find('}')?;
+    let hex_digits = &after_open_prefix[..close_brace];
+    if hex_digits.len() != 6 || !hex_digits.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return None;
+    }
+    let raw_hex = format!("#{hex_digits}");
+
+    // `{color:#xxxxxx}` — `{color:#` is 8 bytes plus the 6 digits and the
+    // closing `}`. The `?` prefix-strip already advanced past `{color:#`.
+    let open_len = "{color:#".len() + close_brace + 1;
+    let after_open = &text[open_len..];
+
+    // Body: `*[ ... ]*` with optional whitespace inside the brackets.
+    let after_bold_open = after_open.strip_prefix("*[")?;
+
+    // Close `]*{color}` — search for the closing `]*` followed by `{color}`.
+    let close_marker = "]*{color}";
+    // Find the first occurrence of `]*` that is followed by `{color}`. We
+    // scan rather than naively use `find("]*{color}")` so that an inner `]`
+    // that doesn't lead into `*{color}` doesn't break the match.
+    let mut search_from = 0;
+    let close_idx = loop {
+        let candidate = after_bold_open[search_from..].find("]*")?;
+        let abs = search_from + candidate;
+        if after_bold_open[abs..].starts_with(close_marker) {
+            break abs;
+        }
+        search_from = abs + 2;
+    };
+    let body = &after_bold_open[..close_idx];
+    // Body must NOT contain `\n` — keep the heuristic local to a single
+    // logical line so it doesn't accidentally swallow a paragraph.
+    if body.contains('\n') {
+        return None;
+    }
+    let trimmed = body.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    let consumed = open_len + "*[".len() + close_idx + close_marker.len();
+
+    if !opts.render_directives {
+        return Some((trimmed.to_string(), consumed));
+    }
+
+    let mut rendered = String::new();
+    rendered.push_str(":status[");
+    rendered.push_str(trimmed);
+    rendered.push(']');
+    if let Some(name) = status_hex_to_color_name(&raw_hex) {
+        let _ = write!(rendered, "{{color={name}}}");
+    } else {
+        // Preserve raw hex so a downstream md→storage/adf pipeline can
+        // still attempt a faithful round-trip.
+        let _ = write!(rendered, "{{color=\"{raw_hex}\"}}");
+    }
+    Some((rendered, consumed))
 }
 
 fn render_status(params: &BTreeMap<String, String>, opts: &ConvertOpts) -> String {
@@ -2073,5 +2300,178 @@ This is informational.
         assert!(out.contains("[docs](https://example.com)"), "got: {out:?}");
         assert!(out.contains(":::info"), "got: {out:?}");
         assert!(out.contains("This is informational."), "got: {out:?}");
+    }
+
+    // ---- Cloud-after-ADF panel recovery (Fix 1A) -------------------------
+
+    #[test]
+    fn panel_bgcolor_to_directive_known_hex_maps_to_directive() {
+        assert_eq!(panel_bgcolor_to_directive("#deebff"), Some("info"));
+        assert_eq!(panel_bgcolor_to_directive("#fffae6"), Some("warning"));
+        assert_eq!(panel_bgcolor_to_directive("#ffebe6"), Some("warning"));
+        assert_eq!(panel_bgcolor_to_directive("#e3fcef"), Some("tip"));
+        assert_eq!(panel_bgcolor_to_directive("#eae6ff"), Some("note"));
+    }
+
+    #[test]
+    fn panel_bgcolor_to_directive_is_case_insensitive() {
+        assert_eq!(panel_bgcolor_to_directive("#DEEBFF"), Some("info"));
+        assert_eq!(panel_bgcolor_to_directive("#FfFaE6"), Some("warning"));
+    }
+
+    #[test]
+    fn panel_bgcolor_to_directive_unknown_returns_none() {
+        assert!(panel_bgcolor_to_directive("#123456").is_none());
+        assert!(panel_bgcolor_to_directive("not-a-hex").is_none());
+    }
+
+    #[test]
+    fn panel_bgcolor_info_maps_to_info_directive() {
+        let out = convert("{panel:bgColor=#deebff}\nbody\n{panel}");
+        assert!(out.contains(":::info"), "got: {out:?}");
+        assert!(out.contains("body"), "got: {out:?}");
+        // bgColor should be dropped once we've remapped the directive name.
+        assert!(!out.contains("bgColor"), "got: {out:?}");
+        assert!(!out.contains(":::panel"), "got: {out:?}");
+    }
+
+    #[test]
+    fn panel_bgcolor_warning_maps_to_warning_directive() {
+        let out = convert("{panel:bgColor=#fffae6}\ncareful\n{panel}");
+        assert!(out.contains(":::warning"), "got: {out:?}");
+        assert!(out.contains("careful"), "got: {out:?}");
+        assert!(!out.contains("bgColor"), "got: {out:?}");
+    }
+
+    #[test]
+    fn panel_bgcolor_unknown_falls_back_to_unknown_panel_directive() {
+        let out = convert("{panel:bgColor=#abcdef}\nbody\n{panel}");
+        // Unknown color → keep the raw `bgColor` attr on a `:::panel`
+        // directive so a downstream md→storage/adf pipeline can still
+        // round-trip the original color.
+        assert!(out.contains(":::panel"), "got: {out:?}");
+        assert!(out.contains("body"), "got: {out:?}");
+        assert!(out.contains("bgColor=#abcdef"), "got: {out:?}");
+    }
+
+    #[test]
+    fn panel_without_bgcolor_falls_back_to_unknown_panel_directive() {
+        let out = convert("{panel}\nbody\n{panel}");
+        assert!(out.contains(":::panel"), "got: {out:?}");
+        assert!(out.contains("body"), "got: {out:?}");
+        assert!(!out.contains("bgColor"), "got: {out:?}");
+    }
+
+    #[test]
+    fn panel_with_unknown_attr_only_falls_back_to_panel_directive() {
+        // `{panel:title=Heads up}` — no bgColor, so we keep `:::panel` and
+        // pass the title through. This shape is rare but should not crash.
+        let out = convert("{panel:title=Heads up}\nbody\n{panel}");
+        assert!(out.contains(":::panel"), "got: {out:?}");
+        assert!(out.contains("body"), "got: {out:?}");
+        assert!(out.contains(r#"title="Heads up""#), "got: {out:?}");
+    }
+
+    // ---- Cloud-after-ADF inline code recovery (Fix 1B) -------------------
+
+    #[test]
+    fn inline_code_macro_single_line_emits_fenced_block() {
+        let out = convert("{code}print('x'){code}");
+        assert!(out.contains("```\nprint('x')\n```"), "got: {out:?}");
+    }
+
+    #[test]
+    fn inline_code_macro_with_language_emits_lang_fence() {
+        let out = convert("{code:python}print('x'){code}");
+        assert!(out.contains("```python"), "got: {out:?}");
+        assert!(out.contains("print('x')"), "got: {out:?}");
+        assert!(out.contains("```\n"), "got: {out:?}");
+    }
+
+    #[test]
+    fn inline_code_macro_trims_inner_whitespace() {
+        let out = convert("{code:python}   print('x')   {code}");
+        // Whitespace immediately around the body should be stripped before
+        // emitting the fenced block.
+        assert!(out.contains("```python\nprint('x')\n```"), "got: {out:?}");
+    }
+
+    #[test]
+    fn multiline_code_macro_still_works() {
+        // Regression: the multi-line form must still parse correctly.
+        let out = convert("{code:rust}\nfn main() {}\n{code}");
+        assert!(out.contains("```rust"), "got: {out:?}");
+        assert!(out.contains("fn main() {}"), "got: {out:?}");
+        assert!(out.contains("```\n"), "got: {out:?}");
+    }
+
+    #[test]
+    fn inline_code_macro_unclosed_falls_through() {
+        // No `{code}` close on the line → treat as multi-line opener.
+        let out = convert("{code:python}\nprint('x')\n{code}");
+        assert!(out.contains("```python\nprint('x')\n```"), "got: {out:?}");
+    }
+
+    // ---- Cloud-after-ADF status heuristic (Fix 1C) -----------------------
+
+    #[test]
+    fn status_hex_to_color_name_known_palette() {
+        assert_eq!(status_hex_to_color_name("#36b37e"), Some("green"));
+        assert_eq!(status_hex_to_color_name("#00875a"), Some("green"));
+        assert_eq!(status_hex_to_color_name("#de350b"), Some("red"));
+        assert_eq!(status_hex_to_color_name("#bf2600"), Some("red"));
+        assert_eq!(status_hex_to_color_name("#ff991f"), Some("yellow"));
+        assert_eq!(status_hex_to_color_name("#0052cc"), Some("blue"));
+        assert_eq!(status_hex_to_color_name("#42526e"), Some("neutral"));
+        assert_eq!(status_hex_to_color_name("#5243aa"), Some("purple"));
+    }
+
+    #[test]
+    fn status_hex_to_color_name_unknown_returns_none() {
+        assert!(status_hex_to_color_name("#123456").is_none());
+    }
+
+    #[test]
+    fn status_heuristic_canonical_green_maps_to_status_directive() {
+        let out = convert("{color:#36B37E}*[ DONE ]*{color}");
+        assert!(out.contains(":status[DONE]"), "got: {out:?}");
+        assert!(out.contains("color=green"), "got: {out:?}");
+    }
+
+    #[test]
+    fn status_heuristic_red_maps_to_status_directive() {
+        let out = convert("{color:#de350b}*[ BLOCKED ]*{color}");
+        assert!(out.contains(":status[BLOCKED]"), "got: {out:?}");
+        assert!(out.contains("color=red"), "got: {out:?}");
+    }
+
+    #[test]
+    fn status_heuristic_unknown_hex_keeps_raw_color_attr() {
+        let out = convert("{color:#abcdef}*[ FOO ]*{color}");
+        assert!(out.contains(":status[FOO]"), "got: {out:?}");
+        // Unknown hex → preserve as quoted raw attr.
+        assert!(out.contains(r##"color="#abcdef""##), "got: {out:?}");
+    }
+
+    #[test]
+    fn status_heuristic_partial_pattern_left_as_is() {
+        // No `*[ ]*` wrapping — this is a regular colored text run, not a
+        // status lozenge. Must not be transformed.
+        let out = convert("{color:#36B37E}plain text{color}");
+        assert!(!out.contains(":status"), "got: {out:?}");
+    }
+
+    #[test]
+    fn status_heuristic_partial_pattern_brackets_only_left_as_is() {
+        // Brackets but no bold wrapping — also not a status pattern.
+        let out = convert("{color:#36B37E}[ DONE ]{color}");
+        assert!(!out.contains(":status"), "got: {out:?}");
+    }
+
+    #[test]
+    fn status_heuristic_directives_off_emits_text_only() {
+        let out = convert_no_directives("{color:#36B37E}*[ DONE ]*{color}");
+        assert!(out.contains("DONE"), "got: {out:?}");
+        assert!(!out.contains(":status"), "got: {out:?}");
     }
 }

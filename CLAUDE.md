@@ -43,9 +43,7 @@ Pre-commit hooks live in `lefthook.yml` (fmt-check, clippy, test). The deny rule
 
 **NEVER merge PRs without explicit user approval.** When branch protection blocks a merge, that is a signal to stop and let the user review — do NOT bypass it with `--admin`. Always create the PR, report the URL, and wait for the user to review and confirm before merging. This applies even if the user says "подлей" or "merge" — show them the PR first.
 
-`cargo test` runs both unit tests (in `src/`) and integration test binaries under `tests/`. The Atlassian contract tests (`tests/contract_*.rs`) are `#[ignore]` by default — they only run when a Prism mock server is up.
-
-**Prism caveat.** Upstream `@stoplight/prism-cli` on npm is currently broken (5.15.7+ is published without its `dist/` directory), so `npx @stoplight/prism-cli` no longer works. Install the standalone binary from [GitHub Releases](https://github.com/stoplightio/prism/releases) and put it on `PATH`, or point `ATL_PRISM_BIN` at it. Full install commands are in `.github/CONTRIBUTING.md`. The contract CI job downloads `prism-cli-linux` straight into `/usr/local/bin/prism` (see `.github/workflows/ci.yml`) for the same reason.
+`cargo test` runs both unit tests (in `src/`) and integration test binaries under `tests/`. The Atlassian contract tests (`tests/contract_*.rs`) are `#[ignore]` by default — they only run when a Prism mock server is up. Install Prism via `npx @stoplight/prism-cli` or the standalone binary from [GitHub Releases](https://github.com/stoplightio/prism/releases); point `ATL_PRISM_BIN` at it if it isn't on `PATH`. Full install commands are in `.github/CONTRIBUTING.md`.
 
 ## Architecture (the parts that aren't obvious from `ls`)
 
@@ -131,7 +129,7 @@ Adding a new flag to an existing subcommand: edit the right file under `cli/args
 
 `AtlassianInstance::read_only` causes write methods to be refused at the client layer — respect this in any new code path.
 
-### Auth: env > legacy TOML > keyring
+### Auth: env > TOML > keyring
 
 `src/auth/{mod,keyring,prompter}.rs`:
 - `SecretStore` trait — `SystemKeyring` (real) and `InMemoryStore` (tests). Backed by the `keyring` crate (macOS Keychain, Windows Credential Manager, Linux Secret Service). Falls back gracefully on headless Linux / Docker by returning `Ok(None)`.
@@ -141,11 +139,11 @@ Adding a new flag to an existing subcommand: edit the right file under `cli/args
 Token resolution chain (in `AtlassianInstance::resolved_token`):
 
 1. `ATL_API_TOKEN` env var (highest — CI-friendly)
-2. Legacy `api_token` field in `atl.toml` (still works; emits a `tracing::warn!` deprecation notice)
+2. `api_token` field in `atl.toml`
 3. Keyring lookup
 4. None
 
-`atl auth login` writes to the keyring and removes any legacy `api_token` from TOML.
+`atl auth login` writes to the keyring and clears any inline `api_token` from TOML.
 
 ### Config
 

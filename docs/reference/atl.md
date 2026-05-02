@@ -24,6 +24,7 @@ Usage: atl [OPTIONS] <COMMAND>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 **Subcommands**
 
@@ -60,6 +61,7 @@ Usage: atl confluence [OPTIONS] <COMMAND>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 **Subcommands**
 
@@ -134,6 +136,7 @@ Usage: atl confluence read [OPTIONS] <PAGE_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl confluence info
 
@@ -158,6 +161,7 @@ Usage: atl confluence info [OPTIONS] <PAGE_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl confluence search
 
@@ -184,6 +188,7 @@ Usage: atl confluence search [OPTIONS] <CQL>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl confluence space
 
@@ -207,6 +212,7 @@ Usage: atl confluence space [OPTIONS] <COMMAND>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 **Subcommands**
 
@@ -251,6 +257,7 @@ Usage: atl confluence space list [OPTIONS]
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence space get
 
@@ -275,6 +282,7 @@ Usage: atl confluence space get [OPTIONS] <SPACE_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence space create
 
@@ -304,6 +312,7 @@ Usage: atl confluence space create [OPTIONS] --key <KEY> --name <NAME>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence space delete
 
@@ -328,6 +337,7 @@ Usage: atl confluence space delete [OPTIONS] <SPACE_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence space pages
 
@@ -353,6 +363,7 @@ Usage: atl confluence space pages [OPTIONS] <SPACE_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence space blogposts
 
@@ -378,6 +389,7 @@ Usage: atl confluence space blogposts [OPTIONS] <SPACE_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence space labels
 
@@ -403,6 +415,7 @@ Usage: atl confluence space labels [OPTIONS] <SPACE_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence space permissions
 
@@ -428,6 +441,7 @@ Usage: atl confluence space permissions [OPTIONS] <SPACE_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence space permissions-available
 
@@ -451,6 +465,7 @@ Usage: atl confluence space permissions-available [OPTIONS]
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence space content-labels
 
@@ -476,6 +491,7 @@ Usage: atl confluence space content-labels [OPTIONS] <SPACE_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence space custom-content
 
@@ -502,6 +518,7 @@ Usage: atl confluence space custom-content [OPTIONS] --content-type <CONTENT_TYP
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence space operations
 
@@ -526,6 +543,7 @@ Usage: atl confluence space operations [OPTIONS] <SPACE_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence space role-assignments
 
@@ -551,6 +569,7 @@ Usage: atl confluence space role-assignments [OPTIONS] <SPACE_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence space set-role-assignments
 
@@ -576,6 +595,7 @@ Usage: atl confluence space set-role-assignments [OPTIONS] --body <BODY> <SPACE_
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence space property
 
@@ -599,6 +619,7 @@ Usage: atl confluence space property [OPTIONS] <COMMAND>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 **Subcommands**
 
@@ -630,6 +651,7 @@ Usage: atl confluence space property list [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ###### atl confluence space property get
 
@@ -655,6 +677,7 @@ Usage: atl confluence space property get [OPTIONS] <ID> <KEY>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ###### atl confluence space property set
 
@@ -681,6 +704,7 @@ Usage: atl confluence space property set [OPTIONS] --value <VALUE> <ID> <KEY>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ###### atl confluence space property delete
 
@@ -706,6 +730,7 @@ Usage: atl confluence space property delete [OPTIONS] <ID> <KEY>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence space role
 
@@ -729,6 +754,7 @@ Usage: atl confluence space role [OPTIONS] <COMMAND>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 **Subcommands**
 
@@ -763,6 +789,7 @@ Usage: atl confluence space role list [OPTIONS] <SPACE_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ###### atl confluence space role get
 
@@ -788,6 +815,7 @@ Usage: atl confluence space role get [OPTIONS] <SPACE_ID> <ROLE_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ###### atl confluence space role create
 
@@ -813,6 +841,7 @@ Usage: atl confluence space role create [OPTIONS] --name <NAME> <SPACE_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ###### atl confluence space role update
 
@@ -839,6 +868,7 @@ Usage: atl confluence space role update [OPTIONS] --name <NAME> <SPACE_ID> <ROLE
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ###### atl confluence space role delete
 
@@ -864,6 +894,7 @@ Usage: atl confluence space role delete [OPTIONS] <SPACE_ID> <ROLE_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ###### atl confluence space role mode
 
@@ -888,6 +919,7 @@ Usage: atl confluence space role mode [OPTIONS] <SPACE_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl confluence children
 
@@ -915,6 +947,7 @@ Usage: atl confluence children [OPTIONS] <PAGE_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl confluence create
 
@@ -948,6 +981,7 @@ Usage: atl confluence create [OPTIONS] --title <TITLE> --body <BODY>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl confluence update
 
@@ -976,6 +1010,7 @@ Usage: atl confluence update [OPTIONS] --title <TITLE> --body <BODY> --version <
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl confluence delete
 
@@ -1002,6 +1037,7 @@ Usage: atl confluence delete [OPTIONS] <PAGE_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl confluence attachment
 
@@ -1025,6 +1061,7 @@ Usage: atl confluence attachment [OPTIONS] <COMMAND>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 **Subcommands**
 
@@ -1067,6 +1104,7 @@ Usage: atl confluence attachment list [OPTIONS] <PAGE_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence attachment get
 
@@ -1091,6 +1129,7 @@ Usage: atl confluence attachment get [OPTIONS] <ATTACHMENT_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence attachment upload
 
@@ -1116,6 +1155,7 @@ Usage: atl confluence attachment upload [OPTIONS] --file <FILE> <PAGE_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence attachment delete
 
@@ -1140,6 +1180,7 @@ Usage: atl confluence attachment delete [OPTIONS] <ATTACHMENT_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence attachment download
 
@@ -1166,6 +1207,7 @@ Usage: atl confluence attachment download [OPTIONS] --page-id <PAGE_ID> <ATTACHM
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence attachment labels
 
@@ -1191,6 +1233,7 @@ Usage: atl confluence attachment labels [OPTIONS] <ATTACHMENT_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence attachment comments
 
@@ -1216,6 +1259,7 @@ Usage: atl confluence attachment comments [OPTIONS] <ATTACHMENT_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence attachment operations
 
@@ -1240,6 +1284,7 @@ Usage: atl confluence attachment operations [OPTIONS] <ATTACHMENT_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence attachment versions
 
@@ -1265,6 +1310,7 @@ Usage: atl confluence attachment versions [OPTIONS] <ATTACHMENT_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence attachment version-details
 
@@ -1289,6 +1335,7 @@ Usage: atl confluence attachment version-details [OPTIONS] <ATTACHMENT_ID> <VERS
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence attachment property
 
@@ -1312,6 +1359,7 @@ Usage: atl confluence attachment property [OPTIONS] <COMMAND>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 **Subcommands**
 
@@ -1343,6 +1391,7 @@ Usage: atl confluence attachment property list [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ###### atl confluence attachment property get
 
@@ -1368,6 +1417,7 @@ Usage: atl confluence attachment property get [OPTIONS] <ID> <KEY>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ###### atl confluence attachment property set
 
@@ -1394,6 +1444,7 @@ Usage: atl confluence attachment property set [OPTIONS] --value <VALUE> <ID> <KE
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ###### atl confluence attachment property delete
 
@@ -1419,6 +1470,7 @@ Usage: atl confluence attachment property delete [OPTIONS] <ID> <KEY>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl confluence find
 
@@ -1445,6 +1497,7 @@ Usage: atl confluence find [OPTIONS] --title <TITLE>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl confluence export
 
@@ -1471,6 +1524,7 @@ Usage: atl confluence export [OPTIONS] <PAGE_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl confluence copy-tree
 
@@ -1501,6 +1555,7 @@ Usage: atl confluence copy-tree [OPTIONS] <SOURCE_PAGE_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl confluence property
 
@@ -1524,6 +1579,7 @@ Usage: atl confluence property [OPTIONS] <COMMAND>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 **Subcommands**
 
@@ -1555,6 +1611,7 @@ Usage: atl confluence property list [OPTIONS] <PAGE_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence property get
 
@@ -1580,6 +1637,7 @@ Usage: atl confluence property get [OPTIONS] <PAGE_ID> <KEY>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence property set
 
@@ -1606,6 +1664,7 @@ Usage: atl confluence property set [OPTIONS] --value <VALUE> <PAGE_ID> <KEY>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence property delete
 
@@ -1631,6 +1690,7 @@ Usage: atl confluence property delete [OPTIONS] <PAGE_ID> <KEY>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl confluence label
 
@@ -1654,6 +1714,7 @@ Usage: atl confluence label [OPTIONS] <COMMAND>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 **Subcommands**
 
@@ -1688,6 +1749,7 @@ Usage: atl confluence label list [OPTIONS] <PAGE_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence label add
 
@@ -1713,6 +1775,7 @@ Usage: atl confluence label add [OPTIONS] <PAGE_ID> <LABELS>...
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence label remove
 
@@ -1738,6 +1801,7 @@ Usage: atl confluence label remove [OPTIONS] <PAGE_ID> <LABEL>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence label pages
 
@@ -1763,6 +1827,7 @@ Usage: atl confluence label pages [OPTIONS] <LABEL_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence label blogposts
 
@@ -1788,6 +1853,7 @@ Usage: atl confluence label blogposts [OPTIONS] <LABEL_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence label attachments
 
@@ -1813,6 +1879,7 @@ Usage: atl confluence label attachments [OPTIONS] <LABEL_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl confluence blog
 
@@ -1836,6 +1903,7 @@ Usage: atl confluence blog [OPTIONS] <COMMAND>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 **Subcommands**
 
@@ -1882,6 +1950,7 @@ Usage: atl confluence blog list [OPTIONS]
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence blog read
 
@@ -1912,6 +1981,7 @@ Usage: atl confluence blog read [OPTIONS] <BLOG_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence blog create
 
@@ -1941,6 +2011,7 @@ Usage: atl confluence blog create [OPTIONS] --title <TITLE> --body <BODY>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence blog update
 
@@ -1969,6 +2040,7 @@ Usage: atl confluence blog update [OPTIONS] --title <TITLE> --body <BODY> --vers
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence blog delete
 
@@ -1995,6 +2067,7 @@ Usage: atl confluence blog delete [OPTIONS] <BLOG_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence blog attachments
 
@@ -2020,6 +2093,7 @@ Usage: atl confluence blog attachments [OPTIONS] <BLOG_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence blog labels
 
@@ -2044,6 +2118,7 @@ Usage: atl confluence blog labels [OPTIONS] <BLOG_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence blog footer-comments
 
@@ -2069,6 +2144,7 @@ Usage: atl confluence blog footer-comments [OPTIONS] <BLOG_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence blog inline-comments
 
@@ -2094,6 +2170,7 @@ Usage: atl confluence blog inline-comments [OPTIONS] <BLOG_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence blog versions
 
@@ -2119,6 +2196,7 @@ Usage: atl confluence blog versions [OPTIONS] <BLOG_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence blog likes
 
@@ -2143,6 +2221,7 @@ Usage: atl confluence blog likes [OPTIONS] <BLOG_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence blog operations
 
@@ -2167,6 +2246,7 @@ Usage: atl confluence blog operations [OPTIONS] <BLOG_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence blog version-details
 
@@ -2191,6 +2271,7 @@ Usage: atl confluence blog version-details [OPTIONS] <BLOG_ID> <VERSION>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence blog likes-count
 
@@ -2215,6 +2296,7 @@ Usage: atl confluence blog likes-count [OPTIONS] <BLOG_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence blog likes-users
 
@@ -2239,6 +2321,7 @@ Usage: atl confluence blog likes-users [OPTIONS] <BLOG_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence blog custom-content
 
@@ -2265,6 +2348,7 @@ Usage: atl confluence blog custom-content [OPTIONS] --content-type <CONTENT_TYPE
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence blog redact
 
@@ -2289,6 +2373,7 @@ Usage: atl confluence blog redact [OPTIONS] <BLOG_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence blog property
 
@@ -2312,6 +2397,7 @@ Usage: atl confluence blog property [OPTIONS] <COMMAND>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 **Subcommands**
 
@@ -2343,6 +2429,7 @@ Usage: atl confluence blog property list [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ###### atl confluence blog property get
 
@@ -2368,6 +2455,7 @@ Usage: atl confluence blog property get [OPTIONS] <ID> <KEY>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ###### atl confluence blog property set
 
@@ -2394,6 +2482,7 @@ Usage: atl confluence blog property set [OPTIONS] --value <VALUE> <ID> <KEY>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ###### atl confluence blog property delete
 
@@ -2419,6 +2508,7 @@ Usage: atl confluence blog property delete [OPTIONS] <ID> <KEY>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl confluence versions
 
@@ -2444,6 +2534,7 @@ Usage: atl confluence versions [OPTIONS] <PAGE_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl confluence version-detail
 
@@ -2468,6 +2559,7 @@ Usage: atl confluence version-detail [OPTIONS] <PAGE_ID> <VERSION>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl confluence likes
 
@@ -2492,6 +2584,7 @@ Usage: atl confluence likes [OPTIONS] <PAGE_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl confluence operations
 
@@ -2516,6 +2609,7 @@ Usage: atl confluence operations [OPTIONS] <PAGE_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl confluence ancestors
 
@@ -2540,6 +2634,7 @@ Usage: atl confluence ancestors [OPTIONS] <PAGE_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl confluence descendants
 
@@ -2565,6 +2660,7 @@ Usage: atl confluence descendants [OPTIONS] <PAGE_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl confluence footer-comment
 
@@ -2588,6 +2684,7 @@ Usage: atl confluence footer-comment [OPTIONS] <COMMAND>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 **Subcommands**
 
@@ -2629,6 +2726,7 @@ Usage: atl confluence footer-comment list [OPTIONS] <PAGE_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence footer-comment get
 
@@ -2653,6 +2751,7 @@ Usage: atl confluence footer-comment get [OPTIONS] <COMMENT_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence footer-comment create
 
@@ -2678,6 +2777,7 @@ Usage: atl confluence footer-comment create [OPTIONS] --body <BODY> <PAGE_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence footer-comment update
 
@@ -2703,6 +2803,7 @@ Usage: atl confluence footer-comment update [OPTIONS] --body <BODY> --version <V
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence footer-comment delete
 
@@ -2727,6 +2828,7 @@ Usage: atl confluence footer-comment delete [OPTIONS] <COMMENT_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence footer-comment children
 
@@ -2752,6 +2854,7 @@ Usage: atl confluence footer-comment children [OPTIONS] <COMMENT_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence footer-comment versions
 
@@ -2777,6 +2880,7 @@ Usage: atl confluence footer-comment versions [OPTIONS] <COMMENT_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence footer-comment likes
 
@@ -2801,6 +2905,7 @@ Usage: atl confluence footer-comment likes [OPTIONS] <COMMENT_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence footer-comment operations
 
@@ -2825,6 +2930,7 @@ Usage: atl confluence footer-comment operations [OPTIONS] <COMMENT_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence footer-comment likes-count
 
@@ -2849,6 +2955,7 @@ Usage: atl confluence footer-comment likes-count [OPTIONS] <COMMENT_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence footer-comment likes-users
 
@@ -2873,6 +2980,7 @@ Usage: atl confluence footer-comment likes-users [OPTIONS] <COMMENT_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence footer-comment version-details
 
@@ -2897,6 +3005,7 @@ Usage: atl confluence footer-comment version-details [OPTIONS] <COMMENT_ID> <VER
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence footer-comment property
 
@@ -2920,6 +3029,7 @@ Usage: atl confluence footer-comment property [OPTIONS] <COMMAND>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 **Subcommands**
 
@@ -2951,6 +3061,7 @@ Usage: atl confluence footer-comment property list [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ###### atl confluence footer-comment property get
 
@@ -2976,6 +3087,7 @@ Usage: atl confluence footer-comment property get [OPTIONS] <ID> <KEY>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ###### atl confluence footer-comment property set
 
@@ -3002,6 +3114,7 @@ Usage: atl confluence footer-comment property set [OPTIONS] --value <VALUE> <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ###### atl confluence footer-comment property delete
 
@@ -3027,6 +3140,7 @@ Usage: atl confluence footer-comment property delete [OPTIONS] <ID> <KEY>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl confluence inline-comment
 
@@ -3050,6 +3164,7 @@ Usage: atl confluence inline-comment [OPTIONS] <COMMAND>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 **Subcommands**
 
@@ -3092,6 +3207,7 @@ Usage: atl confluence inline-comment list [OPTIONS] <PAGE_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence inline-comment get
 
@@ -3116,6 +3232,7 @@ Usage: atl confluence inline-comment get [OPTIONS] <COMMENT_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence inline-comment create
 
@@ -3143,6 +3260,7 @@ Usage: atl confluence inline-comment create [OPTIONS] --body <BODY> --inline-mar
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence inline-comment update
 
@@ -3169,6 +3287,7 @@ Usage: atl confluence inline-comment update [OPTIONS] --body <BODY> --version <V
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence inline-comment delete
 
@@ -3193,6 +3312,7 @@ Usage: atl confluence inline-comment delete [OPTIONS] <COMMENT_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence inline-comment children
 
@@ -3218,6 +3338,7 @@ Usage: atl confluence inline-comment children [OPTIONS] <COMMENT_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence inline-comment versions
 
@@ -3243,6 +3364,7 @@ Usage: atl confluence inline-comment versions [OPTIONS] <COMMENT_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence inline-comment likes
 
@@ -3267,6 +3389,7 @@ Usage: atl confluence inline-comment likes [OPTIONS] <COMMENT_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence inline-comment operations
 
@@ -3291,6 +3414,7 @@ Usage: atl confluence inline-comment operations [OPTIONS] <COMMENT_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence inline-comment likes-count
 
@@ -3315,6 +3439,7 @@ Usage: atl confluence inline-comment likes-count [OPTIONS] <COMMENT_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence inline-comment likes-users
 
@@ -3339,6 +3464,7 @@ Usage: atl confluence inline-comment likes-users [OPTIONS] <COMMENT_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence inline-comment version-details
 
@@ -3363,6 +3489,7 @@ Usage: atl confluence inline-comment version-details [OPTIONS] <COMMENT_ID> <VER
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence inline-comment property
 
@@ -3386,6 +3513,7 @@ Usage: atl confluence inline-comment property [OPTIONS] <COMMAND>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 **Subcommands**
 
@@ -3417,6 +3545,7 @@ Usage: atl confluence inline-comment property list [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ###### atl confluence inline-comment property get
 
@@ -3442,6 +3571,7 @@ Usage: atl confluence inline-comment property get [OPTIONS] <ID> <KEY>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ###### atl confluence inline-comment property set
 
@@ -3468,6 +3598,7 @@ Usage: atl confluence inline-comment property set [OPTIONS] --value <VALUE> <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ###### atl confluence inline-comment property delete
 
@@ -3493,6 +3624,7 @@ Usage: atl confluence inline-comment property delete [OPTIONS] <ID> <KEY>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl confluence whiteboard
 
@@ -3516,6 +3648,7 @@ Usage: atl confluence whiteboard [OPTIONS] <COMMAND>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 **Subcommands**
 
@@ -3554,6 +3687,7 @@ Usage: atl confluence whiteboard create [OPTIONS] --space-id <SPACE_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence whiteboard get
 
@@ -3578,6 +3712,7 @@ Usage: atl confluence whiteboard get [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence whiteboard delete
 
@@ -3602,6 +3737,7 @@ Usage: atl confluence whiteboard delete [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence whiteboard ancestors
 
@@ -3626,6 +3762,7 @@ Usage: atl confluence whiteboard ancestors [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence whiteboard descendants
 
@@ -3651,6 +3788,7 @@ Usage: atl confluence whiteboard descendants [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence whiteboard children
 
@@ -3676,6 +3814,7 @@ Usage: atl confluence whiteboard children [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence whiteboard operations
 
@@ -3700,6 +3839,7 @@ Usage: atl confluence whiteboard operations [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence whiteboard property
 
@@ -3723,6 +3863,7 @@ Usage: atl confluence whiteboard property [OPTIONS] <COMMAND>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 **Subcommands**
 
@@ -3754,6 +3895,7 @@ Usage: atl confluence whiteboard property list [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ###### atl confluence whiteboard property get
 
@@ -3779,6 +3921,7 @@ Usage: atl confluence whiteboard property get [OPTIONS] <ID> <KEY>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ###### atl confluence whiteboard property set
 
@@ -3805,6 +3948,7 @@ Usage: atl confluence whiteboard property set [OPTIONS] --value <VALUE> <ID> <KE
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ###### atl confluence whiteboard property delete
 
@@ -3830,6 +3974,7 @@ Usage: atl confluence whiteboard property delete [OPTIONS] <ID> <KEY>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl confluence database
 
@@ -3853,6 +3998,7 @@ Usage: atl confluence database [OPTIONS] <COMMAND>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 **Subcommands**
 
@@ -3891,6 +4037,7 @@ Usage: atl confluence database create [OPTIONS] --space-id <SPACE_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence database get
 
@@ -3915,6 +4062,7 @@ Usage: atl confluence database get [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence database delete
 
@@ -3939,6 +4087,7 @@ Usage: atl confluence database delete [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence database ancestors
 
@@ -3963,6 +4112,7 @@ Usage: atl confluence database ancestors [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence database descendants
 
@@ -3988,6 +4138,7 @@ Usage: atl confluence database descendants [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence database children
 
@@ -4013,6 +4164,7 @@ Usage: atl confluence database children [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence database operations
 
@@ -4037,6 +4189,7 @@ Usage: atl confluence database operations [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence database property
 
@@ -4060,6 +4213,7 @@ Usage: atl confluence database property [OPTIONS] <COMMAND>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 **Subcommands**
 
@@ -4091,6 +4245,7 @@ Usage: atl confluence database property list [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ###### atl confluence database property get
 
@@ -4116,6 +4271,7 @@ Usage: atl confluence database property get [OPTIONS] <ID> <KEY>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ###### atl confluence database property set
 
@@ -4142,6 +4298,7 @@ Usage: atl confluence database property set [OPTIONS] --value <VALUE> <ID> <KEY>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ###### atl confluence database property delete
 
@@ -4167,6 +4324,7 @@ Usage: atl confluence database property delete [OPTIONS] <ID> <KEY>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl confluence folder
 
@@ -4190,6 +4348,7 @@ Usage: atl confluence folder [OPTIONS] <COMMAND>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 **Subcommands**
 
@@ -4228,6 +4387,7 @@ Usage: atl confluence folder create [OPTIONS] --space-id <SPACE_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence folder get
 
@@ -4252,6 +4412,7 @@ Usage: atl confluence folder get [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence folder delete
 
@@ -4276,6 +4437,7 @@ Usage: atl confluence folder delete [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence folder ancestors
 
@@ -4300,6 +4462,7 @@ Usage: atl confluence folder ancestors [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence folder descendants
 
@@ -4325,6 +4488,7 @@ Usage: atl confluence folder descendants [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence folder children
 
@@ -4350,6 +4514,7 @@ Usage: atl confluence folder children [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence folder operations
 
@@ -4374,6 +4539,7 @@ Usage: atl confluence folder operations [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence folder property
 
@@ -4397,6 +4563,7 @@ Usage: atl confluence folder property [OPTIONS] <COMMAND>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 **Subcommands**
 
@@ -4428,6 +4595,7 @@ Usage: atl confluence folder property list [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ###### atl confluence folder property get
 
@@ -4453,6 +4621,7 @@ Usage: atl confluence folder property get [OPTIONS] <ID> <KEY>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ###### atl confluence folder property set
 
@@ -4479,6 +4648,7 @@ Usage: atl confluence folder property set [OPTIONS] --value <VALUE> <ID> <KEY>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ###### atl confluence folder property delete
 
@@ -4504,6 +4674,7 @@ Usage: atl confluence folder property delete [OPTIONS] <ID> <KEY>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl confluence custom-content
 
@@ -4527,6 +4698,7 @@ Usage: atl confluence custom-content [OPTIONS] <COMMAND>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 **Subcommands**
 
@@ -4569,6 +4741,7 @@ Usage: atl confluence custom-content list [OPTIONS]
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence custom-content get
 
@@ -4593,6 +4766,7 @@ Usage: atl confluence custom-content get [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence custom-content create
 
@@ -4620,6 +4794,7 @@ Usage: atl confluence custom-content create [OPTIONS] --content-type <CONTENT_TY
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence custom-content update
 
@@ -4646,6 +4821,7 @@ Usage: atl confluence custom-content update [OPTIONS] --version <VERSION> <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence custom-content delete
 
@@ -4670,6 +4846,7 @@ Usage: atl confluence custom-content delete [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence custom-content attachments
 
@@ -4695,6 +4872,7 @@ Usage: atl confluence custom-content attachments [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence custom-content children
 
@@ -4720,6 +4898,7 @@ Usage: atl confluence custom-content children [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence custom-content labels
 
@@ -4745,6 +4924,7 @@ Usage: atl confluence custom-content labels [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence custom-content comments
 
@@ -4770,6 +4950,7 @@ Usage: atl confluence custom-content comments [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence custom-content operations
 
@@ -4794,6 +4975,7 @@ Usage: atl confluence custom-content operations [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence custom-content versions
 
@@ -4819,6 +5001,7 @@ Usage: atl confluence custom-content versions [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence custom-content version-details
 
@@ -4843,6 +5026,7 @@ Usage: atl confluence custom-content version-details [OPTIONS] <ID> <VERSION>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence custom-content property
 
@@ -4866,6 +5050,7 @@ Usage: atl confluence custom-content property [OPTIONS] <COMMAND>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 **Subcommands**
 
@@ -4897,6 +5082,7 @@ Usage: atl confluence custom-content property list [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ###### atl confluence custom-content property get
 
@@ -4922,6 +5108,7 @@ Usage: atl confluence custom-content property get [OPTIONS] <ID> <KEY>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ###### atl confluence custom-content property set
 
@@ -4948,6 +5135,7 @@ Usage: atl confluence custom-content property set [OPTIONS] --value <VALUE> <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ###### atl confluence custom-content property delete
 
@@ -4973,6 +5161,7 @@ Usage: atl confluence custom-content property delete [OPTIONS] <ID> <KEY>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl confluence task
 
@@ -4996,6 +5185,7 @@ Usage: atl confluence task [OPTIONS] <COMMAND>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 **Subcommands**
 
@@ -5030,6 +5220,7 @@ Usage: atl confluence task list [OPTIONS]
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence task get
 
@@ -5054,6 +5245,7 @@ Usage: atl confluence task get [OPTIONS] <TASK_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence task update
 
@@ -5079,6 +5271,7 @@ Usage: atl confluence task update [OPTIONS] --status <STATUS> <TASK_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl confluence admin-key
 
@@ -5102,6 +5295,7 @@ Usage: atl confluence admin-key [OPTIONS] <COMMAND>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 **Subcommands**
 
@@ -5131,6 +5325,7 @@ Usage: atl confluence admin-key get [OPTIONS]
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence admin-key enable
 
@@ -5154,6 +5349,7 @@ Usage: atl confluence admin-key enable [OPTIONS]
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence admin-key disable
 
@@ -5177,6 +5373,7 @@ Usage: atl confluence admin-key disable [OPTIONS]
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl confluence classification
 
@@ -5200,6 +5397,7 @@ Usage: atl confluence classification [OPTIONS] <COMMAND>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 **Subcommands**
 
@@ -5242,6 +5440,7 @@ Usage: atl confluence classification list [OPTIONS]
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence classification get-page
 
@@ -5266,6 +5465,7 @@ Usage: atl confluence classification get-page [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence classification set-page
 
@@ -5291,6 +5491,7 @@ Usage: atl confluence classification set-page [OPTIONS] --classification-id <CLA
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence classification reset-page
 
@@ -5315,6 +5516,7 @@ Usage: atl confluence classification reset-page [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence classification get-blogpost
 
@@ -5339,6 +5541,7 @@ Usage: atl confluence classification get-blogpost [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence classification set-blogpost
 
@@ -5364,6 +5567,7 @@ Usage: atl confluence classification set-blogpost [OPTIONS] --classification-id 
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence classification reset-blogpost
 
@@ -5388,6 +5592,7 @@ Usage: atl confluence classification reset-blogpost [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence classification get-space
 
@@ -5412,6 +5617,7 @@ Usage: atl confluence classification get-space [OPTIONS] <SPACE_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence classification set-space
 
@@ -5437,6 +5643,7 @@ Usage: atl confluence classification set-space [OPTIONS] --classification-id <CL
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence classification reset-space
 
@@ -5461,6 +5668,7 @@ Usage: atl confluence classification reset-space [OPTIONS] <SPACE_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence classification get-database
 
@@ -5485,6 +5693,7 @@ Usage: atl confluence classification get-database [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence classification set-database
 
@@ -5510,6 +5719,7 @@ Usage: atl confluence classification set-database [OPTIONS] --classification-id 
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence classification reset-database
 
@@ -5534,6 +5744,7 @@ Usage: atl confluence classification reset-database [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence classification get-whiteboard
 
@@ -5558,6 +5769,7 @@ Usage: atl confluence classification get-whiteboard [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence classification set-whiteboard
 
@@ -5583,6 +5795,7 @@ Usage: atl confluence classification set-whiteboard [OPTIONS] --classification-i
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence classification reset-whiteboard
 
@@ -5607,6 +5820,7 @@ Usage: atl confluence classification reset-whiteboard [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl confluence user
 
@@ -5630,6 +5844,7 @@ Usage: atl confluence user [OPTIONS] <COMMAND>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 **Subcommands**
 
@@ -5660,6 +5875,7 @@ Usage: atl confluence user bulk [OPTIONS] <ACCOUNT_IDS>...
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence user check-access
 
@@ -5684,6 +5900,7 @@ Usage: atl confluence user check-access [OPTIONS] <EMAIL>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence user invite
 
@@ -5708,6 +5925,7 @@ Usage: atl confluence user invite [OPTIONS] <EMAILS>...
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl confluence convert-ids
 
@@ -5732,6 +5950,7 @@ Usage: atl confluence convert-ids [OPTIONS] <IDS>...
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl confluence app-property
 
@@ -5755,6 +5974,7 @@ Usage: atl confluence app-property [OPTIONS] <COMMAND>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 **Subcommands**
 
@@ -5785,6 +6005,7 @@ Usage: atl confluence app-property list [OPTIONS]
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence app-property get
 
@@ -5809,6 +6030,7 @@ Usage: atl confluence app-property get [OPTIONS] <KEY>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence app-property set
 
@@ -5834,6 +6056,7 @@ Usage: atl confluence app-property set [OPTIONS] --value <VALUE> <KEY>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl confluence app-property delete
 
@@ -5858,6 +6081,7 @@ Usage: atl confluence app-property delete [OPTIONS] <KEY>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl confluence page-list
 
@@ -5886,6 +6110,7 @@ Usage: atl confluence page-list [OPTIONS]
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl confluence update-title
 
@@ -5911,6 +6136,7 @@ Usage: atl confluence update-title [OPTIONS] --title <TITLE> --version <VERSION>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl confluence likes-count
 
@@ -5935,6 +6161,7 @@ Usage: atl confluence likes-count [OPTIONS] <PAGE_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl confluence likes-users
 
@@ -5959,6 +6186,7 @@ Usage: atl confluence likes-users [OPTIONS] <PAGE_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl confluence page-custom-content
 
@@ -5985,6 +6213,7 @@ Usage: atl confluence page-custom-content [OPTIONS] --content-type <CONTENT_TYPE
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl confluence redact
 
@@ -6009,6 +6238,7 @@ Usage: atl confluence redact [OPTIONS] <PAGE_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ### atl jira
 
@@ -6032,6 +6262,7 @@ Usage: atl jira [OPTIONS] <COMMAND>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 **Subcommands**
 
@@ -6148,6 +6379,7 @@ Usage: atl jira search [OPTIONS] [JQL]
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira view
 
@@ -6173,6 +6405,7 @@ Usage: atl jira view [OPTIONS] <KEY>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira create
 
@@ -6208,6 +6441,7 @@ Usage: atl jira create [OPTIONS] --project <PROJECT> --issue-type <ISSUE_TYPE> -
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira update
 
@@ -6241,6 +6475,7 @@ Usage: atl jira update [OPTIONS] <KEY>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira delete
 
@@ -6266,6 +6501,7 @@ Usage: atl jira delete [OPTIONS] <KEY>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira move
 
@@ -6291,6 +6527,7 @@ Usage: atl jira move [OPTIONS] --transition <TRANSITION> <KEY>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira assign
 
@@ -6316,6 +6553,7 @@ Usage: atl jira assign [OPTIONS] <KEY> <ACCOUNT_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira comment
 
@@ -6342,6 +6580,7 @@ Usage: atl jira comment [OPTIONS] <KEY> <BODY>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira comments
 
@@ -6366,6 +6605,7 @@ Usage: atl jira comments [OPTIONS] <KEY>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira comment-get
 
@@ -6391,6 +6631,7 @@ Usage: atl jira comment-get [OPTIONS] <KEY> <COMMENT_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira comment-delete
 
@@ -6416,6 +6657,7 @@ Usage: atl jira comment-delete [OPTIONS] <KEY> <COMMENT_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira transitions
 
@@ -6440,6 +6682,7 @@ Usage: atl jira transitions [OPTIONS] <KEY>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira project
 
@@ -6463,6 +6706,7 @@ Usage: atl jira project [OPTIONS] <COMMAND>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 **Subcommands**
 
@@ -6499,6 +6743,7 @@ Usage: atl jira project list [OPTIONS]
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira project get
 
@@ -6523,6 +6768,7 @@ Usage: atl jira project get [OPTIONS] <PROJECT_KEY>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira project create
 
@@ -6551,6 +6797,7 @@ Usage: atl jira project create [OPTIONS] --key <KEY> --name <NAME> --project-typ
 - `--no-pager` — Do not pipe long output through a pager
 - `--jq` — Query output with a jq expression
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira project update
 
@@ -6578,6 +6825,7 @@ Usage: atl jira project update [OPTIONS] <KEY>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira project delete
 
@@ -6602,6 +6850,7 @@ Usage: atl jira project delete [OPTIONS] <PROJECT_KEY>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira project statuses
 
@@ -6626,6 +6875,7 @@ Usage: atl jira project statuses [OPTIONS] <PROJECT_KEY>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira project roles
 
@@ -6650,6 +6900,7 @@ Usage: atl jira project roles [OPTIONS] <PROJECT_KEY>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira project archive
 
@@ -6674,6 +6925,7 @@ Usage: atl jira project archive [OPTIONS] <PROJECT_KEY>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira project restore
 
@@ -6698,6 +6950,7 @@ Usage: atl jira project restore [OPTIONS] <PROJECT_KEY>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira project features
 
@@ -6722,6 +6975,7 @@ Usage: atl jira project features [OPTIONS] <PROJECT_KEY>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira board
 
@@ -6745,6 +6999,7 @@ Usage: atl jira board [OPTIONS] <COMMAND>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 **Subcommands**
 
@@ -6777,6 +7032,7 @@ Usage: atl jira board list [OPTIONS]
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira board get
 
@@ -6801,6 +7057,7 @@ Usage: atl jira board get [OPTIONS] <BOARD_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira board config
 
@@ -6825,6 +7082,7 @@ Usage: atl jira board config [OPTIONS] <BOARD_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira board issues
 
@@ -6852,6 +7110,7 @@ Usage: atl jira board issues [OPTIONS] <BOARD_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira board backlog
 
@@ -6879,6 +7138,7 @@ Usage: atl jira board backlog [OPTIONS] <BOARD_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira sprint
 
@@ -6902,6 +7162,7 @@ Usage: atl jira sprint [OPTIONS] <COMMAND>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 **Subcommands**
 
@@ -6937,6 +7198,7 @@ Usage: atl jira sprint list [OPTIONS] <BOARD_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira sprint get
 
@@ -6961,6 +7223,7 @@ Usage: atl jira sprint get [OPTIONS] <SPRINT_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira sprint issues
 
@@ -6988,6 +7251,7 @@ Usage: atl jira sprint issues [OPTIONS] <SPRINT_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira sprint create
 
@@ -7016,6 +7280,7 @@ Usage: atl jira sprint create [OPTIONS] --board-id <BOARD_ID> --name <NAME>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira sprint update
 
@@ -7045,6 +7310,7 @@ Usage: atl jira sprint update [OPTIONS] <SPRINT_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira sprint delete
 
@@ -7069,6 +7335,7 @@ Usage: atl jira sprint delete [OPTIONS] <SPRINT_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira sprint move
 
@@ -7094,6 +7361,7 @@ Usage: atl jira sprint move [OPTIONS] <SPRINT_ID> <ISSUES>...
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira backlog-move
 
@@ -7118,6 +7386,7 @@ Usage: atl jira backlog-move [OPTIONS] <ISSUES>...
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira me
 
@@ -7141,6 +7410,7 @@ Usage: atl jira me [OPTIONS]
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira epic
 
@@ -7164,6 +7434,7 @@ Usage: atl jira epic [OPTIONS] <COMMAND>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 **Subcommands**
 
@@ -7196,6 +7467,7 @@ Usage: atl jira epic list [OPTIONS] <BOARD_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira epic get
 
@@ -7220,6 +7492,7 @@ Usage: atl jira epic get [OPTIONS] <EPIC_ID_OR_KEY>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira epic issues
 
@@ -7246,6 +7519,7 @@ Usage: atl jira epic issues [OPTIONS] <EPIC_ID_OR_KEY>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira epic add
 
@@ -7271,6 +7545,7 @@ Usage: atl jira epic add [OPTIONS] <EPIC_KEY> <ISSUES>...
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira epic remove
 
@@ -7295,6 +7570,7 @@ Usage: atl jira epic remove [OPTIONS] <ISSUES>...
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira link
 
@@ -7321,6 +7597,7 @@ Usage: atl jira link [OPTIONS] --link-type <LINK_TYPE> <INWARD_KEY> <OUTWARD_KEY
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira link-type
 
@@ -7344,6 +7621,7 @@ Usage: atl jira link-type [OPTIONS] <COMMAND>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 **Subcommands**
 
@@ -7375,6 +7653,7 @@ Usage: atl jira link-type list [OPTIONS]
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira link-type get
 
@@ -7399,6 +7678,7 @@ Usage: atl jira link-type get [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira link-type create
 
@@ -7425,6 +7705,7 @@ Usage: atl jira link-type create [OPTIONS] --name <NAME> --inward <INWARD> --out
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira link-type update
 
@@ -7452,6 +7733,7 @@ Usage: atl jira link-type update [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira link-type delete
 
@@ -7476,6 +7758,7 @@ Usage: atl jira link-type delete [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira issue-link-get
 
@@ -7500,6 +7783,7 @@ Usage: atl jira issue-link-get [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira issue-link-delete
 
@@ -7524,6 +7808,7 @@ Usage: atl jira issue-link-delete [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira remote-link
 
@@ -7550,6 +7835,7 @@ Usage: atl jira remote-link [OPTIONS] <KEY> <URL>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira remote-links
 
@@ -7574,6 +7860,7 @@ Usage: atl jira remote-links [OPTIONS] <KEY>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira remote-link-delete
 
@@ -7599,6 +7886,7 @@ Usage: atl jira remote-link-delete [OPTIONS] <KEY> <LINK_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira clone
 
@@ -7624,6 +7912,7 @@ Usage: atl jira clone [OPTIONS] <KEY>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira worklog
 
@@ -7647,6 +7936,7 @@ Usage: atl jira worklog [OPTIONS] <COMMAND>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 **Subcommands**
 
@@ -7677,6 +7967,7 @@ Usage: atl jira worklog list [OPTIONS] <KEY>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira worklog add
 
@@ -7704,6 +7995,7 @@ Usage: atl jira worklog add [OPTIONS] --time-spent <TIME_SPENT> <KEY>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira worklog delete
 
@@ -7729,6 +8021,7 @@ Usage: atl jira worklog delete [OPTIONS] <KEY> <WORKLOG_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira filter
 
@@ -7752,6 +8045,7 @@ Usage: atl jira filter [OPTIONS] <COMMAND>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 **Subcommands**
 
@@ -7786,6 +8080,7 @@ Usage: atl jira filter list [OPTIONS]
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira filter get
 
@@ -7810,6 +8105,7 @@ Usage: atl jira filter get [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira filter create
 
@@ -7837,6 +8133,7 @@ Usage: atl jira filter create [OPTIONS] --name <NAME> --jql <JQL>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira filter update
 
@@ -7865,6 +8162,7 @@ Usage: atl jira filter update [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira filter delete
 
@@ -7889,6 +8187,7 @@ Usage: atl jira filter delete [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira attach
 
@@ -7914,6 +8213,7 @@ Usage: atl jira attach [OPTIONS] --file <FILE> <KEY>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira watch
 
@@ -7938,6 +8238,7 @@ Usage: atl jira watch [OPTIONS] <KEY>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira unwatch
 
@@ -7962,6 +8263,7 @@ Usage: atl jira unwatch [OPTIONS] <KEY>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira watchers
 
@@ -7986,6 +8288,7 @@ Usage: atl jira watchers [OPTIONS] <KEY>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira vote
 
@@ -8010,6 +8313,7 @@ Usage: atl jira vote [OPTIONS] <KEY>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira unvote
 
@@ -8034,6 +8338,7 @@ Usage: atl jira unvote [OPTIONS] <KEY>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira changelog
 
@@ -8061,6 +8366,7 @@ Usage: atl jira changelog [OPTIONS] <KEY>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira component
 
@@ -8084,6 +8390,7 @@ Usage: atl jira component [OPTIONS] <COMMAND>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 **Subcommands**
 
@@ -8116,6 +8423,7 @@ Usage: atl jira component list [OPTIONS] <PROJECT_KEY>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira component get
 
@@ -8140,6 +8448,7 @@ Usage: atl jira component get [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira component create
 
@@ -8167,6 +8476,7 @@ Usage: atl jira component create [OPTIONS] --project <PROJECT> --name <NAME>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira component update
 
@@ -8195,6 +8505,7 @@ Usage: atl jira component update [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira component delete
 
@@ -8219,6 +8530,7 @@ Usage: atl jira component delete [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira version
 
@@ -8242,6 +8554,7 @@ Usage: atl jira version [OPTIONS] <COMMAND>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 **Subcommands**
 
@@ -8275,6 +8588,7 @@ Usage: atl jira version list [OPTIONS] <PROJECT_KEY>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira version get
 
@@ -8299,6 +8613,7 @@ Usage: atl jira version get [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira version create
 
@@ -8326,6 +8641,7 @@ Usage: atl jira version create [OPTIONS] --project <PROJECT> --name <NAME>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira version update
 
@@ -8356,6 +8672,7 @@ Usage: atl jira version update [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira version delete
 
@@ -8380,6 +8697,7 @@ Usage: atl jira version delete [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira version release
 
@@ -8405,6 +8723,7 @@ Usage: atl jira version release [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira dashboard
 
@@ -8428,6 +8747,7 @@ Usage: atl jira dashboard [OPTIONS] <COMMAND>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 **Subcommands**
 
@@ -8464,6 +8784,7 @@ Usage: atl jira dashboard list [OPTIONS]
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira dashboard get
 
@@ -8488,6 +8809,7 @@ Usage: atl jira dashboard get [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira dashboard create
 
@@ -8513,6 +8835,7 @@ Usage: atl jira dashboard create [OPTIONS] --name <NAME>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira dashboard update
 
@@ -8539,6 +8862,7 @@ Usage: atl jira dashboard update [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira dashboard delete
 
@@ -8563,6 +8887,7 @@ Usage: atl jira dashboard delete [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira dashboard copy
 
@@ -8588,6 +8913,7 @@ Usage: atl jira dashboard copy [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira dashboard gadgets
 
@@ -8612,6 +8938,7 @@ Usage: atl jira dashboard gadgets [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira dashboard add-gadget
 
@@ -8639,6 +8966,7 @@ Usage: atl jira dashboard add-gadget [OPTIONS] --uri <URI> <DASHBOARD_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira dashboard update-gadget
 
@@ -8666,6 +8994,7 @@ Usage: atl jira dashboard update-gadget [OPTIONS] <DASHBOARD_ID> <GADGET_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira dashboard remove-gadget
 
@@ -8691,6 +9020,7 @@ Usage: atl jira dashboard remove-gadget [OPTIONS] <DASHBOARD_ID> <GADGET_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira field
 
@@ -8714,6 +9044,7 @@ Usage: atl jira field [OPTIONS] <COMMAND>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 **Subcommands**
 
@@ -8746,6 +9077,7 @@ Usage: atl jira field list [OPTIONS]
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira field create
 
@@ -8773,6 +9105,7 @@ Usage: atl jira field create [OPTIONS] --name <NAME> --type <TYPE>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira field delete
 
@@ -8797,6 +9130,7 @@ Usage: atl jira field delete [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira field trash
 
@@ -8821,6 +9155,7 @@ Usage: atl jira field trash [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira field restore
 
@@ -8845,6 +9180,7 @@ Usage: atl jira field restore [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira user
 
@@ -8868,6 +9204,7 @@ Usage: atl jira user [OPTIONS] <COMMAND>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 **Subcommands**
 
@@ -8902,6 +9239,7 @@ Usage: atl jira user search [OPTIONS] <QUERY>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira user get
 
@@ -8926,6 +9264,7 @@ Usage: atl jira user get [OPTIONS] <ACCOUNT_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira user list
 
@@ -8951,6 +9290,7 @@ Usage: atl jira user list [OPTIONS]
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira user create
 
@@ -8977,6 +9317,7 @@ Usage: atl jira user create [OPTIONS] --email <EMAIL>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira user delete
 
@@ -9001,6 +9342,7 @@ Usage: atl jira user delete [OPTIONS] <ACCOUNT_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira user assignable
 
@@ -9026,6 +9368,7 @@ Usage: atl jira user assignable [OPTIONS] <ISSUE_KEY>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira group
 
@@ -9049,6 +9392,7 @@ Usage: atl jira group [OPTIONS] <COMMAND>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 **Subcommands**
 
@@ -9083,6 +9427,7 @@ Usage: atl jira group list [OPTIONS]
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira group get
 
@@ -9107,6 +9452,7 @@ Usage: atl jira group get [OPTIONS] <NAME>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira group create
 
@@ -9131,6 +9477,7 @@ Usage: atl jira group create [OPTIONS] <NAME>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira group delete
 
@@ -9155,6 +9502,7 @@ Usage: atl jira group delete [OPTIONS] <NAME>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira group members
 
@@ -9180,6 +9528,7 @@ Usage: atl jira group members [OPTIONS] <NAME>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira group add-user
 
@@ -9205,6 +9554,7 @@ Usage: atl jira group add-user [OPTIONS] <NAME> <ACCOUNT_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira group remove-user
 
@@ -9230,6 +9580,7 @@ Usage: atl jira group remove-user [OPTIONS] <NAME> <ACCOUNT_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira group search
 
@@ -9255,6 +9606,7 @@ Usage: atl jira group search [OPTIONS] <QUERY>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira notify
 
@@ -9282,6 +9634,7 @@ Usage: atl jira notify [OPTIONS] --subject <SUBJECT> --body <BODY> <KEY>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira create-meta
 
@@ -9307,6 +9660,7 @@ Usage: atl jira create-meta [OPTIONS]
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira edit-meta
 
@@ -9331,6 +9685,7 @@ Usage: atl jira edit-meta [OPTIONS] <KEY>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira issue-type
 
@@ -9354,6 +9709,7 @@ Usage: atl jira issue-type [OPTIONS] <COMMAND>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 **Subcommands**
 
@@ -9385,6 +9741,7 @@ Usage: atl jira issue-type list [OPTIONS]
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira issue-type get
 
@@ -9409,6 +9766,7 @@ Usage: atl jira issue-type get [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira issue-type create
 
@@ -9435,6 +9793,7 @@ Usage: atl jira issue-type create [OPTIONS] --name <NAME>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira issue-type update
 
@@ -9461,6 +9820,7 @@ Usage: atl jira issue-type update [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira issue-type delete
 
@@ -9485,6 +9845,7 @@ Usage: atl jira issue-type delete [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira priority
 
@@ -9508,6 +9869,7 @@ Usage: atl jira priority [OPTIONS] <COMMAND>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 **Subcommands**
 
@@ -9539,6 +9901,7 @@ Usage: atl jira priority list [OPTIONS]
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira priority get
 
@@ -9563,6 +9926,7 @@ Usage: atl jira priority get [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira priority create
 
@@ -9589,6 +9953,7 @@ Usage: atl jira priority create [OPTIONS] --name <NAME>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira priority update
 
@@ -9616,6 +9981,7 @@ Usage: atl jira priority update [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira priority delete
 
@@ -9640,6 +10006,7 @@ Usage: atl jira priority delete [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira resolution
 
@@ -9663,6 +10030,7 @@ Usage: atl jira resolution [OPTIONS] <COMMAND>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 **Subcommands**
 
@@ -9694,6 +10062,7 @@ Usage: atl jira resolution list [OPTIONS]
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira resolution get
 
@@ -9718,6 +10087,7 @@ Usage: atl jira resolution get [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira resolution create
 
@@ -9743,6 +10113,7 @@ Usage: atl jira resolution create [OPTIONS] --name <NAME>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira resolution update
 
@@ -9769,6 +10140,7 @@ Usage: atl jira resolution update [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira resolution delete
 
@@ -9793,6 +10165,7 @@ Usage: atl jira resolution delete [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira status
 
@@ -9816,6 +10189,7 @@ Usage: atl jira status [OPTIONS] <COMMAND>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 **Subcommands**
 
@@ -9845,6 +10219,7 @@ Usage: atl jira status list [OPTIONS]
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira status get
 
@@ -9869,6 +10244,7 @@ Usage: atl jira status get [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira status categories
 
@@ -9892,6 +10268,7 @@ Usage: atl jira status categories [OPTIONS]
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira screen
 
@@ -9915,6 +10292,7 @@ Usage: atl jira screen [OPTIONS] <COMMAND>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 **Subcommands**
 
@@ -9947,6 +10325,7 @@ Usage: atl jira screen list [OPTIONS]
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira screen get
 
@@ -9971,6 +10350,7 @@ Usage: atl jira screen get [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira screen create
 
@@ -9996,6 +10376,7 @@ Usage: atl jira screen create [OPTIONS] --name <NAME>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira screen delete
 
@@ -10020,6 +10401,7 @@ Usage: atl jira screen delete [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira screen tabs
 
@@ -10044,6 +10426,7 @@ Usage: atl jira screen tabs [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira screen fields
 
@@ -10069,6 +10452,7 @@ Usage: atl jira screen fields [OPTIONS] <SCREEN_ID> <TAB_ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira workflow
 
@@ -10092,6 +10476,7 @@ Usage: atl jira workflow [OPTIONS] <COMMAND>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 **Subcommands**
 
@@ -10120,6 +10505,7 @@ Usage: atl jira workflow list [OPTIONS]
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira workflow get
 
@@ -10144,6 +10530,7 @@ Usage: atl jira workflow get [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira workflow-scheme
 
@@ -10167,6 +10554,7 @@ Usage: atl jira workflow-scheme [OPTIONS] <COMMAND>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 **Subcommands**
 
@@ -10198,6 +10586,7 @@ Usage: atl jira workflow-scheme list [OPTIONS]
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira workflow-scheme get
 
@@ -10222,6 +10611,7 @@ Usage: atl jira workflow-scheme get [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira workflow-scheme create
 
@@ -10247,6 +10637,7 @@ Usage: atl jira workflow-scheme create [OPTIONS] --name <NAME>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira workflow-scheme update
 
@@ -10273,6 +10664,7 @@ Usage: atl jira workflow-scheme update [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira workflow-scheme delete
 
@@ -10297,6 +10689,7 @@ Usage: atl jira workflow-scheme delete [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira permission-scheme
 
@@ -10320,6 +10713,7 @@ Usage: atl jira permission-scheme [OPTIONS] <COMMAND>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 **Subcommands**
 
@@ -10351,6 +10745,7 @@ Usage: atl jira permission-scheme list [OPTIONS]
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira permission-scheme get
 
@@ -10375,6 +10770,7 @@ Usage: atl jira permission-scheme get [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira permission-scheme create
 
@@ -10400,6 +10796,7 @@ Usage: atl jira permission-scheme create [OPTIONS] --name <NAME>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira permission-scheme update
 
@@ -10426,6 +10823,7 @@ Usage: atl jira permission-scheme update [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira permission-scheme delete
 
@@ -10450,6 +10848,7 @@ Usage: atl jira permission-scheme delete [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira notification-scheme
 
@@ -10473,6 +10872,7 @@ Usage: atl jira notification-scheme [OPTIONS] <COMMAND>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 **Subcommands**
 
@@ -10504,6 +10904,7 @@ Usage: atl jira notification-scheme list [OPTIONS]
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira notification-scheme get
 
@@ -10528,6 +10929,7 @@ Usage: atl jira notification-scheme get [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira notification-scheme create
 
@@ -10553,6 +10955,7 @@ Usage: atl jira notification-scheme create [OPTIONS] --name <NAME>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira notification-scheme update
 
@@ -10579,6 +10982,7 @@ Usage: atl jira notification-scheme update [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira notification-scheme delete
 
@@ -10603,6 +11007,7 @@ Usage: atl jira notification-scheme delete [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira issue-security-scheme
 
@@ -10626,6 +11031,7 @@ Usage: atl jira issue-security-scheme [OPTIONS] <COMMAND>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 **Subcommands**
 
@@ -10657,6 +11063,7 @@ Usage: atl jira issue-security-scheme list [OPTIONS]
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira issue-security-scheme get
 
@@ -10681,6 +11088,7 @@ Usage: atl jira issue-security-scheme get [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira issue-security-scheme create
 
@@ -10706,6 +11114,7 @@ Usage: atl jira issue-security-scheme create [OPTIONS] --name <NAME>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira issue-security-scheme update
 
@@ -10732,6 +11141,7 @@ Usage: atl jira issue-security-scheme update [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira issue-security-scheme delete
 
@@ -10756,6 +11166,7 @@ Usage: atl jira issue-security-scheme delete [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira field-config
 
@@ -10779,6 +11190,7 @@ Usage: atl jira field-config [OPTIONS] <COMMAND>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 **Subcommands**
 
@@ -10809,6 +11221,7 @@ Usage: atl jira field-config list [OPTIONS]
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira field-config get
 
@@ -10833,6 +11246,7 @@ Usage: atl jira field-config get [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira field-config create
 
@@ -10858,6 +11272,7 @@ Usage: atl jira field-config create [OPTIONS] --name <NAME>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira field-config delete
 
@@ -10882,6 +11297,7 @@ Usage: atl jira field-config delete [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira issue-type-scheme
 
@@ -10905,6 +11321,7 @@ Usage: atl jira issue-type-scheme [OPTIONS] <COMMAND>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 **Subcommands**
 
@@ -10936,6 +11353,7 @@ Usage: atl jira issue-type-scheme list [OPTIONS]
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira issue-type-scheme get
 
@@ -10960,6 +11378,7 @@ Usage: atl jira issue-type-scheme get [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira issue-type-scheme create
 
@@ -10986,6 +11405,7 @@ Usage: atl jira issue-type-scheme create [OPTIONS] --name <NAME>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira issue-type-scheme update
 
@@ -11012,6 +11432,7 @@ Usage: atl jira issue-type-scheme update [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira issue-type-scheme delete
 
@@ -11036,6 +11457,7 @@ Usage: atl jira issue-type-scheme delete [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira role
 
@@ -11059,6 +11481,7 @@ Usage: atl jira role [OPTIONS] <COMMAND>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 **Subcommands**
 
@@ -11089,6 +11512,7 @@ Usage: atl jira role list [OPTIONS]
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira role get
 
@@ -11113,6 +11537,7 @@ Usage: atl jira role get [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira role create
 
@@ -11138,6 +11563,7 @@ Usage: atl jira role create [OPTIONS] --name <NAME>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira role delete
 
@@ -11162,6 +11588,7 @@ Usage: atl jira role delete [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira banner
 
@@ -11185,6 +11612,7 @@ Usage: atl jira banner [OPTIONS] <COMMAND>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 **Subcommands**
 
@@ -11213,6 +11641,7 @@ Usage: atl jira banner get [OPTIONS]
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira banner set
 
@@ -11239,6 +11668,7 @@ Usage: atl jira banner set [OPTIONS] --message <MESSAGE>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira configuration
 
@@ -11262,6 +11692,7 @@ Usage: atl jira configuration [OPTIONS]
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira task
 
@@ -11285,6 +11716,7 @@ Usage: atl jira task [OPTIONS] <COMMAND>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 **Subcommands**
 
@@ -11314,6 +11746,7 @@ Usage: atl jira task get [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira task cancel
 
@@ -11338,6 +11771,7 @@ Usage: atl jira task cancel [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira attachment
 
@@ -11361,6 +11795,7 @@ Usage: atl jira attachment [OPTIONS] <COMMAND>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 **Subcommands**
 
@@ -11391,6 +11826,7 @@ Usage: atl jira attachment get [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira attachment delete
 
@@ -11415,6 +11851,7 @@ Usage: atl jira attachment delete [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira attachment meta
 
@@ -11438,6 +11875,7 @@ Usage: atl jira attachment meta [OPTIONS]
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira project-category
 
@@ -11461,6 +11899,7 @@ Usage: atl jira project-category [OPTIONS] <COMMAND>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 **Subcommands**
 
@@ -11492,6 +11931,7 @@ Usage: atl jira project-category list [OPTIONS]
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira project-category get
 
@@ -11516,6 +11956,7 @@ Usage: atl jira project-category get [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira project-category create
 
@@ -11541,6 +11982,7 @@ Usage: atl jira project-category create [OPTIONS] --name <NAME>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira project-category update
 
@@ -11567,6 +12009,7 @@ Usage: atl jira project-category update [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira project-category delete
 
@@ -11591,6 +12034,7 @@ Usage: atl jira project-category delete [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira server-info
 
@@ -11614,6 +12058,7 @@ Usage: atl jira server-info [OPTIONS]
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira webhook
 
@@ -11637,6 +12082,7 @@ Usage: atl jira webhook [OPTIONS] <COMMAND>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 **Subcommands**
 
@@ -11667,6 +12113,7 @@ Usage: atl jira webhook list [OPTIONS]
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira webhook get
 
@@ -11691,6 +12138,7 @@ Usage: atl jira webhook get [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira webhook create
 
@@ -11718,6 +12166,7 @@ Usage: atl jira webhook create [OPTIONS] --name <NAME> --url <URL> --events <EVE
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ##### atl jira webhook delete
 
@@ -11742,6 +12191,7 @@ Usage: atl jira webhook delete [OPTIONS] <ID>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira audit-records
 
@@ -11770,6 +12220,7 @@ Usage: atl jira audit-records [OPTIONS]
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira permissions
 
@@ -11793,6 +12244,7 @@ Usage: atl jira permissions [OPTIONS]
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira my-permissions
 
@@ -11816,6 +12268,7 @@ Usage: atl jira my-permissions [OPTIONS]
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira labels
 
@@ -11841,6 +12294,7 @@ Usage: atl jira labels [OPTIONS]
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira bulk-create
 
@@ -11865,6 +12319,7 @@ Usage: atl jira bulk-create [OPTIONS] --input <INPUT>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira archive
 
@@ -11889,6 +12344,7 @@ Usage: atl jira archive [OPTIONS] <KEYS>...
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl jira unarchive
 
@@ -11913,6 +12369,7 @@ Usage: atl jira unarchive [OPTIONS] <KEYS>...
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ### atl init
 
@@ -11936,6 +12393,7 @@ Usage: atl init [OPTIONS]
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ### atl config
 
@@ -11959,6 +12417,7 @@ Usage: atl config [OPTIONS] <COMMAND>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 **Subcommands**
 
@@ -11990,6 +12449,7 @@ Usage: atl config list [OPTIONS]
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl config show
 
@@ -12014,6 +12474,7 @@ Usage: atl config show [OPTIONS] [NAME]
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl config delete
 
@@ -12038,6 +12499,7 @@ Usage: atl config delete [OPTIONS] <NAME>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl config set-default
 
@@ -12062,6 +12524,7 @@ Usage: atl config set-default [OPTIONS] <NAME>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl config set-defaults
 
@@ -12087,6 +12550,7 @@ Usage: atl config set-defaults [OPTIONS] <--project <PROJECT>|--space <SPACE>> [
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ### atl completions
 
@@ -12111,6 +12575,7 @@ Usage: atl completions [OPTIONS] <SHELL>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ### atl self
 
@@ -12134,6 +12599,7 @@ Usage: atl self [OPTIONS] <COMMAND>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 **Subcommands**
 
@@ -12162,6 +12628,7 @@ Usage: atl self check [OPTIONS]
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl self update
 
@@ -12187,6 +12654,7 @@ Usage: atl self update [OPTIONS]
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ### atl api
 
@@ -12209,6 +12677,7 @@ Usage: atl api [OPTIONS] --service <SERVICE> <ENDPOINT>
 - `--input` — Read the request body verbatim from a file, or `-` for stdin. Mutually exclusive with `--field` / `--raw-field`
 - `--query` — Query parameter in the form `KEY=VALUE`. Repeatable. No short form because `-q` is reserved for `--quiet`
 - `--paginate` — Auto-follow pagination until the server reports no more pages
+- `--max-pages` — Maximum number of pages to fetch when --paginate is set. Defaults to 1000. Use 0 for no limit (not recommended)
 - `--preview` — Print the constructed request to stderr and exit without sending
 - `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
 - `--quiet, -q` — Suppress all output except errors
@@ -12220,6 +12689,7 @@ Usage: atl api [OPTIONS] --service <SERVICE> <ENDPOINT>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ### atl browse
 
@@ -12245,6 +12715,7 @@ Usage: atl browse [OPTIONS] <TARGET>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ### atl alias
 
@@ -12268,6 +12739,7 @@ Usage: atl alias [OPTIONS] <COMMAND>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 **Subcommands**
 
@@ -12299,6 +12771,7 @@ Usage: atl alias set [OPTIONS] <NAME> <EXPANSION>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl alias list
 
@@ -12322,6 +12795,7 @@ Usage: atl alias list [OPTIONS]
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl alias delete
 
@@ -12346,6 +12820,7 @@ Usage: atl alias delete [OPTIONS] <NAME>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 ### atl auth
 
@@ -12369,6 +12844,7 @@ Usage: atl auth [OPTIONS] <COMMAND>
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 **Subcommands**
 
@@ -12405,6 +12881,7 @@ Usage: atl auth login [OPTIONS]
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl auth logout
 
@@ -12429,6 +12906,7 @@ Usage: atl auth logout [OPTIONS]
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl auth status
 
@@ -12453,6 +12931,7 @@ Usage: atl auth status [OPTIONS]
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 
 #### atl auth token
 
@@ -12478,4 +12957,5 @@ Usage: atl auth token [OPTIONS]
 - `--jq` — Query output with a jq expression
 - `--template` — Format output with a minijinja template
 - `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
 

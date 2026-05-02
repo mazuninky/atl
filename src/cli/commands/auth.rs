@@ -17,7 +17,7 @@ use crate::cli::args::{
     AuthKind, AuthLoginArgs, AuthLogoutArgs, AuthService, AuthStatusArgs, AuthSubcommand,
     AuthTokenArgs, SingleService,
 };
-use crate::client::raw_request;
+use crate::client::{RetryConfig, raw_request};
 use crate::config::{AtlassianInstance, AuthType, Config, ConfigLoader, Profile, TokenStorage};
 use crate::io::IoStreams;
 
@@ -29,15 +29,24 @@ pub async fn run(
     io: &mut IoStreams,
     store: &dyn SecretStore,
     prompter: &dyn Prompter,
-    retries: u32,
+    retry_cfg: RetryConfig,
 ) -> Result<()> {
     match cmd {
         AuthSubcommand::Login(args) => {
-            login(args, config_path, cli_profile, io, store, prompter, retries).await
+            login(
+                args,
+                config_path,
+                cli_profile,
+                io,
+                store,
+                prompter,
+                retry_cfg,
+            )
+            .await
         }
         AuthSubcommand::Logout(args) => logout(args, config_path, cli_profile, io, store),
         AuthSubcommand::Status(args) => {
-            status(args, config_path, cli_profile, io, store, retries).await
+            status(args, config_path, cli_profile, io, store, retry_cfg).await
         }
         AuthSubcommand::Token(args) => token(args, config_path, cli_profile, io, store),
     }
@@ -120,7 +129,7 @@ async fn verify_instance(
     kind: &str,
     instance: &AtlassianInstance,
     store: &dyn SecretStore,
-    retries: u32,
+    retry_cfg: RetryConfig,
 ) -> Result<serde_json::Value> {
     let endpoint = match kind {
         "jira" => "/rest/api/2/myself",
@@ -140,7 +149,7 @@ async fn verify_instance(
         HeaderMap::new(),
         &[],
         None,
-        retries,
+        retry_cfg,
     )
     .await?;
     Ok(value)
@@ -167,7 +176,7 @@ async fn login(
     io: &mut IoStreams,
     store: &dyn SecretStore,
     prompter: &dyn Prompter,
-    retries: u32,
+    retry_cfg: RetryConfig,
 ) -> Result<()> {
     let mut config = ConfigLoader::load(config_path)?
         .ok_or_else(|| anyhow!("no config found; run `atl init` first"))?;
@@ -230,7 +239,7 @@ async fn login(
         if !args.skip_verify {
             let mut verify_instance_cloned = instance.clone();
             verify_instance_cloned.api_token = Some(token.clone());
-            let result = verify_instance(kind, &verify_instance_cloned, store, retries).await;
+            let result = verify_instance(kind, &verify_instance_cloned, store, retry_cfg).await;
             match result {
                 Ok(value) => {
                     let label = extract_account_label(&value)
@@ -481,7 +490,7 @@ async fn status(
     cli_profile: Option<&str>,
     io: &mut IoStreams,
     store: &dyn SecretStore,
-    retries: u32,
+    retry_cfg: RetryConfig,
 ) -> Result<()> {
     let config = ConfigLoader::load(config_path)?
         .ok_or_else(|| anyhow!("no config file found; run `atl init` first"))?;
@@ -518,7 +527,7 @@ async fn status(
                 writeln!(io.stdout(), "  --  {kind:<10}  (not configured)")?;
                 continue;
             };
-            report_service_status(name, kind, instance, io, store, retries, args.skip_verify)
+            report_service_status(name, kind, instance, io, store, retry_cfg, args.skip_verify)
                 .await?;
         }
     }
@@ -533,7 +542,7 @@ async fn report_service_status(
     instance: &AtlassianInstance,
     io: &mut IoStreams,
     store: &dyn SecretStore,
-    retries: u32,
+    retry_cfg: RetryConfig,
     skip_verify: bool,
 ) -> Result<()> {
     let account = account_for_instance(instance);
@@ -595,7 +604,7 @@ async fn report_service_status(
 
     let mut verify_inst = instance.clone();
     verify_inst.api_token = Some(token);
-    match verify_instance(kind, &verify_inst, store, retries).await {
+    match verify_instance(kind, &verify_inst, store, retry_cfg).await {
         Ok(_) => {
             writeln!(
                 io.stdout(),

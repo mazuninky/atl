@@ -8,8 +8,8 @@ use crate::config::AtlassianInstance;
 use crate::error::Error;
 
 use super::{
-    HttpClient, build_base_url, build_http_client, detect_confluence_api_path, handle_error_status,
-    handle_response, handle_response_maybe_empty,
+    HttpClient, RetryConfig, build_base_url, build_http_client, detect_confluence_api_path,
+    handle_error_status, handle_response, handle_response_maybe_empty,
 };
 
 pub struct ConfluenceClient {
@@ -27,16 +27,16 @@ impl ConfluenceClient {
         instance: &AtlassianInstance,
         profile: &str,
         store: &dyn SecretStore,
-        retries: u32,
+        cfg: RetryConfig,
     ) -> Result<Self, Error> {
-        let http = build_http_client(instance, profile, "confluence", store, retries)?;
+        let http = build_http_client(instance, profile, "confluence", store, cfg)?;
         // Build a separate client without retry middleware for multipart
         // requests. Multipart bodies are streaming and cannot be cloned,
         // which the retry middleware requires.
-        let no_retry_http = if retries == 0 {
+        let no_retry_http = if cfg.retries == 0 {
             http.clone()
         } else {
-            build_http_client(instance, profile, "confluence", store, 0)?
+            build_http_client(instance, profile, "confluence", store, RetryConfig::off())?
         };
         let base_url = build_base_url(instance, "/wiki/rest/api");
         // Derive v2 URL: if api_path is set, transform it; otherwise use default
@@ -66,13 +66,13 @@ impl ConfluenceClient {
         instance: &AtlassianInstance,
         profile: &str,
         store: &dyn SecretStore,
-        retries: u32,
+        cfg: RetryConfig,
     ) -> Result<Self, Error> {
-        let http = build_http_client(instance, profile, "confluence", store, retries)?;
-        let no_retry_http = if retries == 0 {
+        let http = build_http_client(instance, profile, "confluence", store, cfg)?;
+        let no_retry_http = if cfg.retries == 0 {
             http.clone()
         } else {
-            build_http_client(instance, profile, "confluence", store, 0)?
+            build_http_client(instance, profile, "confluence", store, RetryConfig::off())?
         };
         let (base_url, base_url_v2) = if let Some(ref custom_path) = instance.api_path {
             // api_path overrides the v1 base; derive v2 from it

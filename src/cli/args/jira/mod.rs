@@ -1,6 +1,7 @@
 use clap::{Args, Subcommand, ValueEnum};
 
 mod admin;
+mod automation;
 mod board;
 mod field;
 mod filter;
@@ -11,6 +12,7 @@ mod user;
 mod workflow;
 
 pub use admin::*;
+pub use automation::*;
 pub use board::*;
 pub use field::*;
 pub use filter::*;
@@ -251,4 +253,10 @@ pub enum JiraSubcommand {
 
     /// Unarchive one or more issues
     Unarchive(JiraUnarchiveArgs),
+
+    /// Issue subcommands (check field completeness, …)
+    Issue(JiraIssueCommand),
+
+    /// Manage Jira Cloud automation rules
+    Automation(JiraAutomationCommand),
 }

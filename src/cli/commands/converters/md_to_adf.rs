@@ -50,7 +50,7 @@ use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 
-use comrak::nodes::{AstNode, ListType, NodeValue};
+use comrak::nodes::{AstNode, ListType, NodeCode, NodeValue};
 use comrak::{Arena, Options, parse_document};
 use serde_json::{Value, json};
 use thiserror::Error;
@@ -477,10 +477,85 @@ fn substitute_inline_directives(md: &str) -> String {
     out
 }
 
+/// One slice of a line, classified by whether it lives inside a CommonMark
+/// inline code span. The borrowed strings sum back to the original line.
+enum LineSegment<'a> {
+    Outside(&'a str),
+    CodeSpan(&'a str),
+}
+
+/// Split `line` into alternating "outside" and "code-span" segments using the
+/// CommonMark rule for inline code: a span opens with N consecutive backticks
+/// and closes with the next run of *exactly* N backticks. Unmatched openers
+/// are returned verbatim as `Outside`.
+///
+/// Limitation: indented (4-space) code blocks are NOT recognised here. They
+/// would require a markdown AST walk; the line-oriented pre-pass cannot tell
+/// an indented code line from a regular paragraph by itself.
+fn split_code_span_segments(line: &str) -> Vec<LineSegment<'_>> {
+    let bytes = line.as_bytes();
+    let mut segments: Vec<LineSegment<'_>> = Vec::new();
+    let mut i = 0usize;
+    let mut outside_start = 0usize;
+
+    while i < bytes.len() {
+        if bytes[i] != b'`' {
+            i += 1;
+            continue;
+        }
+        let opener_start = i;
+        while i < bytes.len() && bytes[i] == b'`' {
+            i += 1;
+        }
+        let opener_len = i - opener_start;
+
+        let mut j = i;
+        let close_end: Option<usize> = loop {
+            if j >= bytes.len() {
+                break None;
+            }
+            if bytes[j] != b'`' {
+                j += 1;
+                continue;
+            }
+            let run_start = j;
+            while j < bytes.len() && bytes[j] == b'`' {
+                j += 1;
+            }
+            if j - run_start == opener_len {
+                break Some(j);
+            }
+        };
+
+        if let Some(close_end) = close_end {
+            if opener_start > outside_start {
+                segments.push(LineSegment::Outside(&line[outside_start..opener_start]));
+            }
+            segments.push(LineSegment::CodeSpan(&line[opener_start..close_end]));
+            outside_start = close_end;
+            i = close_end;
+        }
+    }
+
+    if outside_start < line.len() {
+        segments.push(LineSegment::Outside(&line[outside_start..]));
+    }
+    segments
+}
+
 fn substitute_line(line: &str, out: &mut String) {
-    let tokens = parse_inline(line);
+    for segment in split_code_span_segments(line) {
+        match segment {
+            LineSegment::Outside(s) => substitute_outside_segment(s, out),
+            LineSegment::CodeSpan(s) => out.push_str(s),
+        }
+    }
+}
+
+fn substitute_outside_segment(segment: &str, out: &mut String) {
+    let tokens = parse_inline(segment);
     if tokens.iter().all(|t| matches!(t, InlineToken::Text(_))) {
-        out.push_str(line);
+        out.push_str(segment);
         return;
     }
     for token in tokens {
@@ -782,16 +857,18 @@ fn render_inline<'a>(node: &'a AstNode<'a>, marks: &[Value], out: &mut Vec<Value
             }
         }
         NodeValue::Image(img) => {
-            // Promote inline images to a mediaSingle. Strictly speaking
-            // mediaSingle is a block node, but ADF treats it as inline-ish in
-            // many renderers. Still lossy; documented module-level.
-            out.push(json!({
-                "type": "mediaSingle",
-                "content": [{
-                    "type": "media",
-                    "attrs": {"type": "external", "url": img.url},
-                }],
-            }));
+            // ADF's `mediaSingle` is a *block* node — emitting it inside
+            // `paragraph.content` produces invalid ADF. Until block-level
+            // image promotion is implemented, degrade inline images to a
+            // text node containing the original markdown literal so the URL
+            // and alt text survive. This is intentionally lossy.
+            let alt = collect_inline_text(node);
+            let literal = if alt.is_empty() {
+                format!("![]({})", img.url)
+            } else {
+                format!("![{}]({})", alt, img.url)
+            };
+            push_text(&literal, marks, out);
         }
         NodeValue::HtmlInline(s) => {
             // ADF has no raw HTML inline; keep as text.
@@ -868,6 +945,33 @@ fn emit_text_with_directives(text: &str, marks: &[Value], out: &mut Vec<Value>) 
     }
     if !rest.is_empty() {
         push_text(rest, marks, out);
+    }
+}
+
+/// Recursively collect plain-text content from an inline AST node's children.
+///
+/// Used to recover the alt text from `NodeValue::Image` when degrading inline
+/// images to literal markdown. Only text-bearing leaves contribute; marks and
+/// inline structure are dropped because the alt text is purely descriptive.
+fn collect_inline_text<'a>(node: &'a AstNode<'a>) -> String {
+    let mut buf = String::new();
+    for child in node.children() {
+        append_inline_text(child, &mut buf);
+    }
+    buf
+}
+
+fn append_inline_text<'a>(node: &'a AstNode<'a>, out: &mut String) {
+    let value = node.data.borrow().value.clone();
+    match value {
+        NodeValue::Text(s) => out.push_str(&s),
+        NodeValue::Code(NodeCode { literal, .. }) => out.push_str(&literal),
+        NodeValue::SoftBreak | NodeValue::LineBreak => out.push(' '),
+        _ => {
+            for child in node.children() {
+                append_inline_text(child, out);
+            }
+        }
     }
 }
 
@@ -1531,5 +1635,56 @@ mod tests {
         assert!(obj.contains_key("type"));
         assert!(obj.contains_key("version"));
         assert!(obj.contains_key("content"));
+    }
+
+    #[test]
+    fn inline_image_degrades_to_text_not_media_single() {
+        // Bug 3: ADF's `mediaSingle` is block-level. Emitting it inside
+        // `paragraph.content` produces invalid ADF, so we degrade inline
+        // images to a text node carrying the original markdown literal.
+        let doc = convert("Hello ![alt](http://x/y.png) world");
+        let para = first_block(&doc);
+        assert_eq!(para["type"], "paragraph");
+        let inline = para["content"].as_array().unwrap();
+        // No node in the paragraph may be `mediaSingle` or `media`.
+        for node in inline {
+            assert_ne!(node["type"], "mediaSingle", "found mediaSingle: {node:?}");
+            assert_ne!(node["type"], "media", "found media: {node:?}");
+        }
+        // The original markdown literal should be preserved as text.
+        let joined: String = inline
+            .iter()
+            .filter(|n| n["type"] == "text")
+            .filter_map(|n| n["text"].as_str())
+            .collect();
+        assert!(
+            joined.contains("![alt](http://x/y.png)"),
+            "joined inline text was: {joined:?}",
+        );
+    }
+
+    #[test]
+    fn inline_directive_inside_code_span_is_preserved_verbatim() {
+        // Bug 5: pre-pass must skip inline code spans so `:status[…]` inside
+        // them stays as code-span content rather than being rewritten into
+        // ADF storage XML.
+        let doc = convert("Run `:status[DONE]` to mark done.");
+        let para = first_block(&doc);
+        assert_eq!(para["type"], "paragraph");
+        let inline = para["content"].as_array().unwrap();
+        // No `status` node should appear — the directive lives inside a code span.
+        for node in inline {
+            assert_ne!(node["type"], "status", "found status node: {node:?}");
+        }
+        // A text run with the `code` mark should carry the literal `:status[DONE]`.
+        let has_code_directive = inline.iter().any(|n| {
+            n["type"] == "text"
+                && n["text"].as_str() == Some(":status[DONE]")
+                && n["marks"]
+                    .as_array()
+                    .map(|m| m.iter().any(|mk| mk["type"] == "code"))
+                    .unwrap_or(false)
+        });
+        assert!(has_code_directive, "got: {inline:?}");
     }
 }

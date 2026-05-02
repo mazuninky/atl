@@ -1968,6 +1968,7 @@ Usage: atl confluence blog read [OPTIONS] <BLOG_ID>
 
 - `<BLOG_ID>` — Blog post ID
 - `--body-format` — Body format
+- `--no-directives` — Strip MyST-style directives (`:::info`/`:::warning`/etc.) from markdown output. No effect when `--body-format` is not `markdown`
 - `--include-labels` — Include labels in the response
 - `--include-properties` — Include properties in the response
 - `--include-operations` — Include operations in the response

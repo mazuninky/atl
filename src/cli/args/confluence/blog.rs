@@ -99,6 +99,11 @@ pub struct ConfluenceBlogReadArgs {
     #[arg(long, default_value = "markdown", value_enum)]
     pub body_format: BodyFormat,
 
+    /// Strip MyST-style directives (`:::info`/`:::warning`/etc.) from
+    /// markdown output. No effect when `--body-format` is not `markdown`.
+    #[arg(long)]
+    pub no_directives: bool,
+
     /// Include labels in the response
     #[arg(long)]
     pub include_labels: bool,

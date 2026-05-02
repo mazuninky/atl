@@ -846,9 +846,7 @@ fn render_inline(text: &str, opts: &ConvertOpts) -> String {
             && let Some(end) = find_inline_code_end(text, i + 2)
         {
             let body = &text[i + 2..end];
-            out.push('`');
-            out.push_str(body);
-            out.push('`');
+            out.push_str(&wrap_in_code_span(body));
             i = end + 2;
             continue;
         }
@@ -1402,6 +1400,38 @@ fn normalize_blank_lines(s: &str) -> String {
     out
 }
 
+/// Wrap `text` in a CommonMark code span, picking a backtick fence long
+/// enough to avoid colliding with backticks inside `text`. If `text` starts
+/// or ends with a backtick we pad with a single space (also CommonMark-compliant).
+fn wrap_in_code_span(text: &str) -> String {
+    let mut longest = 0usize;
+    let mut current = 0usize;
+    for ch in text.chars() {
+        if ch == '`' {
+            current += 1;
+            if current > longest {
+                longest = current;
+            }
+        } else {
+            current = 0;
+        }
+    }
+    let fence_len = longest + 1;
+    let fence: String = "`".repeat(fence_len);
+    let needs_pad = text.starts_with('`') || text.ends_with('`');
+    let mut out = String::with_capacity(text.len() + 2 * fence_len + if needs_pad { 2 } else { 0 });
+    out.push_str(&fence);
+    if needs_pad {
+        out.push(' ');
+    }
+    out.push_str(text);
+    if needs_pad {
+        out.push(' ');
+    }
+    out.push_str(&fence);
+    out
+}
+
 // =====================================================================
 // Tests
 // =====================================================================
@@ -1503,6 +1533,22 @@ mod tests {
     fn inline_code_double_braces() {
         let out = convert("{{code}}");
         assert!(out.contains("`code`"), "got: {out:?}");
+    }
+
+    #[test]
+    fn inline_code_with_embedded_backtick_uses_longer_fence() {
+        // Bug 9: a single-backtick fence around `a`b` is malformed. The fence
+        // must be longer than any internal run of backticks (CommonMark).
+        let out = convert("{{a`b}}");
+        assert!(out.contains("``a`b``"), "got: {out:?}");
+    }
+
+    #[test]
+    fn inline_code_starting_with_backtick_pads_with_space() {
+        // Bug 9 sibling: when the body starts with `\``, CommonMark requires
+        // a single space pad between the fence and the body.
+        let out = convert("{{`x}}");
+        assert!(out.contains("`` `x ``"), "got: {out:?}");
     }
 
     #[test]

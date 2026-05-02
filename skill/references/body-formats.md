@@ -121,11 +121,11 @@ inline image :image{src="https://x/y.png" alt="diagram"}
 
 | Inline | Confluence | Jira |
 |---|---|---|
-| `:status[TEXT]{color=...}` | `<ac:structured-macro ac:name="status">…` / ADF `status` | `{status:colour=...|title=...}` / ADF `status` |
+| `:status[TEXT]{color=...}` | `<ac:structured-macro ac:name="status">…` / ADF `status` | `{status:colour=...&#124;title=...}` / ADF `status` |
 | `:emoticon{name=...}` | `<ac:emoticon ac:name="..."/>` / ADF `emoji` | `(!)` / `(/)` / `(x)` / `(i)` / `(?)` shortcuts |
 | `:mention[@name]{accountId=...}` | `<ac:link><ri:user/>` / ADF `mention` | `[~accountid:...]` / ADF `mention` |
-| `:link[Title]{pageId=N \| url=...}` | `<ac:link><ri:page/>` / ADF `inlineCard` | `[Title|url]` |
-| `:image{src="..." alt="..."}` | `<ac:image>` / ADF `mediaSingle` | `!url|alt=...!` |
+| `:link[Title]{pageId=N &#124; url=...}` | `<ac:link><ri:page/>` / ADF `inlineCard` | `[Title&#124;url]` |
+| `:image{src="..." alt="..."}` | `<ac:image>` / ADF `mediaSingle` | `!url&#124;alt=...!` |
 
 Unknown directive names pass through as text — round-trip safe.
 

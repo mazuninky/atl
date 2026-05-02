@@ -376,14 +376,24 @@ fn render_toc(params: &BTreeMap<String, String>) -> String {
 }
 
 /// Render a parameter map as `k1=v1|k2=v2`. Keys come out in `BTreeMap` order
-/// (alphabetical). Values are emitted verbatim — Jira wiki params don't use
-/// quoting; values continue until the next `|` or `}`.
+/// (alphabetical). Values are backslash-escaped so a literal `|` or `}` inside
+/// a value can't terminate the macro early.
 fn render_wiki_params(params: &BTreeMap<String, String>) -> String {
     let mut parts = Vec::with_capacity(params.len());
     for (k, v) in params {
-        parts.push(format!("{k}={v}"));
+        parts.push(format!("{k}={}", escape_wiki_param_value(v)));
     }
     parts.join("|")
+}
+
+/// Backslash-escape characters that would otherwise terminate or split a Jira
+/// wiki macro parameter value. `|` separates parameters, `}` closes the macro,
+/// and `\\` itself must be escaped first so we don't double-process previously
+/// emitted backslashes.
+fn escape_wiki_param_value(v: &str) -> String {
+    v.replace('\\', "\\\\")
+        .replace('|', "\\|")
+        .replace('}', "\\}")
 }
 
 /// Unknown block name fallback. Echoes the original `:::name {attrs}` /
@@ -469,10 +479,85 @@ fn substitute_inline_directives(md: &str) -> String {
     out
 }
 
+/// One slice of a line, classified by whether it lives inside a CommonMark
+/// inline code span. The borrowed strings sum back to the original line.
+enum LineSegment<'a> {
+    Outside(&'a str),
+    CodeSpan(&'a str),
+}
+
+/// Split `line` into alternating "outside" and "code-span" segments using the
+/// CommonMark rule for inline code: a span opens with N consecutive backticks
+/// and closes with the next run of *exactly* N backticks. Unmatched openers
+/// are returned verbatim as `Outside`.
+///
+/// Limitation: indented (4-space) code blocks are NOT recognised here. They
+/// would require a markdown AST walk; the line-oriented pre-pass cannot tell
+/// an indented code line from a regular paragraph by itself.
+fn split_code_span_segments(line: &str) -> Vec<LineSegment<'_>> {
+    let bytes = line.as_bytes();
+    let mut segments: Vec<LineSegment<'_>> = Vec::new();
+    let mut i = 0usize;
+    let mut outside_start = 0usize;
+
+    while i < bytes.len() {
+        if bytes[i] != b'`' {
+            i += 1;
+            continue;
+        }
+        let opener_start = i;
+        while i < bytes.len() && bytes[i] == b'`' {
+            i += 1;
+        }
+        let opener_len = i - opener_start;
+
+        let mut j = i;
+        let close_end: Option<usize> = loop {
+            if j >= bytes.len() {
+                break None;
+            }
+            if bytes[j] != b'`' {
+                j += 1;
+                continue;
+            }
+            let run_start = j;
+            while j < bytes.len() && bytes[j] == b'`' {
+                j += 1;
+            }
+            if j - run_start == opener_len {
+                break Some(j);
+            }
+        };
+
+        if let Some(close_end) = close_end {
+            if opener_start > outside_start {
+                segments.push(LineSegment::Outside(&line[outside_start..opener_start]));
+            }
+            segments.push(LineSegment::CodeSpan(&line[opener_start..close_end]));
+            outside_start = close_end;
+            i = close_end;
+        }
+    }
+
+    if outside_start < line.len() {
+        segments.push(LineSegment::Outside(&line[outside_start..]));
+    }
+    segments
+}
+
 fn substitute_line(line: &str, out: &mut String) {
-    let tokens = parse_inline(line);
+    for segment in split_code_span_segments(line) {
+        match segment {
+            LineSegment::Outside(s) => substitute_outside_segment(s, out),
+            LineSegment::CodeSpan(s) => out.push_str(s),
+        }
+    }
+}
+
+fn substitute_outside_segment(segment: &str, out: &mut String) {
+    let tokens = parse_inline(segment);
     if tokens.iter().all(|t| matches!(t, InlineToken::Text(_))) {
-        out.push_str(line);
+        out.push_str(segment);
         return;
     }
     for token in tokens {
@@ -561,7 +646,7 @@ fn render_inline_status(d: &InlineDirective) -> String {
         // user's intent without breaking the stricter Jira renderer.
         params.push(format!("colour={}", raw_color.to_lowercase()));
     }
-    params.push(format!("title={title}"));
+    params.push(format!("title={}", escape_wiki_param_value(&title)));
     format!("{{status:{}}}", params.join("|"))
 }
 
@@ -1660,5 +1745,49 @@ See the [docs](https://example.com) for more.
             "expected status in:\n{result}"
         );
         assert!(result.contains("(/)"), "expected tick in:\n{result}");
+    }
+
+    #[test]
+    fn block_directive_param_with_pipe_is_escaped() {
+        // Bug 6: a literal `|` inside a macro parameter value would be parsed
+        // by Jira as a parameter separator. The emitted value must be
+        // backslash-escaped.
+        let result = convert(":::info title=\"A|B\"\nText.\n:::");
+        assert!(
+            result.contains(r"title=A\|B"),
+            "expected escaped pipe in:\n{result}"
+        );
+        // The unescaped form must NOT appear.
+        assert!(
+            !result.contains("title=A|B"),
+            "found unescaped pipe in:\n{result}"
+        );
+    }
+
+    #[test]
+    fn block_directive_param_with_close_brace_is_escaped() {
+        // Bug 6: a literal `}` inside a value would close the macro early.
+        let result = convert(":::info title=\"A}B\"\nText.\n:::");
+        assert!(
+            result.contains(r"title=A\}B"),
+            "expected escaped brace in:\n{result}"
+        );
+    }
+
+    #[test]
+    fn inline_directive_inside_code_span_is_not_rewritten() {
+        // Bug 5: a `:status[…]` inside an inline code span must NOT be
+        // rewritten by the pre-pass. comrak should see it as code-span content.
+        let result = convert("Run `:status[DONE]` to mark done.");
+        // No `{status:…}` macro should be emitted.
+        assert!(
+            !result.contains("{status:"),
+            "directive inside `…` was rewritten: {result}"
+        );
+        // The literal text should appear inside Jira's `{{…}}` inline code.
+        assert!(
+            result.contains("{{:status[DONE]}}"),
+            "expected literal inside Jira inline code, got: {result}"
+        );
     }
 }

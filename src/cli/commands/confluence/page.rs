@@ -159,9 +159,10 @@ pub(super) async fn export_page(
             render_directives: !args.no_directives,
         },
     )?;
+    let ext = args.body_format.file_extension();
     let page_file = args
         .output_dir
-        .join(format!("{}.html", sanitize_filename(title)));
+        .join(format!("{}.{}", sanitize_filename(title), ext));
     std::fs::write(page_file.as_std_path(), &body_content)?;
     info!("Wrote page content to {page_file}");
 

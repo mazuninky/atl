@@ -328,9 +328,15 @@ pub fn parse_attrs(s: &str) -> Result<BTreeMap<String, String>, DirectiveError> 
         i += 1;
 
         // parse value
+        //
+        // We collect raw bytes (not chars) so that multi-byte UTF-8 sequences
+        // round-trip correctly. The escape sequences (`\"`, `\\`) are pure
+        // ASCII so byte-level handling of the escape ITSELF is fine, but the
+        // surrounding content must be preserved verbatim. After the loop we
+        // decode the collected bytes once via `String::from_utf8`.
         let value = if i < n && bytes[i] == b'"' {
             i += 1;
-            let mut buf = String::new();
+            let mut buf: Vec<u8> = Vec::new();
             loop {
                 if i >= n {
                     return Err(DirectiveError::BadAttrs(format!(
@@ -341,11 +347,11 @@ pub fn parse_attrs(s: &str) -> Result<BTreeMap<String, String>, DirectiveError> 
                 if b == b'\\' && i + 1 < n {
                     let next = bytes[i + 1];
                     if next == b'"' || next == b'\\' {
-                        buf.push(next as char);
+                        buf.push(next);
                         i += 2;
                         continue;
                     }
-                    buf.push('\\');
+                    buf.push(b'\\');
                     i += 1;
                     continue;
                 }
@@ -353,10 +359,12 @@ pub fn parse_attrs(s: &str) -> Result<BTreeMap<String, String>, DirectiveError> 
                     i += 1;
                     break;
                 }
-                buf.push(b as char);
+                buf.push(b);
                 i += 1;
             }
-            buf
+            String::from_utf8(buf).map_err(|e| {
+                DirectiveError::BadAttrs(format!("invalid utf-8 in quoted value for `{key}`: {e}"))
+            })?
         } else {
             let value_start = i;
             while i < n {
@@ -574,8 +582,12 @@ impl BlockLexer {
             let name = &after_fence[..end];
             let attrs_part = after_fence[end..].trim();
 
-            // Unknown directive name → passthrough.
-            if lookup(name).is_none() {
+            // Unknown directive name OR a name registered as inline-only →
+            // passthrough. The `:::name` syntax is reserved for block-scope
+            // directives; an inline-only name (e.g. `mention`) appearing
+            // between `:::` fences is treated as plain text so the inline
+            // form remains the single canonical way to invoke it.
+            if !matches!(lookup(name), Some(spec) if matches!(spec.kind, DirectiveKind::Block)) {
                 return BlockEvent::Line(line.to_string());
             }
 
@@ -717,8 +729,12 @@ pub fn parse_inline(text: &str) -> Vec<InlineToken> {
         }
         let name = &text[after_colon..name_end];
 
-        // Unknown name? leave as text and advance past `:`.
-        if lookup(name).is_none() {
+        // Unknown name OR a block-only name? leave as text and advance past
+        // `:`. The `:name[…]` syntax is reserved for inline-scope directives;
+        // a block-only name (e.g. `info`) appearing inline is treated as
+        // plain text so the block form remains the single canonical way to
+        // invoke it.
+        if !matches!(lookup(name), Some(spec) if matches!(spec.kind, DirectiveKind::Inline)) {
             i += 1;
             continue;
         }
@@ -1416,5 +1432,113 @@ mod tests {
         let is = inline_specs();
         assert_eq!(is.len(), 5);
         assert!(is.iter().all(|s| matches!(s.kind, DirectiveKind::Inline)));
+    }
+
+    // ---- UTF-8 in attribute values (regression) --------------------------
+
+    #[test]
+    fn parse_attrs_preserves_utf8_in_quoted_value() {
+        let result = parse_attrs(r#"title="café""#).unwrap();
+        assert_eq!(result.get("title"), Some(&"café".to_string()));
+    }
+
+    #[test]
+    fn parse_attrs_preserves_utf8_with_escape() {
+        let result = parse_attrs(r#"title="\"café\"""#).unwrap();
+        assert_eq!(result.get("title"), Some(&"\"café\"".to_string()));
+    }
+
+    #[test]
+    fn parse_attrs_preserves_utf8_in_unquoted_value() {
+        // Unquoted values stop at whitespace, but multi-byte UTF-8 runs
+        // (Cyrillic, emoji) should round-trip.
+        let result = parse_attrs("name=привет").unwrap();
+        assert_eq!(result.get("name"), Some(&"привет".to_string()));
+    }
+
+    #[test]
+    fn parse_attrs_preserves_emoji_in_quoted_value() {
+        let result = parse_attrs(r#"emoji="hi 🎉 there""#).unwrap();
+        assert_eq!(result.get("emoji"), Some(&"hi 🎉 there".to_string()));
+    }
+
+    // ---- DirectiveKind enforcement (regression) --------------------------
+
+    #[test]
+    fn block_lexer_rejects_inline_name_as_block_directive() {
+        // `:::mention` — `mention` is an Inline-only directive; block fence
+        // should fall through as Line.
+        let mut lex = BlockLexer::new();
+        let event = lex.lex_line(":::mention");
+        assert!(matches!(event, BlockEvent::Line(_)), "got {event:?}");
+    }
+
+    #[test]
+    fn inline_parser_rejects_block_name_as_inline_directive() {
+        // `:info[x]` — `info` is a Block-only directive; inline syntax
+        // should pass through as Text.
+        let tokens = parse_inline(":info[content]");
+        assert!(
+            matches!(tokens.as_slice(), [InlineToken::Text(s)] if s == ":info[content]"),
+            "got {tokens:?}"
+        );
+    }
+
+    #[test]
+    fn block_lexer_accepts_block_name() {
+        // `:::info` — `info` is Block; should open a directive.
+        let mut lex = BlockLexer::new();
+        let event = lex.lex_line(":::info");
+        assert!(
+            matches!(event, BlockEvent::Open { ref name, .. } if name == "info"),
+            "got {event:?}"
+        );
+    }
+
+    #[test]
+    fn inline_parser_accepts_inline_name() {
+        // `:status[DONE]` — `status` is Inline; should produce a Directive
+        // token.
+        let tokens = parse_inline(":status[DONE]");
+        assert!(
+            matches!(tokens.first(), Some(InlineToken::Directive(d)) if d.name == "status"),
+            "got {tokens:?}"
+        );
+    }
+
+    #[test]
+    fn block_lexer_rejects_all_inline_only_names() {
+        // Sweep every Inline-only spec and confirm `:::name` falls through.
+        for spec in inline_specs() {
+            let mut lex = BlockLexer::new();
+            let line = format!(":::{}", spec.name);
+            let event = lex.lex_line(&line);
+            assert!(
+                matches!(event, BlockEvent::Line(ref s) if s == &line),
+                "inline-only `{}` must not open as block, got {event:?}",
+                spec.name
+            );
+            assert_eq!(
+                lex.depth(),
+                0,
+                "inline-only `{}` must not be pushed onto block stack",
+                spec.name
+            );
+        }
+    }
+
+    #[test]
+    fn inline_parser_rejects_all_block_only_names() {
+        // Sweep every Block-only spec and confirm `:name[…]` falls through
+        // as text.
+        for spec in block_specs() {
+            let input = format!(":{}[body]", spec.name);
+            let tokens = parse_inline(&input);
+            assert!(
+                matches!(tokens.as_slice(), [InlineToken::Text(s)] if s == &input),
+                "block-only `{}` must not parse inline, got {tokens:?}",
+                spec.name
+            );
+        }
     }
 }

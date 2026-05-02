@@ -204,6 +204,36 @@ fn convert_comment_body(
     Ok(())
 }
 
+/// Pretty-print any ADF body objects in an issue payload as JSON strings so
+/// the console flattener can render them.
+///
+/// `flatten_issue` only emits `description` / comment `body` fields when they
+/// are JSON strings, so an ADF response (where these fields are objects)
+/// would silently be dropped. This walks `/fields/description` and every
+/// `/fields/comment/comments[*]/body`, replacing object values with a
+/// pretty-printed JSON string. Non-object fields are left alone — this is a
+/// console-only formatting hop, not a converter.
+fn stringify_adf_bodies(issue: &mut Value) {
+    if let Some(desc) = issue.pointer_mut("/fields/description")
+        && desc.is_object()
+    {
+        let pretty = serde_json::to_string_pretty(desc).unwrap_or_default();
+        *desc = Value::String(pretty);
+    }
+    if let Some(comments) = issue.pointer_mut("/fields/comment/comments")
+        && let Some(arr) = comments.as_array_mut()
+    {
+        for c in arr.iter_mut() {
+            if let Some(body) = c.get_mut("body")
+                && body.is_object()
+            {
+                let pretty = serde_json::to_string_pretty(body).unwrap_or_default();
+                *body = Value::String(pretty);
+            }
+        }
+    }
+}
+
 pub(super) fn today_date() -> String {
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -344,6 +374,37 @@ fn build_update_fields(
         );
     }
     Ok(fields)
+}
+
+/// Pick the API version to send a clone-create payload to, based on the
+/// source description's shape and the deployment flavor.
+///
+/// On Cloud, the v2 endpoint can occasionally return an ADF description
+/// (the field config decides). The v2 create endpoint rejects ADF, so
+/// when we see an object description we must route the create call to v3.
+/// Wiki-text (or missing) descriptions stay on v2.
+///
+/// On Data Center / Server, v3 is not available — even if the description
+/// somehow arrived as an object we have to fall back to v2 and accept the
+/// likely failure mode (a `tracing::warn!` records the situation so
+/// operators can spot the misconfiguration).
+fn clone_api_version(source: &Value, flavor: JiraFlavor) -> JiraApiVersion {
+    let description_is_adf = source
+        .pointer("/fields/description")
+        .map(Value::is_object)
+        .unwrap_or(false);
+    if !description_is_adf {
+        return JiraApiVersion::V2;
+    }
+    if flavor == JiraFlavor::Cloud {
+        JiraApiVersion::V3
+    } else {
+        tracing::warn!(
+            "source issue has an ADF description but flavor is {:?}; falling back to V2 create — payload may be rejected",
+            flavor
+        );
+        JiraApiVersion::V2
+    }
 }
 
 /// Build a clone payload by copying selected fields from a source issue and
@@ -756,6 +817,9 @@ async fn dispatch(
             let mut value = client.get_issue(&args.key, &[], api_version).await?;
             convert_issue_bodies(&mut value, args.body_format, !args.no_directives)?;
             if matches!(format, OutputFormat::Console) {
+                if matches!(args.body_format, JiraBodyFormat::Adf) {
+                    stringify_adf_bodies(&mut value);
+                }
                 flatten_issue(value)
             } else {
                 value
@@ -879,14 +943,17 @@ async fn dispatch(
             ))
         }
         JiraSubcommand::Clone(args) => {
-            // Clone preserves the source description shape — read and write
-            // through v2 since `get_issue(.., V2)` returns wiki-text
-            // descriptions and the v2 create endpoint accepts the same
-            // shape unchanged.
+            // Clone preserves the source description shape. v2 normally
+            // returns wiki-text descriptions, but Cloud's field config can
+            // surface ADF objects through the v2 endpoint anyway — and the
+            // v2 create endpoint rejects ADF payloads. Inspect the source
+            // description shape and route the create call to v3 when ADF
+            // is detected so the clone never posts an invalid payload.
             let source = client.get_issue(&args.key, &[], JiraApiVersion::V2).await?;
+            let api_version = clone_api_version(&source, client.flavor());
             let new_fields = build_clone_fields(&source, args.summary.as_deref())?;
             client
-                .create_issue(&json!({ "fields": new_fields }), JiraApiVersion::V2)
+                .create_issue(&json!({ "fields": new_fields }), api_version)
                 .await?
         }
         JiraSubcommand::Worklog(wl_cmd) => {
@@ -1667,6 +1734,86 @@ mod tests {
         assert_eq!(value, before);
     }
 
+    // ---- stringify_adf_bodies ----
+
+    #[test]
+    fn stringify_adf_bodies_pretty_prints_object_description() {
+        // ADF descriptions land as JSON objects; flatten_issue only handles
+        // string fields, so an unstringified object would silently disappear
+        // from the console output. After this hop, the description is a
+        // pretty-printed JSON string the flattener can render.
+        let mut issue = json!({
+            "fields": {
+                "description": {"type": "doc", "version": 1, "content": []}
+            }
+        });
+        stringify_adf_bodies(&mut issue);
+        let desc = issue
+            .pointer("/fields/description")
+            .and_then(Value::as_str)
+            .expect("description should be a string after stringify");
+        // Pretty-print emits multi-line JSON.
+        assert!(
+            desc.contains('\n'),
+            "description should be pretty-printed JSON, got: {desc:?}"
+        );
+        // Round-trip parses to the same shape.
+        let parsed: Value =
+            serde_json::from_str(desc).expect("stringified ADF must remain valid JSON");
+        assert_eq!(parsed.get("type").and_then(Value::as_str), Some("doc"));
+    }
+
+    #[test]
+    fn stringify_adf_bodies_leaves_string_description_alone() {
+        // A wiki-text description is already a string; the helper must not
+        // touch it (otherwise we'd corrupt non-ADF responses).
+        let mut issue = json!({
+            "fields": {"description": "plain wiki text"}
+        });
+        stringify_adf_bodies(&mut issue);
+        assert_eq!(
+            issue.pointer("/fields/description").and_then(Value::as_str),
+            Some("plain wiki text")
+        );
+    }
+
+    #[test]
+    fn stringify_adf_bodies_pretty_prints_object_comment_bodies() {
+        // Comment bodies follow the same shape as descriptions and must be
+        // stringified the same way so they survive flattening.
+        let mut issue = json!({
+            "fields": {
+                "comment": {
+                    "comments": [
+                        {"id": "1", "body": {"type": "doc", "content": []}},
+                        {"id": "2", "body": "wiki"}
+                    ]
+                }
+            }
+        });
+        stringify_adf_bodies(&mut issue);
+        let b0 = issue
+            .pointer("/fields/comment/comments/0/body")
+            .and_then(Value::as_str)
+            .expect("ADF comment body should stringify");
+        assert!(b0.contains("\"type\""));
+        // Plain string body must remain a string with the original content.
+        assert_eq!(
+            issue
+                .pointer("/fields/comment/comments/1/body")
+                .and_then(Value::as_str),
+            Some("wiki")
+        );
+    }
+
+    #[test]
+    fn stringify_adf_bodies_no_description_or_comments_is_safe() {
+        // Missing description / comments must not panic.
+        let mut issue = json!({"fields": {}});
+        stringify_adf_bodies(&mut issue);
+        assert_eq!(issue, json!({"fields": {}}));
+    }
+
     // ---- build_jql: filter flag coverage ----
 
     #[test]
@@ -2175,6 +2322,74 @@ mod tests {
         assert!(
             err.to_string().contains("could not read fields"),
             "expected fields-missing error, got: {err}"
+        );
+    }
+
+    // ---- clone_api_version ----
+
+    #[test]
+    fn clone_api_version_string_description_uses_v2() {
+        // The common case: v2 returned a wiki-text description. Stay on v2.
+        let source = json!({
+            "fields": {
+                "summary": "S",
+                "description": "wiki body"
+            }
+        });
+        assert_eq!(
+            clone_api_version(&source, JiraFlavor::Cloud),
+            JiraApiVersion::V2
+        );
+    }
+
+    #[test]
+    fn clone_api_version_adf_description_on_cloud_uses_v3() {
+        // Cloud's field config can return an ADF object even from v2; the
+        // create endpoint must be v3 or the payload will be rejected.
+        let source = json!({
+            "fields": {
+                "summary": "S",
+                "description": {"type": "doc", "version": 1, "content": []}
+            }
+        });
+        assert_eq!(
+            clone_api_version(&source, JiraFlavor::Cloud),
+            JiraApiVersion::V3
+        );
+    }
+
+    #[test]
+    fn clone_api_version_adf_description_on_data_center_falls_back_to_v2() {
+        // Data Center has no v3 — best we can do is fall back to v2 and
+        // surface the diagnostic via the warn! call.
+        let source = json!({
+            "fields": {
+                "description": {"type": "doc"}
+            }
+        });
+        assert_eq!(
+            clone_api_version(&source, JiraFlavor::DataCenter),
+            JiraApiVersion::V2
+        );
+    }
+
+    #[test]
+    fn clone_api_version_missing_description_uses_v2() {
+        // No description field at all — v2 is correct (no body to coerce).
+        let source = json!({"fields": {"summary": "S"}});
+        assert_eq!(
+            clone_api_version(&source, JiraFlavor::Cloud),
+            JiraApiVersion::V2
+        );
+    }
+
+    #[test]
+    fn clone_api_version_null_description_uses_v2() {
+        // Explicit null is `Value::Null`, not an object — stay on v2.
+        let source = json!({"fields": {"description": null}});
+        assert_eq!(
+            clone_api_version(&source, JiraFlavor::Cloud),
+            JiraApiVersion::V2
         );
     }
 

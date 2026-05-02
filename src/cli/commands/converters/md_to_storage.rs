@@ -332,6 +332,12 @@ fn render_block_directive(
 
     if spec.allows_body {
         render_macro_with_body(macro_name, params, body)
+    } else if !body.trim().is_empty() {
+        // Spec forbids a body, but the user wrote one anyway. Emitting the
+        // self-closing macro would silently drop their content, which is
+        // worse than degrading visibly — pass the original literal through
+        // so the user sees their input survived.
+        render_unknown_block(name, params, body)
     } else {
         render_macro_self_closing(macro_name, params)
     }
@@ -474,12 +480,106 @@ fn substitute_inline_directives(md: &str, out_placeholders: &mut Vec<InlineDirec
     out
 }
 
+/// One slice of a line, classified by whether it lives inside a CommonMark
+/// inline code span. The borrowed strings sum back to the original line.
+enum LineSegment<'a> {
+    Outside(&'a str),
+    CodeSpan(&'a str),
+}
+
+/// Split `line` into alternating "outside" and "code-span" segments using the
+/// CommonMark rule for inline code: a span opens with N consecutive backticks
+/// and closes with the next run of *exactly* N backticks. Unmatched openers
+/// are returned verbatim as `Outside`.
+///
+/// The opening and closing backtick runs are included in the `CodeSpan`
+/// segments so the original byte sequence is preserved on rejoin.
+fn split_code_span_segments(line: &str) -> Vec<LineSegment<'_>> {
+    let bytes = line.as_bytes();
+    let mut segments: Vec<LineSegment<'_>> = Vec::new();
+    let mut i = 0usize;
+    let mut outside_start = 0usize;
+
+    while i < bytes.len() {
+        if bytes[i] != b'`' {
+            i += 1;
+            continue;
+        }
+        // Count opener length.
+        let opener_start = i;
+        while i < bytes.len() && bytes[i] == b'`' {
+            i += 1;
+        }
+        let opener_len = i - opener_start;
+
+        // Search for a matching close run of exactly `opener_len` backticks.
+        let mut j = i;
+        let close_end: Option<usize> = loop {
+            if j >= bytes.len() {
+                break None;
+            }
+            if bytes[j] != b'`' {
+                j += 1;
+                continue;
+            }
+            let run_start = j;
+            while j < bytes.len() && bytes[j] == b'`' {
+                j += 1;
+            }
+            if j - run_start == opener_len {
+                break Some(j);
+            }
+            // Wrong-length run inside the span — keep scanning.
+        };
+
+        if let Some(close_end) = close_end {
+            // Flush "outside" prefix up to opener_start.
+            if opener_start > outside_start {
+                segments.push(LineSegment::Outside(&line[outside_start..opener_start]));
+            }
+            segments.push(LineSegment::CodeSpan(&line[opener_start..close_end]));
+            outside_start = close_end;
+            i = close_end;
+        }
+        // No close found — the opener is just literal text. Continue scanning
+        // from where we are; outside_start stays put.
+    }
+
+    if outside_start < line.len() {
+        segments.push(LineSegment::Outside(&line[outside_start..]));
+    }
+    segments
+}
+
 /// Run the inline parser against one line and append the result (with
 /// placeholders for directives) to `out`.
+///
+/// The line is split into "outside" and "inside" segments by inline code
+/// spans (`` `…` ``, `` ``…`` ``, etc.). Only the "outside" segments are sent
+/// through [`parse_inline`] — anything inside a code span is passed through
+/// verbatim so directives like `` `:status[Done]` `` survive into comrak as
+/// literal code-span content.
+///
+/// Limitation: indented (4-space) code blocks are NOT recognised here. They
+/// would require a markdown AST walk; the line-oriented pre-pass cannot tell
+/// an indented code line from a regular paragraph by itself.
 fn substitute_line(line: &str, out: &mut String, out_placeholders: &mut Vec<InlineDirective>) {
-    let tokens = parse_inline(line);
+    for segment in split_code_span_segments(line) {
+        match segment {
+            LineSegment::Outside(s) => substitute_outside_segment(s, out, out_placeholders),
+            LineSegment::CodeSpan(s) => out.push_str(s),
+        }
+    }
+}
+
+fn substitute_outside_segment(
+    segment: &str,
+    out: &mut String,
+    out_placeholders: &mut Vec<InlineDirective>,
+) {
+    let tokens = parse_inline(segment);
     if tokens.iter().all(|t| matches!(t, InlineToken::Text(_))) {
-        out.push_str(line);
+        out.push_str(segment);
         return;
     }
     for token in tokens {
@@ -893,23 +993,20 @@ mod tests {
     }
 
     #[test]
-    fn known_directive_without_storage_macro_passes_through() {
-        // The `mention` directive is registered but has `conf_storage_macro:
-        // None`. Block-form mention isn't valid (it's an inline directive),
-        // but we test the fallback path explicitly via the renderer.
-        // Since `mention` is registered as INLINE, the block lexer would
-        // accept `:::mention` as a known name with no storage macro.
+    fn block_fence_with_inline_only_name_does_not_emit_structured_macro() {
+        // `mention` is registered as INLINE; using it in block-fence form
+        // (`:::mention`) is a kind mismatch. The block lexer must fall
+        // through (the `:::mention` line is treated as plain text), and the
+        // overall conversion must NOT produce a Confluence structured-macro
+        // node — `mention` has no storage-macro mapping.
         let out = convert(":::mention\nx\n:::");
-        // Should render the original literal `:::mention` form, NOT a
-        // structured-macro.
         assert!(
             !out.contains(r#"ac:name="mention""#),
-            "directive with no storage macro must not become structured-macro, got: {out}"
+            "kind-mismatched block fence must not become structured-macro, got: {out}"
         );
-        assert!(
-            out.contains(":::mention"),
-            "fallback literal present, got: {out}"
-        );
+        // The literal `x` body must still be emitted somewhere in the
+        // output (it's not a directive body, it's just a paragraph line).
+        assert!(out.contains('x'), "body line must round-trip, got: {out}");
     }
 
     // ---- code-fence escape ------------------------------------------------
@@ -1153,5 +1250,68 @@ body
         let out = convert("before :status[DONE]");
         assert!(out.contains(r#"ac:name="status""#), "got: {out}");
         assert!(out.contains("before"), "got: {out}");
+    }
+
+    #[test]
+    fn self_closing_directive_with_body_passes_through_literal() {
+        // Bug 4: `:::toc` is self-closing (allows_body == false). When the
+        // user wrote a body anyway, silently dropping it is worse than
+        // emitting the literal markdown so the user sees their content.
+        let out = convert(":::toc\nstray text\n:::");
+        // The self-closing structured-macro must NOT be emitted because we
+        // chose to degrade visibly instead.
+        assert!(
+            !out.contains(r#"<ac:structured-macro ac:name="toc">"#),
+            "expected literal passthrough, got: {out}"
+        );
+        // The original body content must still be visible somewhere in the output.
+        assert!(out.contains("stray text"), "got: {out}");
+    }
+
+    #[test]
+    fn self_closing_directive_without_body_still_emits_macro() {
+        // Bug 4 sibling: when there's no body content, the self-closing
+        // structured macro is still the right thing to emit.
+        let out = convert(":::toc\n:::");
+        assert!(
+            out.contains(r#"<ac:structured-macro ac:name="toc">"#),
+            "got: {out}"
+        );
+        assert!(
+            !out.contains("<ac:rich-text-body>"),
+            "self-closing macro must not have a body, got: {out}"
+        );
+    }
+
+    #[test]
+    fn inline_directive_inside_code_span_is_not_rewritten() {
+        // Bug 5: a `:status[…]` inside an inline code span must NOT be
+        // rewritten by the pre-pass. comrak should see the original literal
+        // as code-span content.
+        let out = convert("Run `:status[DONE]` to set status.");
+        // No `status` macro should be emitted — the directive is inside a code span.
+        assert!(
+            !out.contains(r#"ac:name="status""#),
+            "directive inside `…` was rewritten: {out}"
+        );
+        // The literal `:status[DONE]` should appear inside `<code>…</code>`.
+        assert!(
+            out.contains("<code>:status[DONE]</code>"),
+            "expected literal inside code span, got: {out}"
+        );
+    }
+
+    #[test]
+    fn inline_directive_outside_code_span_on_same_line_still_works() {
+        // Bug 5 follow-up: only the code-span content is skipped; directives
+        // before/after the span are still rewritten.
+        let out = convert("Run `:status[DONE]` then :status[OK]{color=green} ok.");
+        // The first one (inside code) is preserved as literal code text.
+        assert!(out.contains("<code>:status[DONE]</code>"), "got: {out}");
+        // The second one (outside) becomes a real status macro.
+        assert!(
+            out.contains(r#"ac:name="status""#),
+            "outside-span directive should still be emitted: {out}"
+        );
     }
 }

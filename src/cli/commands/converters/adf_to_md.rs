@@ -439,7 +439,7 @@ fn render_table(rows: &[Value], out: &mut String, ctx: &mut Ctx) {
     out.push('|');
     for cell in &header {
         out.push(' ');
-        out.push_str(cell);
+        out.push_str(&escape_table_cell(cell));
         out.push_str(" |");
     }
     out.push('\n');
@@ -454,12 +454,22 @@ fn render_table(rows: &[Value], out: &mut String, ctx: &mut Ctx) {
         out.push('|');
         for cell in &row {
             out.push(' ');
-            out.push_str(cell);
+            out.push_str(&escape_table_cell(cell));
             out.push_str(" |");
         }
         out.push('\n');
     }
     out.push('\n');
+}
+
+/// Escape characters that would break a GFM table cell.
+///
+/// A literal `|` inside a cell would be parsed as a column separator; the GFM
+/// convention is to backslash-escape it. We don't touch other characters
+/// because the cell content is already inline-rendered markdown, where pipes
+/// are the only context-sensitive character at table-cell granularity.
+fn escape_table_cell(cell: &str) -> String {
+    cell.replace('|', "\\|")
 }
 
 // =====================================================================
@@ -750,7 +760,7 @@ fn apply_marks(text: &str, marks: Option<&Vec<Value>>) -> String {
     };
 
     if is_code {
-        s = format!("`{s}`");
+        s = wrap_in_code_span(&s);
     }
     // When em and strong are both present, use `_` for em so the combined
     // form is `**_x_**` instead of the ambiguous `***x***`.
@@ -791,6 +801,39 @@ fn apply_marks(text: &str, marks: Option<&Vec<Value>>) -> String {
         s = format!("[{s}]({href})");
     }
     s
+}
+
+/// Wrap `text` in a CommonMark code span, picking a backtick run long enough
+/// to avoid colliding with backticks inside `text`. If `text` starts or ends
+/// with a backtick, we pad with a single space (also CommonMark-compliant).
+fn wrap_in_code_span(text: &str) -> String {
+    // Longest run of consecutive backticks in `text`.
+    let mut longest = 0usize;
+    let mut current = 0usize;
+    for ch in text.chars() {
+        if ch == '`' {
+            current += 1;
+            if current > longest {
+                longest = current;
+            }
+        } else {
+            current = 0;
+        }
+    }
+    let fence_len = longest + 1;
+    let fence: String = "`".repeat(fence_len);
+    let needs_pad = text.starts_with('`') || text.ends_with('`');
+    let mut out = String::with_capacity(text.len() + 2 * fence_len + if needs_pad { 2 } else { 0 });
+    out.push_str(&fence);
+    if needs_pad {
+        out.push(' ');
+    }
+    out.push_str(text);
+    if needs_pad {
+        out.push(' ');
+    }
+    out.push_str(&fence);
+    out
 }
 
 fn render_mention(node: &Value, out: &mut String, ctx: &Ctx) {
@@ -1319,6 +1362,62 @@ mod tests {
         assert!(md.contains("| A | B |"), "got: {md:?}");
         assert!(md.contains("| --- | --- |"), "got: {md:?}");
         assert!(md.contains("| 1 | 2 |"), "got: {md:?}");
+    }
+
+    #[test]
+    fn table_cell_pipe_is_escaped() {
+        // Bug 1: a literal `|` inside a cell would split the column. The
+        // emitted cell must backslash-escape it (GFM convention).
+        let adf = doc(json!([
+            {
+                "type": "table",
+                "content": [
+                    {
+                        "type": "tableRow",
+                        "content": [
+                            {"type": "tableHeader", "content": [
+                                {"type": "paragraph", "content": [{"type": "text", "text": "h|x"}]}
+                            ]},
+                        ]
+                    },
+                    {
+                        "type": "tableRow",
+                        "content": [
+                            {"type": "tableCell", "content": [
+                                {"type": "paragraph", "content": [{"type": "text", "text": "a | b"}]}
+                            ]},
+                        ]
+                    }
+                ]
+            }
+        ]));
+        let md = convert(&adf);
+        // Cell containing `a | b` must have escaped pipes.
+        assert!(md.contains(r"a \| b"), "got: {md:?}");
+        // Header containing `h|x` must also be escaped.
+        assert!(md.contains(r"h\|x"), "got: {md:?}");
+    }
+
+    #[test]
+    fn code_span_with_backtick_uses_longer_fence() {
+        // Bug 2: a single-backtick fence around `a`b` produces malformed
+        // markdown; the fence must be longer than any internal run.
+        let adf = one_para(json!([
+            {"type": "text", "text": "a`b", "marks": [{"type": "code"}]}
+        ]));
+        let md = convert(&adf);
+        assert_eq!(md.trim(), "``a`b``");
+    }
+
+    #[test]
+    fn code_span_starting_with_backtick_pads_with_space() {
+        // Bug 2: when the body starts/ends with `\``, CommonMark requires
+        // exactly one padding space between the fence and the body.
+        let adf = one_para(json!([
+            {"type": "text", "text": "`x", "marks": [{"type": "code"}]}
+        ]));
+        let md = convert(&adf);
+        assert_eq!(md.trim(), "`` `x ``");
     }
 
     #[test]

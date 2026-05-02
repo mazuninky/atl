@@ -146,7 +146,10 @@ fn parse(xhtml: &str) -> Result<Vec<XNode>, StorageToMdError> {
     let cfg = reader.config_mut();
     cfg.trim_text(false);
     cfg.expand_empty_elements = false;
-    cfg.check_end_names = false;
+    // `check_end_names = true` (the quick-xml default) enforces matched
+    // start/end tag names. The module's documented contract is "well-formed
+    // XML required", so a mismatched close like `<p></div>` should surface as
+    // `Error::Xml`, not silently succeed.
 
     // Stack of (element-name, attrs, accumulated-children) for currently-open
     // elements. The synthetic `<atl_root>` is the first frame pushed when its
@@ -772,7 +775,18 @@ fn emit_structured_macro(
     };
 
     if !ctx.opts.render_directives {
-        // Strip wrapper — emit only the body content.
+        // Strip wrapper — emit the body content. The Confluence `status`
+        // macro is a special case: its visible text lives in the `title`
+        // parameter rather than the body, so falling back to `body_md` would
+        // drop the badge text entirely. Prefer `title` when present.
+        if macro_name == "status" {
+            let title = params.get("title").cloned().unwrap_or_default();
+            let text = if title.is_empty() { body_md } else { title };
+            if !text.is_empty() {
+                out.push_str(&text);
+            }
+            return;
+        }
         if !body_md.is_empty() {
             ensure_blank_line(out);
             out.push_str(&body_md);
@@ -1708,5 +1722,33 @@ mod tests {
         let md = storage_to_markdown(&xml, ConvertOpts::default()).unwrap();
         assert!(md.contains(":status[DONE]"), "got: {md:?}");
         assert!(md.contains("color=green"), "got: {md:?}");
+    }
+
+    #[test]
+    fn mismatched_end_tag_returns_err() {
+        // Bug 7: with `check_end_names = true` (the quick-xml default),
+        // mismatched end tags must surface as an XML error rather than parsing
+        // silently. The module's documented contract is "well-formed XML
+        // required".
+        let result = storage_to_markdown("<p>oops</div>", ConvertOpts::default());
+        match result {
+            Err(StorageToMdError::Xml(_)) => {}
+            other => panic!("expected XML error, got: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn no_directives_status_emits_title_text() {
+        // Bug 8: in the strip path, the `status` macro stores its visible
+        // text in the `title` parameter, not the body. Falling back to body
+        // content drops the badge text — title must be preferred.
+        let xhtml = r#"<p><ac:structured-macro ac:name="status"><ac:parameter ac:name="title">DONE</ac:parameter><ac:parameter ac:name="colour">green</ac:parameter></ac:structured-macro></p>"#;
+        let out = convert_no_directives(xhtml);
+        assert!(out.contains("DONE"), "expected title text, got: {out:?}");
+        // The directive syntax must NOT be emitted in strip mode.
+        assert!(
+            !out.contains(":status["),
+            "directive form leaked into strip mode: {out:?}"
+        );
     }
 }

@@ -209,6 +209,21 @@ impl BodyFormat {
             Self::Adf => "atlas_doc_format",
         }
     }
+
+    /// File extension to use when persisting a body of this format to disk.
+    ///
+    /// Used by `atl confluence export` so the on-disk filename matches the
+    /// content shape: storage XHTML lives in `.xhtml`, the server-rendered
+    /// HTML preview in `.html`, ADF (a stringified JSON document) in
+    /// `.json`, and markdown in `.md`.
+    pub fn file_extension(&self) -> &'static str {
+        match self {
+            Self::Storage => "xhtml",
+            Self::View => "html",
+            Self::Markdown => "md",
+            Self::Adf => "json",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Default, ValueEnum)]
@@ -221,4 +236,35 @@ pub enum InputFormat {
     /// Atlassian Document Format JSON — sent natively as
     /// `atlas_doc_format`.
     Adf,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn file_extension_storage_is_xhtml() {
+        // Storage XHTML is canonical Confluence wire format — `.xhtml` makes
+        // the on-disk type discoverable by editors that key off extensions.
+        assert_eq!(BodyFormat::Storage.file_extension(), "xhtml");
+    }
+
+    #[test]
+    fn file_extension_view_is_html() {
+        // The view format is server-rendered HTML preview; `.html` matches.
+        assert_eq!(BodyFormat::View.file_extension(), "html");
+    }
+
+    #[test]
+    fn file_extension_markdown_is_md() {
+        // Markdown export is the new default — must land in `.md`, not the
+        // legacy hard-coded `.html`.
+        assert_eq!(BodyFormat::Markdown.file_extension(), "md");
+    }
+
+    #[test]
+    fn file_extension_adf_is_json() {
+        // ADF is a stringified JSON document; `.json` reflects that.
+        assert_eq!(BodyFormat::Adf.file_extension(), "json");
+    }
 }

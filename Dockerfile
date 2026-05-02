@@ -19,7 +19,6 @@ FROM rust:${RUST_VERSION}-slim-${DEBIAN_CODENAME} AS builder
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         pkg-config \
-        libdbus-1-dev \
         ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 

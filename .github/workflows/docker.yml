@@ -78,24 +78,6 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ needs.verify-version.outputs.tag }}
-          fetch-depth: 0
-
-      # Dockerfile and .dockerignore are build infra, not source. Always
-      # take them from the default branch so old tags can be backfilled
-      # (e.g. v2026.18.3 was cut before the Dockerfile existed) and
-      # Dockerfile fixes can be applied to any prior release without
-      # re-tagging. The tag's src/ + Cargo.{toml,lock} drive the actual
-      # build inputs.
-      - name: Overlay Dockerfile from default branch
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          DEFAULT_BRANCH=$(gh repo view --json defaultBranchRef --jq '.defaultBranchRef.name')
-          git fetch --depth=1 origin "$DEFAULT_BRANCH"
-          git checkout "origin/$DEFAULT_BRANCH" -- Dockerfile .dockerignore
-          echo "Dockerfile overlaid from origin/$DEFAULT_BRANCH"
 
       - name: Compute lowercase image name
         id: image

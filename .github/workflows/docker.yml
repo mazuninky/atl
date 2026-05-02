@@ -241,6 +241,6 @@ jobs:
             echo "  with:"
             echo "    args: jira issue list --jql 'assignee = currentUser()'"
             echo "  env:"
-            echo "    ATL_API_TOKEN: \${{ secrets.ATL_TOKEN }}"
+            echo "    ATL_API_TOKEN: \$"'{{ secrets.ATL_TOKEN }}'
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"

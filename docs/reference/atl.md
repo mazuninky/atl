@@ -9053,6 +9053,8 @@ Usage: atl jira field [OPTIONS] <COMMAND>
 - `delete` — Delete a custom field
 - `trash` — Move a custom field to trash
 - `restore` — Restore a custom field from trash
+- `context` — Manage custom field contexts
+- `options` — Manage select-list options for a custom field context
 
 ##### atl jira field list
 
@@ -9170,6 +9172,469 @@ Usage: atl jira field restore [OPTIONS] <ID>
 **Options**
 
 - `<ID>` — Resource ID
+- `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
+- `--quiet, -q` — Suppress all output except errors
+- `--config` — Path to configuration file
+- `--profile, -p` — Profile name to use
+- `--format, -F` — Output format
+- `--no-color` — Disable colored output
+- `--no-pager` — Do not pipe long output through a pager
+- `--jq` — Query output with a jq expression
+- `--template` — Format output with a minijinja template
+- `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
+
+##### atl jira field context
+
+Manage custom field contexts
+
+**Usage**
+
+```
+Usage: atl jira field context [OPTIONS] <FIELD_ID> <COMMAND>
+```
+
+**Options**
+
+- `<FIELD_ID>` — Custom field ID (e.g. "customfield_10010")
+- `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
+- `--quiet, -q` — Suppress all output except errors
+- `--config` — Path to configuration file
+- `--profile, -p` — Profile name to use
+- `--format, -F` — Output format
+- `--no-color` — Disable colored output
+- `--no-pager` — Do not pipe long output through a pager
+- `--jq` — Query output with a jq expression
+- `--template` — Format output with a minijinja template
+- `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
+
+**Subcommands**
+
+- `list` — List contexts for the field
+- `create` — Create a context
+- `update` — Update a context
+- `delete` — Delete a context
+- `projects` — List projects mapped to a context
+- `add-projects` — Add projects to a context
+- `remove-projects` — Remove projects from a context
+- `issue-types` — List issue types mapped to a context
+- `add-issue-types` — Add issue types to a context
+- `remove-issue-types` — Remove issue types from a context
+
+###### atl jira field context list
+
+List contexts for the field
+
+**Usage**
+
+```
+Usage: atl jira field context <FIELD_ID> list [OPTIONS]
+```
+
+**Options**
+
+- `--limit, -l` — Max results per page
+- `--all` — Fetch all results (auto-paginate)
+- `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
+- `--quiet, -q` — Suppress all output except errors
+- `--config` — Path to configuration file
+- `--profile, -p` — Profile name to use
+- `--format, -F` — Output format
+- `--no-color` — Disable colored output
+- `--no-pager` — Do not pipe long output through a pager
+- `--jq` — Query output with a jq expression
+- `--template` — Format output with a minijinja template
+- `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
+
+###### atl jira field context create
+
+Create a context
+
+**Usage**
+
+```
+Usage: atl jira field context <FIELD_ID> create [OPTIONS] --name <NAME>
+```
+
+**Options**
+
+- `--name, -n` — Context name
+- `--description, -d` — Description
+- `--issue-type-id` — Issue type ID(s) the context applies to (repeatable)
+- `--project-id` — Project ID(s) the context applies to (repeatable)
+- `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
+- `--quiet, -q` — Suppress all output except errors
+- `--config` — Path to configuration file
+- `--profile, -p` — Profile name to use
+- `--format, -F` — Output format
+- `--no-color` — Disable colored output
+- `--no-pager` — Do not pipe long output through a pager
+- `--jq` — Query output with a jq expression
+- `--template` — Format output with a minijinja template
+- `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
+
+###### atl jira field context update
+
+Update a context
+
+**Usage**
+
+```
+Usage: atl jira field context <FIELD_ID> update [OPTIONS] <CONTEXT_ID>
+```
+
+**Options**
+
+- `<CONTEXT_ID>` — Context ID
+- `--name, -n` — New name
+- `--description, -d` — New description
+- `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
+- `--quiet, -q` — Suppress all output except errors
+- `--config` — Path to configuration file
+- `--profile, -p` — Profile name to use
+- `--format, -F` — Output format
+- `--no-color` — Disable colored output
+- `--no-pager` — Do not pipe long output through a pager
+- `--jq` — Query output with a jq expression
+- `--template` — Format output with a minijinja template
+- `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
+
+###### atl jira field context delete
+
+Delete a context
+
+**Usage**
+
+```
+Usage: atl jira field context <FIELD_ID> delete [OPTIONS] <CONTEXT_ID>
+```
+
+**Options**
+
+- `<CONTEXT_ID>` — Context ID
+- `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
+- `--quiet, -q` — Suppress all output except errors
+- `--config` — Path to configuration file
+- `--profile, -p` — Profile name to use
+- `--format, -F` — Output format
+- `--no-color` — Disable colored output
+- `--no-pager` — Do not pipe long output through a pager
+- `--jq` — Query output with a jq expression
+- `--template` — Format output with a minijinja template
+- `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
+
+###### atl jira field context projects
+
+List projects mapped to a context
+
+**Usage**
+
+```
+Usage: atl jira field context <FIELD_ID> projects [OPTIONS] <CONTEXT_ID>
+```
+
+**Options**
+
+- `<CONTEXT_ID>` — Context ID
+- `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
+- `--quiet, -q` — Suppress all output except errors
+- `--config` — Path to configuration file
+- `--profile, -p` — Profile name to use
+- `--format, -F` — Output format
+- `--no-color` — Disable colored output
+- `--no-pager` — Do not pipe long output through a pager
+- `--jq` — Query output with a jq expression
+- `--template` — Format output with a minijinja template
+- `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
+
+###### atl jira field context add-projects
+
+Add projects to a context
+
+**Usage**
+
+```
+Usage: atl jira field context <FIELD_ID> add-projects [OPTIONS] --project-id <ID> <CONTEXT_ID>
+```
+
+**Options**
+
+- `<CONTEXT_ID>` — Context ID
+- `--project-id` — Project ID(s) (repeatable, at least one)
+- `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
+- `--quiet, -q` — Suppress all output except errors
+- `--config` — Path to configuration file
+- `--profile, -p` — Profile name to use
+- `--format, -F` — Output format
+- `--no-color` — Disable colored output
+- `--no-pager` — Do not pipe long output through a pager
+- `--jq` — Query output with a jq expression
+- `--template` — Format output with a minijinja template
+- `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
+
+###### atl jira field context remove-projects
+
+Remove projects from a context
+
+**Usage**
+
+```
+Usage: atl jira field context <FIELD_ID> remove-projects [OPTIONS] --project-id <ID> <CONTEXT_ID>
+```
+
+**Options**
+
+- `<CONTEXT_ID>` — Context ID
+- `--project-id` — Project ID(s) (repeatable, at least one)
+- `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
+- `--quiet, -q` — Suppress all output except errors
+- `--config` — Path to configuration file
+- `--profile, -p` — Profile name to use
+- `--format, -F` — Output format
+- `--no-color` — Disable colored output
+- `--no-pager` — Do not pipe long output through a pager
+- `--jq` — Query output with a jq expression
+- `--template` — Format output with a minijinja template
+- `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
+
+###### atl jira field context issue-types
+
+List issue types mapped to a context
+
+**Usage**
+
+```
+Usage: atl jira field context <FIELD_ID> issue-types [OPTIONS] <CONTEXT_ID>
+```
+
+**Options**
+
+- `<CONTEXT_ID>` — Context ID
+- `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
+- `--quiet, -q` — Suppress all output except errors
+- `--config` — Path to configuration file
+- `--profile, -p` — Profile name to use
+- `--format, -F` — Output format
+- `--no-color` — Disable colored output
+- `--no-pager` — Do not pipe long output through a pager
+- `--jq` — Query output with a jq expression
+- `--template` — Format output with a minijinja template
+- `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
+
+###### atl jira field context add-issue-types
+
+Add issue types to a context
+
+**Usage**
+
+```
+Usage: atl jira field context <FIELD_ID> add-issue-types [OPTIONS] --issue-type-id <ID> <CONTEXT_ID>
+```
+
+**Options**
+
+- `<CONTEXT_ID>` — Context ID
+- `--issue-type-id` — Issue type ID(s) (repeatable, at least one)
+- `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
+- `--quiet, -q` — Suppress all output except errors
+- `--config` — Path to configuration file
+- `--profile, -p` — Profile name to use
+- `--format, -F` — Output format
+- `--no-color` — Disable colored output
+- `--no-pager` — Do not pipe long output through a pager
+- `--jq` — Query output with a jq expression
+- `--template` — Format output with a minijinja template
+- `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
+
+###### atl jira field context remove-issue-types
+
+Remove issue types from a context
+
+**Usage**
+
+```
+Usage: atl jira field context <FIELD_ID> remove-issue-types [OPTIONS] --issue-type-id <ID> <CONTEXT_ID>
+```
+
+**Options**
+
+- `<CONTEXT_ID>` — Context ID
+- `--issue-type-id` — Issue type ID(s) (repeatable, at least one)
+- `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
+- `--quiet, -q` — Suppress all output except errors
+- `--config` — Path to configuration file
+- `--profile, -p` — Profile name to use
+- `--format, -F` — Output format
+- `--no-color` — Disable colored output
+- `--no-pager` — Do not pipe long output through a pager
+- `--jq` — Query output with a jq expression
+- `--template` — Format output with a minijinja template
+- `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
+
+##### atl jira field options
+
+Manage select-list options for a custom field context
+
+**Usage**
+
+```
+Usage: atl jira field options [OPTIONS] <FIELD_ID> <CONTEXT_ID> <COMMAND>
+```
+
+**Options**
+
+- `<FIELD_ID>` — Custom field ID (e.g. "customfield_10010")
+- `<CONTEXT_ID>` — Context ID
+- `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
+- `--quiet, -q` — Suppress all output except errors
+- `--config` — Path to configuration file
+- `--profile, -p` — Profile name to use
+- `--format, -F` — Output format
+- `--no-color` — Disable colored output
+- `--no-pager` — Do not pipe long output through a pager
+- `--jq` — Query output with a jq expression
+- `--template` — Format output with a minijinja template
+- `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
+
+**Subcommands**
+
+- `list` — List options in the context
+- `add` — Add one or more options
+- `update` — Update a single option
+- `delete` — Delete a single option
+- `reorder` — Reorder options within the context
+
+###### atl jira field options list
+
+List options in the context
+
+**Usage**
+
+```
+Usage: atl jira field options <FIELD_ID> <CONTEXT_ID> list [OPTIONS]
+```
+
+**Options**
+
+- `--limit, -l` — Max results per page
+- `--all` — Fetch all results (auto-paginate)
+- `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
+- `--quiet, -q` — Suppress all output except errors
+- `--config` — Path to configuration file
+- `--profile, -p` — Profile name to use
+- `--format, -F` — Output format
+- `--no-color` — Disable colored output
+- `--no-pager` — Do not pipe long output through a pager
+- `--jq` — Query output with a jq expression
+- `--template` — Format output with a minijinja template
+- `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
+
+###### atl jira field options add
+
+Add one or more options
+
+**Usage**
+
+```
+Usage: atl jira field options <FIELD_ID> <CONTEXT_ID> add [OPTIONS] --value <VALUE>
+```
+
+**Options**
+
+- `--value` — Option value(s) — repeat to add multiple in one call
+- `--disabled` — Mark the new options as disabled
+- `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
+- `--quiet, -q` — Suppress all output except errors
+- `--config` — Path to configuration file
+- `--profile, -p` — Profile name to use
+- `--format, -F` — Output format
+- `--no-color` — Disable colored output
+- `--no-pager` — Do not pipe long output through a pager
+- `--jq` — Query output with a jq expression
+- `--template` — Format output with a minijinja template
+- `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
+
+###### atl jira field options update
+
+Update a single option
+
+**Usage**
+
+```
+Usage: atl jira field options <FIELD_ID> <CONTEXT_ID> update [OPTIONS] <OPTION_ID>
+```
+
+**Options**
+
+- `<OPTION_ID>` — Option ID
+- `--value` — New option value
+- `--disabled` — Whether the option is disabled
+- `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
+- `--quiet, -q` — Suppress all output except errors
+- `--config` — Path to configuration file
+- `--profile, -p` — Profile name to use
+- `--format, -F` — Output format
+- `--no-color` — Disable colored output
+- `--no-pager` — Do not pipe long output through a pager
+- `--jq` — Query output with a jq expression
+- `--template` — Format output with a minijinja template
+- `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
+
+###### atl jira field options delete
+
+Delete a single option
+
+**Usage**
+
+```
+Usage: atl jira field options <FIELD_ID> <CONTEXT_ID> delete [OPTIONS] <OPTION_ID>
+```
+
+**Options**
+
+- `<OPTION_ID>` — Option ID
+- `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
+- `--quiet, -q` — Suppress all output except errors
+- `--config` — Path to configuration file
+- `--profile, -p` — Profile name to use
+- `--format, -F` — Output format
+- `--no-color` — Disable colored output
+- `--no-pager` — Do not pipe long output through a pager
+- `--jq` — Query output with a jq expression
+- `--template` — Format output with a minijinja template
+- `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
+
+###### atl jira field options reorder
+
+Reorder options within the context
+
+**Usage**
+
+```
+Usage: atl jira field options <FIELD_ID> <CONTEXT_ID> reorder [OPTIONS] <--after <ID>|--position <POSITION>> <OPTION_IDS>...
+```
+
+**Options**
+
+- `<OPTION_IDS>` — Option IDs to move (in the order they should appear)
+- `--after` — Insert the moved options after this option ID
+- `--position` — Move the options to a fixed position
 - `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
 - `--quiet, -q` — Suppress all output except errors
 - `--config` — Path to configuration file

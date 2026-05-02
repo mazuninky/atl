@@ -3,6 +3,84 @@ use serde_json::{Value, json};
 use crate::cli::args::*;
 use crate::client::JiraClient;
 
+/// Build the create payload for a custom field context.
+fn build_context_create_payload(args: &JiraFieldContextCreateArgs) -> Value {
+    let mut payload = json!({
+        "name": &args.name,
+        "issueTypeIds": &args.issue_type_ids,
+        "projectIds": &args.project_ids,
+    });
+    if let Some(desc) = &args.description {
+        payload["description"] = Value::String(desc.clone());
+    }
+    payload
+}
+
+/// Build the update payload for a custom field context.
+fn build_context_update_payload(args: &JiraFieldContextUpdateArgs) -> anyhow::Result<Value> {
+    let mut fields = serde_json::Map::new();
+    if let Some(name) = &args.name {
+        fields.insert("name".into(), Value::String(name.clone()));
+    }
+    if let Some(desc) = &args.description {
+        fields.insert("description".into(), Value::String(desc.clone()));
+    }
+    if fields.is_empty() {
+        anyhow::bail!("no fields to update; specify at least one of --name, --description");
+    }
+    Ok(Value::Object(fields))
+}
+
+/// Build the batch-create payload for select-list options.
+fn build_options_create_payload(args: &JiraFieldOptionsAddArgs) -> Value {
+    let opts: Vec<Value> = args
+        .values
+        .iter()
+        .map(|v| {
+            let mut o = json!({ "value": v });
+            if args.disabled {
+                o["disabled"] = Value::Bool(true);
+            }
+            o
+        })
+        .collect();
+    json!({ "options": opts })
+}
+
+/// Build the batch-update payload for a single select-list option.
+fn build_options_update_payload(args: &JiraFieldOptionsUpdateArgs) -> anyhow::Result<Value> {
+    let mut entry = serde_json::Map::new();
+    entry.insert("id".into(), Value::String(args.option_id.clone()));
+    let mut had_change = false;
+    if let Some(value) = &args.value {
+        entry.insert("value".into(), Value::String(value.clone()));
+        had_change = true;
+    }
+    if let Some(disabled) = args.disabled {
+        entry.insert("disabled".into(), Value::Bool(disabled));
+        had_change = true;
+    }
+    if !had_change {
+        anyhow::bail!("no fields to update; specify at least one of --value, --disabled");
+    }
+    Ok(json!({ "options": [Value::Object(entry)] }))
+}
+
+/// Build the reorder payload for select-list options.
+fn build_options_reorder_payload(args: &JiraFieldOptionsReorderArgs) -> Value {
+    let mut payload = json!({ "customFieldOptionIds": &args.option_ids });
+    if let Some(after) = &args.after {
+        payload["after"] = Value::String(after.clone());
+    } else if let Some(position) = args.position {
+        let label = match position {
+            JiraFieldOptionsPosition::First => "First",
+            JiraFieldOptionsPosition::Last => "Last",
+        };
+        payload["position"] = Value::String(label.to_string());
+    }
+    payload
+}
+
 /// Filter the raw field list down to custom fields. Pass-through if the value isn't an array
 /// (the upstream API is supposed to return an array but we don't enforce a schema here).
 fn filter_custom_fields(all: Value) -> serde_json::Result<Value> {
@@ -144,6 +222,159 @@ pub(super) async fn dispatch_field(
         JiraFieldSubcommand::Restore(args) => {
             client.restore_field(&args.id).await?;
             Value::String(format!("Field {} restored", args.id))
+        }
+        JiraFieldSubcommand::Context(cmd) => {
+            dispatch_field_context(&cmd.field_id, &cmd.command, client).await?
+        }
+        JiraFieldSubcommand::Options(cmd) => {
+            dispatch_field_options(&cmd.field_id, &cmd.context_id, &cmd.command, client).await?
+        }
+    })
+}
+
+async fn dispatch_field_context(
+    field_id: &str,
+    cmd: &JiraFieldContextSubcommand,
+    client: &JiraClient,
+) -> anyhow::Result<Value> {
+    Ok(match cmd {
+        JiraFieldContextSubcommand::List(args) => {
+            if args.all {
+                client.field_contexts_list_all(field_id).await?
+            } else {
+                client.field_contexts_list(field_id, args.limit, 0).await?
+            }
+        }
+        JiraFieldContextSubcommand::Create(args) => {
+            client
+                .create_field_context(field_id, &build_context_create_payload(args))
+                .await?
+        }
+        JiraFieldContextSubcommand::Update(args) => {
+            client
+                .update_field_context(
+                    field_id,
+                    &args.context_id,
+                    &build_context_update_payload(args)?,
+                )
+                .await?
+        }
+        JiraFieldContextSubcommand::Delete(args) => {
+            client
+                .delete_field_context(field_id, &args.context_id)
+                .await?;
+            Value::String(format!("Context {} deleted", args.context_id))
+        }
+        JiraFieldContextSubcommand::Projects(args) => {
+            client
+                .field_context_project_mappings(field_id, &args.context_id)
+                .await?
+        }
+        JiraFieldContextSubcommand::AddProjects(args) => {
+            let res = client
+                .field_context_assign_projects(field_id, &args.context_id, &args.project_ids)
+                .await?;
+            if res.is_null() {
+                Value::String(format!(
+                    "Added {} project(s) to context {}",
+                    args.project_ids.len(),
+                    args.context_id
+                ))
+            } else {
+                res
+            }
+        }
+        JiraFieldContextSubcommand::RemoveProjects(args) => {
+            let res = client
+                .field_context_remove_projects(field_id, &args.context_id, &args.project_ids)
+                .await?;
+            if res.is_null() {
+                Value::String(format!(
+                    "Removed {} project(s) from context {}",
+                    args.project_ids.len(),
+                    args.context_id
+                ))
+            } else {
+                res
+            }
+        }
+        JiraFieldContextSubcommand::IssueTypes(args) => {
+            client
+                .field_context_issue_type_mappings(field_id, &args.context_id)
+                .await?
+        }
+        JiraFieldContextSubcommand::AddIssueTypes(args) => {
+            let res = client
+                .field_context_assign_issue_types(field_id, &args.context_id, &args.issue_type_ids)
+                .await?;
+            if res.is_null() {
+                Value::String(format!(
+                    "Added {} issue type(s) to context {}",
+                    args.issue_type_ids.len(),
+                    args.context_id
+                ))
+            } else {
+                res
+            }
+        }
+        JiraFieldContextSubcommand::RemoveIssueTypes(args) => {
+            let res = client
+                .field_context_remove_issue_types(field_id, &args.context_id, &args.issue_type_ids)
+                .await?;
+            if res.is_null() {
+                Value::String(format!(
+                    "Removed {} issue type(s) from context {}",
+                    args.issue_type_ids.len(),
+                    args.context_id
+                ))
+            } else {
+                res
+            }
+        }
+    })
+}
+
+async fn dispatch_field_options(
+    field_id: &str,
+    context_id: &str,
+    cmd: &JiraFieldOptionsSubcommand,
+    client: &JiraClient,
+) -> anyhow::Result<Value> {
+    Ok(match cmd {
+        JiraFieldOptionsSubcommand::List(args) => {
+            if args.all {
+                client.field_options_list_all(field_id, context_id).await?
+            } else {
+                client
+                    .field_options_list(field_id, context_id, args.limit, 0)
+                    .await?
+            }
+        }
+        JiraFieldOptionsSubcommand::Add(args) => {
+            client
+                .field_options_create(field_id, context_id, &build_options_create_payload(args))
+                .await?
+        }
+        JiraFieldOptionsSubcommand::Update(args) => {
+            client
+                .field_options_update(field_id, context_id, &build_options_update_payload(args)?)
+                .await?
+        }
+        JiraFieldOptionsSubcommand::Delete(args) => {
+            client
+                .field_option_delete(field_id, context_id, &args.option_id)
+                .await?;
+            Value::String(format!("Option {} deleted", args.option_id))
+        }
+        JiraFieldOptionsSubcommand::Reorder(args) => {
+            let res = client
+                .field_options_reorder(field_id, context_id, &build_options_reorder_payload(args))
+                .await?;
+            if res.is_null() {
+                Value::String(format!("Reordered {} option(s)", args.option_ids.len()))
+            } else {
+                res
+            }
         }
     })
 }
@@ -518,6 +749,398 @@ mod tests {
         assert!(
             err.to_string().contains("no fields to update"),
             "got: {err}"
+        );
+    }
+
+    // --- build_context_create_payload ----------------------------------------
+
+    #[test]
+    fn context_create_minimal_emits_empty_id_arrays() {
+        let args = JiraFieldContextCreateArgs {
+            name: "Default".to_string(),
+            description: None,
+            issue_type_ids: vec![],
+            project_ids: vec![],
+        };
+        assert_eq!(
+            build_context_create_payload(&args),
+            json!({
+                "name": "Default",
+                "issueTypeIds": [],
+                "projectIds": [],
+            })
+        );
+    }
+
+    #[test]
+    fn context_create_with_description_and_ids() {
+        let args = JiraFieldContextCreateArgs {
+            name: "Bugs".to_string(),
+            description: Some("for bug-only projects".to_string()),
+            issue_type_ids: vec!["10001".to_string(), "10002".to_string()],
+            project_ids: vec!["10010".to_string()],
+        };
+        assert_eq!(
+            build_context_create_payload(&args),
+            json!({
+                "name": "Bugs",
+                "description": "for bug-only projects",
+                "issueTypeIds": ["10001", "10002"],
+                "projectIds": ["10010"],
+            })
+        );
+    }
+
+    // --- build_context_update_payload ----------------------------------------
+
+    #[test]
+    fn context_update_with_name_only() {
+        let args = JiraFieldContextUpdateArgs {
+            context_id: "1".to_string(),
+            name: Some("New".to_string()),
+            description: None,
+        };
+        assert_eq!(
+            build_context_update_payload(&args).unwrap(),
+            json!({ "name": "New" })
+        );
+    }
+
+    #[test]
+    fn context_update_with_no_fields_errors() {
+        let args = JiraFieldContextUpdateArgs {
+            context_id: "1".to_string(),
+            name: None,
+            description: None,
+        };
+        let err = build_context_update_payload(&args).unwrap_err();
+        assert!(
+            err.to_string().contains("no fields to update"),
+            "got: {err}"
+        );
+    }
+
+    // --- build_options_create_payload ----------------------------------------
+
+    #[test]
+    fn options_create_single_value() {
+        let args = JiraFieldOptionsAddArgs {
+            values: vec!["foo".to_string()],
+            disabled: false,
+        };
+        assert_eq!(
+            build_options_create_payload(&args),
+            json!({ "options": [ { "value": "foo" } ] })
+        );
+    }
+
+    #[test]
+    fn options_create_multiple_values_with_disabled_flag() {
+        let args = JiraFieldOptionsAddArgs {
+            values: vec!["foo".to_string(), "bar".to_string()],
+            disabled: true,
+        };
+        assert_eq!(
+            build_options_create_payload(&args),
+            json!({
+                "options": [
+                    { "value": "foo", "disabled": true },
+                    { "value": "bar", "disabled": true },
+                ]
+            })
+        );
+    }
+
+    // --- build_options_update_payload ----------------------------------------
+
+    #[test]
+    fn options_update_with_value_only() {
+        let args = JiraFieldOptionsUpdateArgs {
+            option_id: "10000".to_string(),
+            value: Some("new".to_string()),
+            disabled: None,
+        };
+        assert_eq!(
+            build_options_update_payload(&args).unwrap(),
+            json!({ "options": [ { "id": "10000", "value": "new" } ] })
+        );
+    }
+
+    #[test]
+    fn options_update_with_disabled_only() {
+        let args = JiraFieldOptionsUpdateArgs {
+            option_id: "10000".to_string(),
+            value: None,
+            disabled: Some(true),
+        };
+        assert_eq!(
+            build_options_update_payload(&args).unwrap(),
+            json!({ "options": [ { "id": "10000", "disabled": true } ] })
+        );
+    }
+
+    #[test]
+    fn options_update_with_no_fields_errors() {
+        let args = JiraFieldOptionsUpdateArgs {
+            option_id: "10000".to_string(),
+            value: None,
+            disabled: None,
+        };
+        let err = build_options_update_payload(&args).unwrap_err();
+        assert!(
+            err.to_string().contains("no fields to update"),
+            "got: {err}"
+        );
+    }
+
+    // --- build_options_reorder_payload ---------------------------------------
+
+    #[test]
+    fn options_reorder_with_after() {
+        let args = JiraFieldOptionsReorderArgs {
+            option_ids: vec!["1".to_string(), "2".to_string()],
+            after: Some("3".to_string()),
+            position: None,
+        };
+        assert_eq!(
+            build_options_reorder_payload(&args),
+            json!({ "customFieldOptionIds": ["1", "2"], "after": "3" })
+        );
+    }
+
+    #[test]
+    fn options_reorder_with_position_first() {
+        let args = JiraFieldOptionsReorderArgs {
+            option_ids: vec!["1".to_string()],
+            after: None,
+            position: Some(JiraFieldOptionsPosition::First),
+        };
+        assert_eq!(
+            build_options_reorder_payload(&args),
+            json!({ "customFieldOptionIds": ["1"], "position": "First" })
+        );
+    }
+
+    #[test]
+    fn options_reorder_with_position_last() {
+        let args = JiraFieldOptionsReorderArgs {
+            option_ids: vec!["1".to_string()],
+            after: None,
+            position: Some(JiraFieldOptionsPosition::Last),
+        };
+        assert_eq!(
+            build_options_reorder_payload(&args),
+            json!({ "customFieldOptionIds": ["1"], "position": "Last" })
+        );
+    }
+
+    // --- clap parse smoke tests ----------------------------------------------
+    //
+    // Boot a tiny CLI tree just to confirm the new args parse and that the
+    // mutual-exclusion / required guards on `reorder` actually trigger.
+
+    use clap::Parser;
+
+    #[derive(Debug, Parser)]
+    struct TestField {
+        #[command(subcommand)]
+        command: JiraFieldSubcommand,
+    }
+
+    fn parse_field(argv: &[&str]) -> Result<TestField, clap::Error> {
+        let mut full = vec!["test"];
+        full.extend_from_slice(argv);
+        TestField::try_parse_from(full)
+    }
+
+    #[test]
+    fn context_list_parses() {
+        let parsed = parse_field(&["context", "customfield_10001", "list"]).unwrap();
+        match parsed.command {
+            JiraFieldSubcommand::Context(c) => {
+                assert_eq!(c.field_id, "customfield_10001");
+                assert!(matches!(c.command, JiraFieldContextSubcommand::List(_)));
+            }
+            other => panic!("expected Context, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn context_create_parses_with_minimum_args() {
+        let parsed =
+            parse_field(&["context", "customfield_10001", "create", "--name", "X"]).unwrap();
+        match parsed.command {
+            JiraFieldSubcommand::Context(c) => match c.command {
+                JiraFieldContextSubcommand::Create(args) => {
+                    assert_eq!(args.name, "X");
+                    assert!(args.issue_type_ids.is_empty());
+                    assert!(args.project_ids.is_empty());
+                }
+                other => panic!("expected Create, got {other:?}"),
+            },
+            other => panic!("expected Context, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn context_update_parses_positional_id_and_name() {
+        let parsed = parse_field(&[
+            "context",
+            "customfield_10001",
+            "update",
+            "10100",
+            "--name",
+            "Y",
+        ])
+        .unwrap();
+        match parsed.command {
+            JiraFieldSubcommand::Context(c) => match c.command {
+                JiraFieldContextSubcommand::Update(args) => {
+                    assert_eq!(args.context_id, "10100");
+                    assert_eq!(args.name.as_deref(), Some("Y"));
+                }
+                other => panic!("expected Update, got {other:?}"),
+            },
+            other => panic!("expected Context, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn context_add_projects_collects_repeats() {
+        let parsed = parse_field(&[
+            "context",
+            "customfield_10001",
+            "add-projects",
+            "10100",
+            "--project-id",
+            "10000",
+            "--project-id",
+            "10001",
+        ])
+        .unwrap();
+        match parsed.command {
+            JiraFieldSubcommand::Context(c) => match c.command {
+                JiraFieldContextSubcommand::AddProjects(args) => {
+                    assert_eq!(args.context_id, "10100");
+                    assert_eq!(args.project_ids, vec!["10000", "10001"]);
+                }
+                other => panic!("expected AddProjects, got {other:?}"),
+            },
+            other => panic!("expected Context, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn options_add_parses_repeated_value() {
+        let parsed = parse_field(&[
+            "options",
+            "customfield_10001",
+            "10100",
+            "add",
+            "--value",
+            "foo",
+            "--value",
+            "bar",
+        ])
+        .unwrap();
+        match parsed.command {
+            JiraFieldSubcommand::Options(o) => {
+                assert_eq!(o.field_id, "customfield_10001");
+                assert_eq!(o.context_id, "10100");
+                match o.command {
+                    JiraFieldOptionsSubcommand::Add(args) => {
+                        assert_eq!(args.values, vec!["foo", "bar"]);
+                        assert!(!args.disabled);
+                    }
+                    other => panic!("expected Add, got {other:?}"),
+                }
+            }
+            other => panic!("expected Options, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn options_update_parses() {
+        let parsed = parse_field(&[
+            "options",
+            "customfield_10001",
+            "10100",
+            "update",
+            "20000",
+            "--value",
+            "foo",
+        ])
+        .unwrap();
+        match parsed.command {
+            JiraFieldSubcommand::Options(o) => match o.command {
+                JiraFieldOptionsSubcommand::Update(args) => {
+                    assert_eq!(args.option_id, "20000");
+                    assert_eq!(args.value.as_deref(), Some("foo"));
+                    assert_eq!(args.disabled, None);
+                }
+                other => panic!("expected Update, got {other:?}"),
+            },
+            other => panic!("expected Options, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn options_reorder_with_after_parses() {
+        let parsed = parse_field(&[
+            "options",
+            "customfield_10001",
+            "10100",
+            "reorder",
+            "1",
+            "2",
+            "--after",
+            "3",
+        ])
+        .unwrap();
+        match parsed.command {
+            JiraFieldSubcommand::Options(o) => match o.command {
+                JiraFieldOptionsSubcommand::Reorder(args) => {
+                    assert_eq!(args.option_ids, vec!["1", "2"]);
+                    assert_eq!(args.after.as_deref(), Some("3"));
+                    assert!(args.position.is_none());
+                }
+                other => panic!("expected Reorder, got {other:?}"),
+            },
+            other => panic!("expected Options, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn options_reorder_without_target_errors() {
+        let err =
+            parse_field(&["options", "customfield_10001", "10100", "reorder", "1"]).unwrap_err();
+        // The ArgGroup is `required = true`, so clap rejects a reorder call
+        // that supplies neither `--after` nor `--position`.
+        assert_eq!(
+            err.kind(),
+            clap::error::ErrorKind::MissingRequiredArgument,
+            "expected MissingRequiredArgument, got: {err}"
+        );
+    }
+
+    #[test]
+    fn options_reorder_with_both_after_and_position_errors() {
+        let err = parse_field(&[
+            "options",
+            "customfield_10001",
+            "10100",
+            "reorder",
+            "1",
+            "--after",
+            "3",
+            "--position",
+            "first",
+        ])
+        .unwrap_err();
+        assert_eq!(
+            err.kind(),
+            clap::error::ErrorKind::ArgumentConflict,
+            "expected ArgumentConflict, got: {err}"
         );
     }
 }

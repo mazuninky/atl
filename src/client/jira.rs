@@ -2023,6 +2023,272 @@ impl JiraClient {
             .await
     }
 
+    // -- Admin: Field Contexts --
+
+    pub async fn field_contexts_list(
+        &self,
+        field_id: &str,
+        max_results: u32,
+        start_at: u32,
+    ) -> Result<Value, Error> {
+        let url = format!("{}/field/{field_id}/context", self.base_url);
+        debug!("GET {url}");
+        let resp = self
+            .http
+            .get(&url)
+            .query(&[
+                ("maxResults", &max_results.to_string()),
+                ("startAt", &start_at.to_string()),
+            ])
+            .send()
+            .await?;
+        handle_response(resp).await
+    }
+
+    pub async fn field_contexts_list_all(&self, field_id: &str) -> Result<Value, Error> {
+        let url = format!("{}/field/{field_id}/context", self.base_url);
+        self.paginate_offset(&url, 100, "values", &[]).await
+    }
+
+    pub async fn create_field_context(
+        &self,
+        field_id: &str,
+        payload: &Value,
+    ) -> Result<Value, Error> {
+        self.admin_post(&format!("/field/{field_id}/context"), payload)
+            .await
+    }
+
+    pub async fn update_field_context(
+        &self,
+        field_id: &str,
+        context_id: &str,
+        payload: &Value,
+    ) -> Result<Value, Error> {
+        self.admin_put(&format!("/field/{field_id}/context/{context_id}"), payload)
+            .await
+    }
+
+    pub async fn delete_field_context(
+        &self,
+        field_id: &str,
+        context_id: &str,
+    ) -> Result<(), Error> {
+        self.admin_delete(&format!("/field/{field_id}/context/{context_id}"))
+            .await
+    }
+
+    pub async fn field_context_project_mappings(
+        &self,
+        field_id: &str,
+        context_id: &str,
+    ) -> Result<Value, Error> {
+        let url = format!("{}/field/{field_id}/context/projectmapping", self.base_url);
+        debug!("GET {url} contextId={context_id}");
+        let resp = self
+            .http
+            .get(&url)
+            .query(&[("contextId", context_id)])
+            .send()
+            .await?;
+        handle_response(resp).await
+    }
+
+    pub async fn field_context_assign_projects(
+        &self,
+        field_id: &str,
+        context_id: &str,
+        project_ids: &[String],
+    ) -> Result<Value, Error> {
+        self.assert_writable()?;
+        let url = format!(
+            "{}/field/{field_id}/context/{context_id}/project",
+            self.base_url
+        );
+        debug!("PUT {url}");
+        let resp = self
+            .http
+            .put(&url)
+            .json(&serde_json::json!({ "projectIds": project_ids }))
+            .send()
+            .await?;
+        handle_response_maybe_empty(resp).await
+    }
+
+    pub async fn field_context_remove_projects(
+        &self,
+        field_id: &str,
+        context_id: &str,
+        project_ids: &[String],
+    ) -> Result<Value, Error> {
+        self.assert_writable()?;
+        let url = format!(
+            "{}/field/{field_id}/context/{context_id}/project/remove",
+            self.base_url
+        );
+        debug!("POST {url}");
+        let resp = self
+            .http
+            .post(&url)
+            .json(&serde_json::json!({ "projectIds": project_ids }))
+            .send()
+            .await?;
+        handle_response_maybe_empty(resp).await
+    }
+
+    pub async fn field_context_issue_type_mappings(
+        &self,
+        field_id: &str,
+        context_id: &str,
+    ) -> Result<Value, Error> {
+        let url = format!(
+            "{}/field/{field_id}/context/issuetypemapping",
+            self.base_url
+        );
+        debug!("GET {url} contextId={context_id}");
+        let resp = self
+            .http
+            .get(&url)
+            .query(&[("contextId", context_id)])
+            .send()
+            .await?;
+        handle_response(resp).await
+    }
+
+    pub async fn field_context_assign_issue_types(
+        &self,
+        field_id: &str,
+        context_id: &str,
+        issue_type_ids: &[String],
+    ) -> Result<Value, Error> {
+        self.assert_writable()?;
+        let url = format!(
+            "{}/field/{field_id}/context/{context_id}/issuetype",
+            self.base_url
+        );
+        debug!("PUT {url}");
+        let resp = self
+            .http
+            .put(&url)
+            .json(&serde_json::json!({ "issueTypeIds": issue_type_ids }))
+            .send()
+            .await?;
+        handle_response_maybe_empty(resp).await
+    }
+
+    pub async fn field_context_remove_issue_types(
+        &self,
+        field_id: &str,
+        context_id: &str,
+        issue_type_ids: &[String],
+    ) -> Result<Value, Error> {
+        self.assert_writable()?;
+        let url = format!(
+            "{}/field/{field_id}/context/{context_id}/issuetype/remove",
+            self.base_url
+        );
+        debug!("POST {url}");
+        let resp = self
+            .http
+            .post(&url)
+            .json(&serde_json::json!({ "issueTypeIds": issue_type_ids }))
+            .send()
+            .await?;
+        handle_response_maybe_empty(resp).await
+    }
+
+    // -- Admin: Field Context Options --
+
+    pub async fn field_options_list(
+        &self,
+        field_id: &str,
+        context_id: &str,
+        max_results: u32,
+        start_at: u32,
+    ) -> Result<Value, Error> {
+        let url = format!(
+            "{}/field/{field_id}/context/{context_id}/option",
+            self.base_url
+        );
+        debug!("GET {url}");
+        let resp = self
+            .http
+            .get(&url)
+            .query(&[
+                ("maxResults", &max_results.to_string()),
+                ("startAt", &start_at.to_string()),
+            ])
+            .send()
+            .await?;
+        handle_response(resp).await
+    }
+
+    pub async fn field_options_list_all(
+        &self,
+        field_id: &str,
+        context_id: &str,
+    ) -> Result<Value, Error> {
+        let url = format!(
+            "{}/field/{field_id}/context/{context_id}/option",
+            self.base_url
+        );
+        self.paginate_offset(&url, 100, "values", &[]).await
+    }
+
+    pub async fn field_options_create(
+        &self,
+        field_id: &str,
+        context_id: &str,
+        payload: &Value,
+    ) -> Result<Value, Error> {
+        self.admin_post(
+            &format!("/field/{field_id}/context/{context_id}/option"),
+            payload,
+        )
+        .await
+    }
+
+    pub async fn field_options_update(
+        &self,
+        field_id: &str,
+        context_id: &str,
+        payload: &Value,
+    ) -> Result<Value, Error> {
+        self.admin_put(
+            &format!("/field/{field_id}/context/{context_id}/option"),
+            payload,
+        )
+        .await
+    }
+
+    pub async fn field_option_delete(
+        &self,
+        field_id: &str,
+        context_id: &str,
+        option_id: &str,
+    ) -> Result<(), Error> {
+        self.admin_delete(&format!(
+            "/field/{field_id}/context/{context_id}/option/{option_id}"
+        ))
+        .await
+    }
+
+    pub async fn field_options_reorder(
+        &self,
+        field_id: &str,
+        context_id: &str,
+        payload: &Value,
+    ) -> Result<Value, Error> {
+        self.assert_writable()?;
+        let url = format!(
+            "{}/field/{field_id}/context/{context_id}/option/move",
+            self.base_url
+        );
+        debug!("PUT {url}");
+        let resp = self.http.put(&url).json(payload).send().await?;
+        handle_response_maybe_empty(resp).await
+    }
+
     // -- Admin: Standalone Roles --
 
     pub async fn list_roles(&self) -> Result<Value, Error> {

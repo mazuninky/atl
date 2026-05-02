@@ -12848,7 +12848,7 @@ Issue subcommands (check field completeness, …)
 
 **Usage**
 
-```
+```text
 Usage: atl jira issue [OPTIONS] <COMMAND>
 ```
 
@@ -12876,7 +12876,7 @@ Verify an issue has values for required/warning fields
 
 **Usage**
 
-```
+```text
 Usage: atl jira issue check [OPTIONS] <KEY>
 ```
 
@@ -12903,7 +12903,7 @@ Manage Jira Cloud automation rules
 
 **Usage**
 
-```
+```text
 Usage: atl jira automation [OPTIONS] <COMMAND>
 ```
 
@@ -12937,7 +12937,7 @@ List automation rules
 
 **Usage**
 
-```
+```text
 Usage: atl jira automation list [OPTIONS]
 ```
 
@@ -12963,7 +12963,7 @@ Get full definition of a rule by UUID
 
 **Usage**
 
-```
+```text
 Usage: atl jira automation get [OPTIONS] <UUID>
 ```
 
@@ -12988,7 +12988,7 @@ Create a new rule from a JSON body (`<literal>`, `@file`, or `-` for stdin)
 
 **Usage**
 
-```
+```text
 Usage: atl jira automation create [OPTIONS] --body <BODY>
 ```
 
@@ -13013,7 +13013,7 @@ Update an existing rule with a JSON body
 
 **Usage**
 
-```
+```text
 Usage: atl jira automation update [OPTIONS] --body <BODY> <UUID>
 ```
 
@@ -13039,7 +13039,7 @@ Enable a rule
 
 **Usage**
 
-```
+```text
 Usage: atl jira automation enable [OPTIONS] <UUID>
 ```
 
@@ -13064,7 +13064,7 @@ Disable a rule
 
 **Usage**
 
-```
+```text
 Usage: atl jira automation disable [OPTIONS] <UUID>
 ```
 
@@ -13089,7 +13089,7 @@ Delete a rule (must be disabled first per Atlassian)
 
 **Usage**
 
-```
+```text
 Usage: atl jira automation delete [OPTIONS] <UUID>
 ```
 

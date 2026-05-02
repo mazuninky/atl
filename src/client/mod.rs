@@ -245,7 +245,7 @@ pub(super) async fn handle_error_status(
     status_code: u16,
     response: reqwest::Response,
 ) -> Result<serde_json::Value, Error> {
-    let body = response.text().await.unwrap_or_default();
+    let body = read_sanitized_error_body(response).await;
     match status_code {
         401 | 403 => Err(Error::Auth(format!("{status_code}: {body}"))),
         404 => Err(Error::NotFound(body)),
@@ -254,6 +254,62 @@ pub(super) async fn handle_error_status(
             message: body,
         }),
     }
+}
+
+/// Read the response body as text, log the full untruncated body at debug
+/// level for `--verbose` debugging, and return a sanitized form safe for
+/// inclusion in user-visible error messages.
+///
+/// The full body is emitted on the `atl::client::error` target so it can
+/// be filtered with `RUST_LOG=atl::client::error=debug`.
+pub(super) async fn read_sanitized_error_body(response: reqwest::Response) -> String {
+    let raw = response.text().await.unwrap_or_default();
+    debug!(target: "atl::client::error", "upstream error body: {raw}");
+    sanitize_error_body(&raw)
+}
+
+/// Sanitize an upstream response body for embedding in a user-facing error
+/// message.
+///
+/// Truncates to at most 512 bytes on a UTF-8 char boundary (appending `…`
+/// when truncation occurs), and replaces ASCII / Unicode "Cc" control
+/// characters — anything matched by [`char::is_control`] except `\n` and
+/// `\t` — with `?`. This neutralizes ANSI escape sequences (ESC, 0x1B),
+/// terminal bells (0x07), NUL bytes, and similar terminal-manipulation
+/// vectors that a malicious or MITM-proxied upstream could inject.
+///
+/// Note: Unicode bidi-override format characters (e.g. U+202E) are in the
+/// `Cf` (format) category, not `Cc` (control), so [`char::is_control`]
+/// does not match them and they pass through. Hardening that surface is
+/// tracked separately.
+fn sanitize_error_body(body: &str) -> String {
+    const MAX_BYTES: usize = 512;
+
+    // Truncate at the largest UTF-8 char boundary <= MAX_BYTES.
+    let (truncated, was_truncated) = if body.len() <= MAX_BYTES {
+        (body, false)
+    } else {
+        let cut = body
+            .char_indices()
+            .map(|(idx, _)| idx)
+            .take_while(|&idx| idx <= MAX_BYTES)
+            .last()
+            .unwrap_or(0);
+        (&body[..cut], true)
+    };
+
+    let mut out = String::with_capacity(truncated.len() + if was_truncated { 4 } else { 0 });
+    for c in truncated.chars() {
+        if c.is_control() && c != '\n' && c != '\t' {
+            out.push('?');
+        } else {
+            out.push(c);
+        }
+    }
+    if was_truncated {
+        out.push('…');
+    }
+    out
 }
 
 #[cfg(test)]
@@ -624,6 +680,193 @@ mod tests {
                 "expected read_only in error message, got: {msg}"
             ),
             other => panic!("expected Error::Config, got: {other:?}"),
+        }
+    }
+
+    // ----------------------------------------------------------------------
+    // sanitize_error_body / handle_error_status — security regression tests
+    //
+    // These cover audit finding M1: the upstream 4xx body must not be
+    // interpolated raw into user-visible error messages, since a malicious
+    // or MITM-proxied Atlassian server could inject ANSI escape sequences
+    // or forged instructions.
+    // ----------------------------------------------------------------------
+
+    #[test]
+    fn sanitize_error_body_passes_through_short_clean_input() {
+        let out = sanitize_error_body("plain ascii");
+        assert_eq!(out, "plain ascii");
+    }
+
+    #[test]
+    fn sanitize_error_body_preserves_newlines_and_tabs() {
+        let out = sanitize_error_body("line1\nline2\twith-tab");
+        assert_eq!(out, "line1\nline2\twith-tab");
+    }
+
+    #[test]
+    fn sanitize_error_body_strips_esc_bell_and_nul() {
+        // ESC (0x1B), bell (0x07), NUL (0x00) all become '?'.
+        let input = "ansi:\x1b[2Jbell:\x07nul:\x00end";
+        let out = sanitize_error_body(input);
+        assert_eq!(out, "ansi:?[2Jbell:?nul:?end");
+        assert!(
+            !out.contains('\x1b'),
+            "ESC must not survive sanitization: {out:?}"
+        );
+        assert!(!out.contains('\x07'));
+        assert!(!out.contains('\x00'));
+    }
+
+    #[test]
+    fn sanitize_error_body_truncates_at_512_bytes_with_ellipsis() {
+        let input = "a".repeat(1024);
+        let out = sanitize_error_body(&input);
+        // 512 'a' bytes + '…' (3-byte UTF-8) = 515 bytes.
+        assert_eq!(out.len(), 512 + '…'.len_utf8());
+        assert!(out.ends_with('…'));
+        assert!(out.starts_with(&"a".repeat(512)));
+    }
+
+    #[test]
+    fn sanitize_error_body_truncates_on_utf8_char_boundary() {
+        // Build input where a multi-byte char straddles the 512-byte mark.
+        // 510 ASCII bytes, then '€' (3 bytes at positions 510, 511, 512),
+        // then more ASCII. Cutting at 512 would split the '€' mid-codepoint.
+        // The helper must instead cut at index 510 (the start of '€').
+        let mut input = "a".repeat(510);
+        input.push('€');
+        input.push_str(&"b".repeat(100));
+
+        let out = sanitize_error_body(&input);
+        // Must be valid UTF-8 (round-trips through &str without panic).
+        let _: &str = out.as_str();
+        // First 510 'a's preserved, then '…' (no '€', no 'b's, no truncation
+        // mid-codepoint).
+        assert!(out.starts_with(&"a".repeat(510)));
+        assert!(out.ends_with('…'));
+        assert!(
+            !out.contains('€'),
+            "'€' must be dropped because it would straddle the 512-byte cut"
+        );
+        assert!(!out.contains('b'));
+    }
+
+    #[test]
+    fn sanitize_error_body_handles_exactly_512_bytes_without_truncation() {
+        let input = "a".repeat(512);
+        let out = sanitize_error_body(&input);
+        assert_eq!(out, input);
+        assert!(!out.ends_with('…'));
+    }
+
+    #[test]
+    fn sanitize_error_body_empty_input() {
+        assert_eq!(sanitize_error_body(""), "");
+    }
+
+    #[test]
+    fn sanitize_error_body_bidi_override_passes_through() {
+        // Documents the actual boundary: U+202E is in the Unicode "Cf"
+        // (format) category, not "Cc", so char::is_control() does not match.
+        // The helper does NOT strip it. If we ever broaden the filter,
+        // update this test.
+        let input = "before\u{202e}after";
+        let out = sanitize_error_body(input);
+        assert!(out.contains('\u{202e}'));
+    }
+
+    /// Spawn a one-shot HTTP/1.1 mock that responds with the given status
+    /// and raw body, then return the URL to send a request to.
+    ///
+    /// Uses a `tokio::net::TcpListener` rather than `mockito` to avoid a
+    /// new dev-dependency. The listener is bound to `127.0.0.1:0` so it
+    /// gets an ephemeral free port. The spawned task handles exactly one
+    /// connection and exits.
+    async fn spawn_mock_with_body(status_line: &'static str, body: &'static [u8]) -> String {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let (mut sock, _) = listener.accept().await.unwrap();
+            // Drain the request (read until we see the end of headers).
+            let mut buf = [0u8; 4096];
+            loop {
+                let n = sock.read(&mut buf).await.unwrap_or(0);
+                if n == 0 {
+                    break;
+                }
+                if buf[..n].windows(4).any(|w| w == b"\r\n\r\n") {
+                    break;
+                }
+            }
+            let mut response = format!(
+                "HTTP/1.1 {status_line}\r\nContent-Length: {}\r\nContent-Type: text/plain\r\nConnection: close\r\n\r\n",
+                body.len()
+            )
+            .into_bytes();
+            response.extend_from_slice(body);
+            sock.write_all(&response).await.unwrap();
+            sock.shutdown().await.ok();
+        });
+        format!("http://{addr}/")
+    }
+
+    #[tokio::test]
+    async fn handle_error_status_sanitizes_ansi_in_auth_error() {
+        // End-to-end: a mock 401 with an ANSI-laden body is fetched through
+        // reqwest; the resulting Error::Auth message must not contain raw
+        // ESC bytes.
+        let url = spawn_mock_with_body("401 Unauthorized", b"\x1b[2J\x1b[Hattacker says hi").await;
+        let resp = reqwest::Client::new().get(&url).send().await.unwrap();
+        let status_code = resp.status().as_u16();
+        let err = handle_error_status(status_code, resp).await.unwrap_err();
+        match err {
+            Error::Auth(msg) => {
+                assert!(
+                    !msg.contains('\x1b'),
+                    "Error::Auth must not contain ESC bytes, got: {msg:?}"
+                );
+                assert!(
+                    msg.contains("attacker says hi"),
+                    "non-control text should still surface: {msg:?}"
+                );
+                assert!(msg.starts_with("401:"), "expected status prefix: {msg:?}");
+            }
+            other => panic!("expected Error::Auth, got: {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn handle_error_status_sanitizes_not_found_body() {
+        let url = spawn_mock_with_body("404 Not Found", b"page not\x07 here\x00").await;
+        let resp = reqwest::Client::new().get(&url).send().await.unwrap();
+        let status_code = resp.status().as_u16();
+        let err = handle_error_status(status_code, resp).await.unwrap_err();
+        match err {
+            Error::NotFound(msg) => {
+                assert!(!msg.contains('\x07'));
+                assert!(!msg.contains('\x00'));
+                assert!(msg.contains("page not"));
+            }
+            other => panic!("expected Error::NotFound, got: {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn handle_error_status_sanitizes_generic_api_error() {
+        let url =
+            spawn_mock_with_body("500 Internal Server Error", b"oops\x1b[31mred\x1b[0m").await;
+        let resp = reqwest::Client::new().get(&url).send().await.unwrap();
+        let status_code = resp.status().as_u16();
+        let err = handle_error_status(status_code, resp).await.unwrap_err();
+        match err {
+            Error::Api { status, message } => {
+                assert_eq!(status, 500);
+                assert!(!message.contains('\x1b'));
+                assert!(message.contains("oops"));
+            }
+            other => panic!("expected Error::Api, got: {other:?}"),
         }
     }
 }

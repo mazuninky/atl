@@ -7,6 +7,7 @@ use crate::error::Error;
 
 use super::{
     HttpClient, build_base_url, build_http_client, handle_response, handle_response_maybe_empty,
+    read_sanitized_error_body,
 };
 
 pub struct JiraClient {
@@ -370,7 +371,7 @@ impl JiraClient {
         if status.is_success() {
             Ok(())
         } else {
-            let body = resp.text().await.unwrap_or_default();
+            let body = read_sanitized_error_body(resp).await;
             Err(Error::Api {
                 status: status.as_u16(),
                 message: body,
@@ -401,7 +402,7 @@ impl JiraClient {
         if status.is_success() {
             Ok(())
         } else {
-            let body = resp.text().await.unwrap_or_default();
+            let body = read_sanitized_error_body(resp).await;
             Err(Error::Api {
                 status: status.as_u16(),
                 message: body,
@@ -418,7 +419,7 @@ impl JiraClient {
         if status.is_success() {
             Ok(())
         } else {
-            let body = resp.text().await.unwrap_or_default();
+            let body = read_sanitized_error_body(resp).await;
             Err(Error::Api {
                 status: status.as_u16(),
                 message: body,
@@ -627,7 +628,7 @@ impl JiraClient {
         if status.is_success() {
             Ok(())
         } else {
-            let body = resp.text().await.unwrap_or_default();
+            let body = read_sanitized_error_body(resp).await;
             Err(Error::Api {
                 status: status.as_u16(),
                 message: body,
@@ -650,7 +651,7 @@ impl JiraClient {
         if status.is_success() {
             Ok(())
         } else {
-            let body = resp.text().await.unwrap_or_default();
+            let body = read_sanitized_error_body(resp).await;
             Err(Error::Api {
                 status: status.as_u16(),
                 message: body,
@@ -669,7 +670,7 @@ impl JiraClient {
         if status.is_success() {
             Ok(())
         } else {
-            let body = resp.text().await.unwrap_or_default();
+            let body = read_sanitized_error_body(resp).await;
             Err(Error::Api {
                 status: status.as_u16(),
                 message: body,
@@ -751,7 +752,7 @@ impl JiraClient {
         if status.is_success() {
             Ok(())
         } else {
-            let body = resp.text().await.unwrap_or_default();
+            let body = read_sanitized_error_body(resp).await;
             Err(Error::Api {
                 status: status.as_u16(),
                 message: body,
@@ -791,7 +792,7 @@ impl JiraClient {
         if status.is_success() {
             Ok(())
         } else {
-            let body = resp.text().await.unwrap_or_default();
+            let body = read_sanitized_error_body(resp).await;
             Err(Error::Api {
                 status: status.as_u16(),
                 message: body,
@@ -858,7 +859,7 @@ impl JiraClient {
         if status.is_success() {
             Ok(())
         } else {
-            let body = resp.text().await.unwrap_or_default();
+            let body = read_sanitized_error_body(resp).await;
             Err(Error::Api {
                 status: status.as_u16(),
                 message: body,
@@ -886,7 +887,7 @@ impl JiraClient {
         if status.is_success() {
             Ok(())
         } else {
-            let body = resp.text().await.unwrap_or_default();
+            let body = read_sanitized_error_body(resp).await;
             Err(Error::Api {
                 status: status.as_u16(),
                 message: body,
@@ -962,7 +963,7 @@ impl JiraClient {
         if status.is_success() {
             Ok(())
         } else {
-            let body = resp.text().await.unwrap_or_default();
+            let body = read_sanitized_error_body(resp).await;
             Err(Error::Api {
                 status: status.as_u16(),
                 message: body,
@@ -1042,7 +1043,7 @@ impl JiraClient {
         if status.is_success() {
             Ok(())
         } else {
-            let body = resp.text().await.unwrap_or_default();
+            let body = read_sanitized_error_body(resp).await;
             Err(Error::Api {
                 status: status.as_u16(),
                 message: body,
@@ -1109,7 +1110,7 @@ impl JiraClient {
         if status.is_success() {
             Ok(())
         } else {
-            let body = resp.text().await.unwrap_or_default();
+            let body = read_sanitized_error_body(resp).await;
             Err(Error::Api {
                 status: status.as_u16(),
                 message: body,
@@ -1186,7 +1187,7 @@ impl JiraClient {
         if status.is_success() {
             Ok(())
         } else {
-            let body = resp.text().await.unwrap_or_default();
+            let body = read_sanitized_error_body(resp).await;
             Err(Error::Api {
                 status: status.as_u16(),
                 message: body,
@@ -1257,7 +1258,7 @@ impl JiraClient {
         if status.is_success() {
             Ok(())
         } else {
-            let body = resp.text().await.unwrap_or_default();
+            let body = read_sanitized_error_body(resp).await;
             Err(Error::Api {
                 status: status.as_u16(),
                 message: body,
@@ -1317,7 +1318,7 @@ impl JiraClient {
         if status.is_success() {
             Ok(())
         } else {
-            let body = resp.text().await.unwrap_or_default();
+            let body = read_sanitized_error_body(resp).await;
             Err(Error::Api {
                 status: status.as_u16(),
                 message: body,
@@ -1366,7 +1367,7 @@ impl JiraClient {
         if status.is_success() {
             Ok(())
         } else {
-            let body = resp.text().await.unwrap_or_default();
+            let body = read_sanitized_error_body(resp).await;
             Err(Error::Api {
                 status: status.as_u16(),
                 message: body,
@@ -1431,7 +1432,7 @@ impl JiraClient {
         if status.is_success() {
             Ok(())
         } else {
-            let body = resp.text().await.unwrap_or_default();
+            let body = read_sanitized_error_body(resp).await;
             Err(Error::Api {
                 status: status.as_u16(),
                 message: body,
@@ -1450,7 +1451,7 @@ impl JiraClient {
         if status.is_success() {
             Ok(())
         } else {
-            let body = resp.text().await.unwrap_or_default();
+            let body = read_sanitized_error_body(resp).await;
             Err(Error::Api {
                 status: status.as_u16(),
                 message: body,
@@ -1467,7 +1468,7 @@ impl JiraClient {
         if status.is_success() {
             Ok(())
         } else {
-            let body = resp.text().await.unwrap_or_default();
+            let body = read_sanitized_error_body(resp).await;
             Err(Error::Api {
                 status: status.as_u16(),
                 message: body,
@@ -1555,7 +1556,7 @@ impl JiraClient {
         if status.is_success() {
             Ok(())
         } else {
-            let body = resp.text().await.unwrap_or_default();
+            let body = read_sanitized_error_body(resp).await;
             Err(Error::Api {
                 status: status.as_u16(),
                 message: body,
@@ -1583,7 +1584,7 @@ impl JiraClient {
         if status.is_success() {
             Ok(())
         } else {
-            let body = resp.text().await.unwrap_or_default();
+            let body = read_sanitized_error_body(resp).await;
             Err(Error::Api {
                 status: status.as_u16(),
                 message: body,
@@ -1625,7 +1626,7 @@ impl JiraClient {
         if status.is_success() {
             Ok(())
         } else {
-            let body = resp.text().await.unwrap_or_default();
+            let body = read_sanitized_error_body(resp).await;
             Err(Error::Api {
                 status: status.as_u16(),
                 message: body,

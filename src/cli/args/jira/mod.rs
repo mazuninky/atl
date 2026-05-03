@@ -28,7 +28,7 @@ pub use workflow::*;
 pub enum JiraInputFormat {
     /// Jira wiki syntax (sent as-is)
     Wiki,
-    /// Markdown (converted to Jira wiki syntax)
+    /// Markdown — converted to ADF on Cloud (v3 API), Jira wiki on Data Center / Server (v2 API)
     #[default]
     Markdown,
     /// ADF JSON (sent via Cloud v3 API; not available on Data Center / Server)

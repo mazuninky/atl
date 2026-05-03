@@ -31,22 +31,41 @@ use super::read_body_arg;
 /// Jira client understands.
 ///
 /// - [`JiraInputFormat::Wiki`] is a passthrough — the body reaches the v2 API
-///   byte-for-byte as the `description` / comment `body` field.
-/// - [`JiraInputFormat::Markdown`] runs the body through
-///   [`super::converters::md_to_wiki::markdown_to_wiki`] and wraps the result
-///   in [`JiraBodyContent::Wiki`].
+///   byte-for-byte as the `description` / comment `body` field, regardless of
+///   flavor. Users who explicitly ask for wiki get wiki.
+/// - [`JiraInputFormat::Markdown`] is flavor-aware. On Cloud the body goes
+///   through [`super::converters::md_to_adf::markdown_to_adf`] and is wrapped
+///   in [`JiraBodyContent::Adf`] so it routes through the v3 API. On Data
+///   Center / Server it goes through
+///   [`super::converters::md_to_wiki::markdown_to_wiki`] and is wrapped in
+///   [`JiraBodyContent::Wiki`] (v3 doesn't exist on DC). The Cloud branch
+///   exists because v2 stores wiki text literally rather than parsing it into
+///   ADF nodes — `{info}` ends up as a paragraph/text node, not a panel —
+///   which breaks the markdown → wiki → ADF → markdown round-trip for
+///   directives. Sending native ADF avoids the lossy server-side conversion.
 /// - [`JiraInputFormat::Adf`] parses the body as JSON and wraps it in
 ///   [`JiraBodyContent::Adf`]. Invalid JSON surfaces as an error. Cloud-flavor
 ///   validation lives in [`assert_adf_supported`] at the call site so the
 ///   message can mention the specific operation that failed.
-fn convert_input(body: String, fmt: &JiraInputFormat) -> anyhow::Result<JiraBodyContent> {
+fn convert_input(
+    body: String,
+    fmt: &JiraInputFormat,
+    flavor: JiraFlavor,
+) -> anyhow::Result<JiraBodyContent> {
     Ok(match fmt {
         JiraInputFormat::Wiki => JiraBodyContent::Wiki(body),
-        JiraInputFormat::Markdown => {
-            let wiki = super::converters::md_to_wiki::markdown_to_wiki(&body)
-                .context("failed to convert markdown to Jira wiki")?;
-            JiraBodyContent::Wiki(wiki)
-        }
+        JiraInputFormat::Markdown => match flavor {
+            JiraFlavor::Cloud => {
+                let adf = super::converters::md_to_adf::markdown_to_adf(&body)
+                    .context("failed to convert markdown to ADF")?;
+                JiraBodyContent::Adf(adf)
+            }
+            JiraFlavor::DataCenter => {
+                let wiki = super::converters::md_to_wiki::markdown_to_wiki(&body)
+                    .context("failed to convert markdown to Jira wiki")?;
+                JiraBodyContent::Wiki(wiki)
+            }
+        },
         JiraInputFormat::Adf => {
             let parsed: Value =
                 serde_json::from_str(&body).with_context(|| "ADF input is not valid JSON")?;
@@ -848,7 +867,7 @@ async fn dispatch(
         JiraSubcommand::Create(args) => {
             let description_value = if let Some(desc) = &args.description {
                 let raw = read_body_arg(desc).context("failed to read --description body")?;
-                let body = convert_input(raw, &args.input_format)?;
+                let body = convert_input(raw, &args.input_format, client.flavor())?;
                 assert_adf_supported(client.flavor(), &body)?;
                 let version = api_version_for(&body);
                 Some((body_field_value(body), version))
@@ -867,7 +886,7 @@ async fn dispatch(
         JiraSubcommand::Update(args) => {
             let description_value = if let Some(desc) = &args.description {
                 let raw = read_body_arg(desc).context("failed to read --description body")?;
-                let body = convert_input(raw, &args.input_format)?;
+                let body = convert_input(raw, &args.input_format, client.flavor())?;
                 assert_adf_supported(client.flavor(), &body)?;
                 let version = api_version_for(&body);
                 Some((body_field_value(body), version))
@@ -898,7 +917,7 @@ async fn dispatch(
         }
         JiraSubcommand::Comment(args) => {
             let raw = read_body_arg(&args.body).context("failed to read comment body argument")?;
-            let body = convert_input(raw, &args.input_format)?;
+            let body = convert_input(raw, &args.input_format, client.flavor())?;
             assert_adf_supported(client.flavor(), &body)?;
             client.add_comment(&args.key, &body).await?
         }
@@ -1471,7 +1490,12 @@ mod tests {
         // and `{` that the markdown converter would interpret) reaches Jira
         // as-is.
         let body = "h1. Hello\n\n*already bold*".to_string();
-        let result = assert_wiki(convert_input(body.clone(), &JiraInputFormat::Wiki).unwrap());
+        // Wiki passthrough is flavor-agnostic — verify on Cloud (the harder
+        // case, since Markdown does branch on flavor and we want to keep
+        // Wiki orthogonal).
+        let result = assert_wiki(
+            convert_input(body.clone(), &JiraInputFormat::Wiki, JiraFlavor::Cloud).unwrap(),
+        );
         assert_eq!(
             result, body,
             "Wiki input must pass through unchanged, got: {result:?}"
@@ -1479,11 +1503,18 @@ mod tests {
     }
 
     #[test]
-    fn convert_input_markdown_converts_heading() {
-        // Markdown input must run through the converter — the cheapest signal
-        // that conversion happened is the presence of the wiki heading token.
-        let result =
-            assert_wiki(convert_input("# Hi".to_string(), &JiraInputFormat::Markdown).unwrap());
+    fn convert_input_markdown_on_data_center_converts_heading() {
+        // On DC the Markdown branch must run through `markdown_to_wiki` — the
+        // cheapest signal that conversion happened is the presence of the wiki
+        // heading token. v3 ADF isn't available on DC so wiki is the only path.
+        let result = assert_wiki(
+            convert_input(
+                "# Hi".to_string(),
+                &JiraInputFormat::Markdown,
+                JiraFlavor::DataCenter,
+            )
+            .unwrap(),
+        );
         assert!(
             result.contains("h1. Hi"),
             "expected wiki heading `h1. Hi` after markdown conversion, got: {result:?}"
@@ -1495,11 +1526,17 @@ mod tests {
     }
 
     #[test]
-    fn convert_input_markdown_converts_bold() {
+    fn convert_input_markdown_on_data_center_converts_bold() {
         // Locks in that bold conversion runs (`**x**` → `*x*`) when the input
-        // format is Markdown. The wiki path would leave `**x**` literally.
-        let result =
-            assert_wiki(convert_input("**x**".to_string(), &JiraInputFormat::Markdown).unwrap());
+        // format is Markdown on DC. The wiki path would leave `**x**` literally.
+        let result = assert_wiki(
+            convert_input(
+                "**x**".to_string(),
+                &JiraInputFormat::Markdown,
+                JiraFlavor::DataCenter,
+            )
+            .unwrap(),
+        );
         assert!(
             result.contains("*x*") && !result.contains("**x**"),
             "expected `**x**` to convert to `*x*`, got: {result:?}"
@@ -1509,25 +1546,49 @@ mod tests {
     #[test]
     fn convert_input_empty_body_does_not_panic() {
         // Edge case: empty body is legal (e.g. user passes `--description ""`).
-        // Must not panic on either path.
-        let wiki = assert_wiki(convert_input(String::new(), &JiraInputFormat::Wiki).unwrap());
+        // Must not panic on any path.
+        let wiki = assert_wiki(
+            convert_input(String::new(), &JiraInputFormat::Wiki, JiraFlavor::Cloud).unwrap(),
+        );
         assert_eq!(wiki, "", "empty wiki body should pass through");
 
-        let md = assert_wiki(convert_input(String::new(), &JiraInputFormat::Markdown).unwrap());
-        // Markdown converter may emit a trailing newline for an empty doc;
-        // accept either to keep the test resilient to converter trims.
-        assert!(
-            md.is_empty() || md == "\n",
-            "empty markdown body should produce empty or single newline, got: {md:?}"
+        // Markdown on DC: wiki output. Markdown converter may emit a trailing
+        // newline for an empty doc; accept either to keep the test resilient
+        // to converter trims.
+        let md_dc = assert_wiki(
+            convert_input(
+                String::new(),
+                &JiraInputFormat::Markdown,
+                JiraFlavor::DataCenter,
+            )
+            .unwrap(),
         );
+        assert!(
+            md_dc.is_empty() || md_dc == "\n",
+            "empty markdown body on DC should produce empty or single newline, got: {md_dc:?}"
+        );
+
+        // Markdown on Cloud: ADF doc with empty content.
+        let md_cloud =
+            convert_input(String::new(), &JiraInputFormat::Markdown, JiraFlavor::Cloud).unwrap();
+        match md_cloud {
+            JiraBodyContent::Adf(v) => {
+                assert_eq!(v["type"], "doc", "empty markdown on Cloud should be a doc");
+            }
+            JiraBodyContent::Wiki(s) => {
+                panic!("expected Adf for Markdown on Cloud, got Wiki: {s:?}")
+            }
+        }
     }
 
     #[test]
     fn convert_input_adf_valid_json_yields_adf_variant() {
         // Valid ADF JSON must be parsed and wrapped in JiraBodyContent::Adf so
-        // the caller knows to route through v3.
+        // the caller knows to route through v3. Flavor is not consulted on the
+        // Adf branch — Cloud-only enforcement happens at `assert_adf_supported`.
         let adf = json!({"type": "doc", "version": 1, "content": []});
-        let result = convert_input(adf.to_string(), &JiraInputFormat::Adf).unwrap();
+        let result =
+            convert_input(adf.to_string(), &JiraInputFormat::Adf, JiraFlavor::Cloud).unwrap();
         match result {
             JiraBodyContent::Adf(v) => {
                 assert_eq!(v["type"], "doc");
@@ -1539,10 +1600,135 @@ mod tests {
 
     #[test]
     fn convert_input_adf_invalid_json_returns_error() {
-        let err = convert_input("not json".to_string(), &JiraInputFormat::Adf).unwrap_err();
+        let err = convert_input(
+            "not json".to_string(),
+            &JiraInputFormat::Adf,
+            JiraFlavor::Cloud,
+        )
+        .unwrap_err();
         assert!(
             err.to_string().contains("ADF input is not valid JSON"),
             "expected ADF JSON parse error, got: {err}"
+        );
+    }
+
+    // ---- flavor-aware Markdown dispatch ----
+    //
+    // These tests pin the asymmetric write-side behaviour PR #70 introduces:
+    // default Markdown writes go through ADF on Cloud (so panels/status survive
+    // the round-trip) but stay on wiki on Data Center / Server (no v3 there).
+
+    #[test]
+    fn default_markdown_on_cloud_writes_via_adf() {
+        // On Cloud, the default Markdown branch must produce JiraBodyContent::Adf
+        // so the caller routes through v3. This is the symmetric counterpart of
+        // `default_markdown_on_cloud_reads_via_v3_adf`. Without this, panels and
+        // status text are stored as raw wiki tokens (`{info}`) inside paragraph
+        // text nodes by Cloud's v2 endpoint — see the PR description for the
+        // ORB-210 reproduction.
+        let body = ":::info\nHello\n:::".to_string();
+        let result = convert_input(body, &JiraInputFormat::Markdown, JiraFlavor::Cloud).unwrap();
+        match result {
+            JiraBodyContent::Adf(v) => {
+                assert_eq!(v["type"], "doc", "expected ADF doc, got: {v}");
+                let first = &v["content"][0];
+                assert_eq!(
+                    first["type"], "panel",
+                    "expected first ADF block to be a panel (proves md_to_adf ran), got: {first}"
+                );
+                assert_eq!(
+                    first["attrs"]["panelType"], "info",
+                    "expected panelType=info, got: {first}"
+                );
+            }
+            JiraBodyContent::Wiki(s) => {
+                panic!("expected Adf on Cloud Markdown write path, got Wiki: {s:?}")
+            }
+        }
+        // And the API-version routing must agree: ADF -> v3.
+        let again = convert_input(
+            ":::info\nHi\n:::".to_string(),
+            &JiraInputFormat::Markdown,
+            JiraFlavor::Cloud,
+        )
+        .unwrap();
+        assert_eq!(api_version_for(&again), JiraApiVersion::V3);
+    }
+
+    #[test]
+    fn default_markdown_on_server_writes_via_wiki() {
+        // On Data Center / Server the Markdown branch must stay on wiki text —
+        // there's no v3 API to send ADF to, and `md_to_wiki` is the canonical
+        // converter for that flavor.
+        let result = convert_input(
+            "# Hi".to_string(),
+            &JiraInputFormat::Markdown,
+            JiraFlavor::DataCenter,
+        )
+        .unwrap();
+        match &result {
+            JiraBodyContent::Wiki(s) => {
+                assert!(
+                    s.contains("h1. Hi"),
+                    "expected wiki heading on DC, got: {s:?}"
+                );
+            }
+            JiraBodyContent::Adf(v) => {
+                panic!("expected Wiki on DC Markdown write path, got Adf: {v:?}")
+            }
+        }
+        // Wiki -> v2 routing.
+        assert_eq!(api_version_for(&result), JiraApiVersion::V2);
+    }
+
+    #[test]
+    fn wiki_input_uses_wiki_on_both_flavors() {
+        // Regression: `--input-format wiki` is a literal passthrough, never
+        // upgraded to ADF on Cloud. Users who explicitly want wiki must keep
+        // getting wiki + v2 regardless of flavor.
+        let body = "h2. Header\n\n*bold*".to_string();
+        for flavor in [JiraFlavor::Cloud, JiraFlavor::DataCenter] {
+            let result = convert_input(body.clone(), &JiraInputFormat::Wiki, flavor).unwrap();
+            match &result {
+                JiraBodyContent::Wiki(s) => assert_eq!(
+                    s, &body,
+                    "Wiki passthrough must be byte-for-byte on {flavor:?}, got: {s:?}"
+                ),
+                JiraBodyContent::Adf(v) => {
+                    panic!("expected Wiki on {flavor:?} for --input-format wiki, got Adf: {v:?}")
+                }
+            }
+            assert_eq!(api_version_for(&result), JiraApiVersion::V2);
+        }
+    }
+
+    #[test]
+    fn adf_input_uses_adf_on_cloud_errors_on_server() {
+        // Regression: `--input-format adf` parses on both flavors (the
+        // assert_adf_supported guard at the call site does the DC rejection)
+        // but the routing is unchanged — Adf variant -> v3 always.
+        let adf = json!({"type": "doc", "version": 1, "content": []}).to_string();
+
+        // Cloud: parses cleanly, routes to v3.
+        let cloud = convert_input(adf.clone(), &JiraInputFormat::Adf, JiraFlavor::Cloud).unwrap();
+        match &cloud {
+            JiraBodyContent::Adf(v) => assert_eq!(v["type"], "doc"),
+            JiraBodyContent::Wiki(s) => panic!("expected Adf on Cloud, got Wiki: {s:?}"),
+        }
+        assert_eq!(api_version_for(&cloud), JiraApiVersion::V3);
+
+        // DC: convert_input itself does NOT error — it parses the JSON and
+        // produces an Adf variant. Rejection lives in `assert_adf_supported`,
+        // which the call site invokes immediately after. Verify both halves
+        // here so a future refactor that moves the check can't silently
+        // regress the DC error path.
+        let dc = convert_input(adf, &JiraInputFormat::Adf, JiraFlavor::DataCenter).unwrap();
+        assert!(matches!(dc, JiraBodyContent::Adf(_)));
+        let err = assert_adf_supported(JiraFlavor::DataCenter, &dc).unwrap_err();
+        let downcast = err.downcast_ref::<crate::error::Error>();
+        assert!(
+            matches!(downcast, Some(crate::error::Error::Config(_))),
+            "ADF on DC must surface as Error::Config (exit code 3), got: {downcast:?}"
         );
     }
 

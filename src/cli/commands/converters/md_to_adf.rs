@@ -848,9 +848,18 @@ fn render_inline<'a>(node: &'a AstNode<'a>, marks: &[Value], out: &mut Vec<Value
         }
         NodeValue::Link(link) => {
             let mut new_marks = marks.to_vec();
+            // Comrak parses `[text](url "title")` and reference defs of the
+            // form `[ref]: url "title"` into the same NodeLink, exposing the
+            // title via the `title` field. Attach it to the ADF link mark when
+            // present so the round-trip preserves it.
+            let mut attrs = serde_json::Map::new();
+            attrs.insert("href".to_string(), Value::String(link.url));
+            if !link.title.is_empty() {
+                attrs.insert("title".to_string(), Value::String(link.title));
+            }
             new_marks.push(json!({
                 "type": "link",
-                "attrs": {"href": link.url},
+                "attrs": attrs,
             }));
             for child in node.children() {
                 render_inline(child, &new_marks, out);
@@ -1700,6 +1709,179 @@ mod tests {
             joined.contains("![alt](http://x/y.png)"),
             "joined inline text was: {joined:?}",
         );
+    }
+
+    // ---- reference-style links -------------------------------------------
+
+    #[test]
+    fn reference_style_link_resolves_to_link_mark() {
+        let md = "See [docs][d].\n\n[d]: https://example.com/docs";
+        let doc = convert(md);
+        // No paragraph in the document should echo the literal `[d]:` def.
+        for block in doc["content"].as_array().unwrap() {
+            if block["type"] != "paragraph" {
+                continue;
+            }
+            let joined: String = block["content"]
+                .as_array()
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|n| n["text"].as_str())
+                        .collect::<Vec<_>>()
+                        .join("")
+                })
+                .unwrap_or_default();
+            assert!(
+                !joined.contains("[d]: https://example.com/docs"),
+                "reference def must not appear as text: {joined:?}"
+            );
+        }
+        let inline = doc["content"][0]["content"].as_array().unwrap();
+        // Expect: text "See ", text "docs" with link mark, text "."
+        let leading = inline
+            .iter()
+            .find(|n| n["type"] == "text" && n["text"] == "See ")
+            .unwrap_or_else(|| panic!("missing 'See ' text run: {inline:#?}"));
+        assert!(leading.get("marks").is_none());
+        let linked = inline
+            .iter()
+            .find(|n| n["type"] == "text" && n["text"] == "docs")
+            .unwrap_or_else(|| panic!("missing linked 'docs' text run: {inline:#?}"));
+        let marks = linked["marks"].as_array().unwrap();
+        assert_eq!(marks.len(), 1);
+        assert_eq!(marks[0]["type"], "link");
+        assert_eq!(marks[0]["attrs"]["href"], "https://example.com/docs");
+        let trailing = inline
+            .iter()
+            .find(|n| n["type"] == "text" && n["text"] == ".")
+            .unwrap_or_else(|| panic!("missing trailing '.' text run: {inline:#?}"));
+        assert!(trailing.get("marks").is_none());
+    }
+
+    #[test]
+    fn reference_style_link_with_title_attr_resolves() {
+        let md = "See [docs][d].\n\n[d]: https://example.com/docs \"Doc title\"";
+        let doc = convert(md);
+        let inline = doc["content"][0]["content"].as_array().unwrap();
+        let linked = inline
+            .iter()
+            .find(|n| n["type"] == "text" && n["text"] == "docs")
+            .unwrap_or_else(|| panic!("missing linked 'docs': {inline:#?}"));
+        let mark = &linked["marks"][0];
+        assert_eq!(mark["type"], "link");
+        assert_eq!(mark["attrs"]["href"], "https://example.com/docs");
+        assert_eq!(
+            mark["attrs"]["title"], "Doc title",
+            "title from ref def must be preserved on the link mark: {mark:?}"
+        );
+    }
+
+    #[test]
+    fn shortcut_reference_link_resolves() {
+        // `[docs]` with a matching `[docs]:` def — the shortcut form (no
+        // second bracket pair) must still resolve to a link mark.
+        let md = "[docs]\n\n[docs]: https://example.com/docs";
+        let doc = convert(md);
+        let inline = doc["content"][0]["content"].as_array().unwrap();
+        assert_eq!(inline.len(), 1, "expected single linked run: {inline:#?}");
+        let linked = &inline[0];
+        assert_eq!(linked["type"], "text");
+        assert_eq!(linked["text"], "docs");
+        let marks = linked["marks"].as_array().unwrap();
+        assert_eq!(marks[0]["type"], "link");
+        assert_eq!(marks[0]["attrs"]["href"], "https://example.com/docs");
+    }
+
+    #[test]
+    fn reference_style_image_resolves() {
+        // ADF's mediaSingle is a block node; emitting it inline produces
+        // invalid ADF. Inline images therefore degrade to a literal markdown
+        // text run. The reference-style form must still resolve through
+        // comrak's ref map so the alt + src survive inside that literal —
+        // they must not surface as the unresolved `![alt][img]` form.
+        let md = "![alt][img]\n\n[img]: img.png";
+        let doc = convert(md);
+        let para = first_block(&doc);
+        assert_eq!(para["type"], "paragraph");
+        let inline = para["content"].as_array().unwrap();
+        // No mediaSingle / media node may appear inside the paragraph.
+        for node in inline {
+            assert_ne!(node["type"], "mediaSingle");
+            assert_ne!(node["type"], "media");
+        }
+        let joined: String = inline
+            .iter()
+            .filter(|n| n["type"] == "text")
+            .filter_map(|n| n["text"].as_str())
+            .collect();
+        assert!(
+            joined.contains("![alt](img.png)"),
+            "alt + src must survive as resolved literal markdown: {joined:?}"
+        );
+        // The unresolved ref form must not leak through.
+        assert!(
+            !joined.contains("![alt][img]"),
+            "unresolved reference form must not appear: {joined:?}"
+        );
+    }
+
+    #[test]
+    fn unresolved_reference_falls_back_to_text() {
+        // No `[missing]:` def — must not crash, must not emit a link mark,
+        // and must surface the literal `[unresolved][missing]` so the user
+        // sees their input wasn't silently dropped.
+        let md = "[unresolved][missing]";
+        let doc = convert(md);
+        let para = first_block(&doc);
+        assert_eq!(para["type"], "paragraph");
+        let inline = para["content"].as_array().unwrap();
+        // No link mark anywhere in the inline content.
+        for node in inline {
+            if let Some(marks) = node.get("marks").and_then(|v| v.as_array()) {
+                for mk in marks {
+                    assert_ne!(
+                        mk["type"], "link",
+                        "unresolved ref must not produce a link mark: {node:?}"
+                    );
+                }
+            }
+        }
+        let joined: String = inline
+            .iter()
+            .filter(|n| n["type"] == "text")
+            .filter_map(|n| n["text"].as_str())
+            .collect();
+        assert!(
+            joined.contains("[unresolved][missing]"),
+            "literal ref text should survive: {joined:?}"
+        );
+    }
+
+    #[test]
+    fn reference_def_does_not_appear_as_paragraph() {
+        // Given a doc with a ref def line, no paragraph block in the output
+        // should contain the def text (`[d]: ...`). Comrak consumes the def
+        // out of the AST during reference resolution.
+        let md = "See [docs][d].\n\n[d]: https://example.com/docs";
+        let doc = convert(md);
+        for block in doc["content"].as_array().unwrap() {
+            if block["type"] != "paragraph" {
+                continue;
+            }
+            let joined: String = block["content"]
+                .as_array()
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(|n| n["text"].as_str())
+                        .collect::<Vec<_>>()
+                        .join("")
+                })
+                .unwrap_or_default();
+            assert!(
+                !joined.contains("[d]:"),
+                "ref def `[d]: ...` must not appear as a paragraph: {joined:?}"
+            );
+        }
     }
 
     #[test]

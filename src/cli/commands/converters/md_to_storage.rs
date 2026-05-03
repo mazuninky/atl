@@ -425,10 +425,38 @@ fn render_text(md: &str) -> String {
 
     let html = markdown_to_html(&with_placeholders, &gfm_options());
 
-    if placeholders.is_empty() {
-        return html;
+    let html = if placeholders.is_empty() {
+        html
+    } else {
+        restore_inline_directives(&html, &placeholders)
+    };
+
+    rewrite_stripped_html_tags(&html)
+}
+
+/// Atlassian's storage-format sanitiser silently drops the keyboard-input
+/// (`<kbd>`), sample-output (`<samp>`), and variable (`<var>`) tags, so
+/// after a round-trip the user's `Press <kbd>Ctrl</kbd>` shows up as plain
+/// `Press Ctrl`. Storage *does* preserve `<code>`, so the cheapest survival
+/// trick is to rewrite each of these tags as `<code>` before the body
+/// reaches the API. The visual presentation differs slightly (monospace vs
+/// keyboard-key chrome) but the structural information survives.
+///
+/// The substitution is purely lexical — the input here is comrak-rendered
+/// HTML, so we only have to recognise the literal opening / closing tags.
+/// We do NOT touch attributes (the affected tags are bare in any realistic
+/// markdown source) and we do NOT recurse into nested forms; back-to-back
+/// `<kbd>` / `<samp>` / `<var>` runs each get their own pair of `<code>`
+/// tags, mirroring the original structure.
+fn rewrite_stripped_html_tags(html: &str) -> String {
+    const STRIPPED_TAGS: &[&str] = &["kbd", "samp", "var"];
+    let mut out = html.to_string();
+    for tag in STRIPPED_TAGS {
+        let open = format!("<{tag}>");
+        let close = format!("</{tag}>");
+        out = out.replace(&open, "<code>").replace(&close, "</code>");
     }
-    restore_inline_directives(&html, &placeholders)
+    out
 }
 
 fn gfm_options() -> Options<'static> {
@@ -1581,6 +1609,84 @@ body
                 r#"<ac:plain-text-link-body><![CDATA[Some Page]]></ac:plain-text-link-body>"#
             ),
             "expected plain-text link body: {out}"
+        );
+    }
+
+    // ---- stripped HTML tag preservation -----------------------------------
+    //
+    // Atlassian's storage sanitiser drops `<kbd>`, `<samp>`, and `<var>`
+    // server-side. We rewrite each as `<code>` so the content survives the
+    // round-trip — the user's keystroke / sample-output / variable text is
+    // more useful as monospace than vanishing into plain prose.
+
+    #[test]
+    fn kbd_inline_html_becomes_code_for_confluence_storage() {
+        // Plain `<kbd>Ctrl</kbd>` must reach the API as `<code>Ctrl</code>`
+        // — never as the literal `<kbd>` tag (which Confluence drops) and
+        // never as plain text `Ctrl` (which loses the visual distinction).
+        let out = convert("<kbd>Ctrl</kbd>");
+        assert!(
+            out.contains("<code>Ctrl</code>"),
+            "kbd must be rewritten as code, got: {out}"
+        );
+        assert!(
+            !out.contains("<kbd>"),
+            "kbd opening tag must not survive, got: {out}"
+        );
+        assert!(
+            !out.contains("</kbd>"),
+            "kbd closing tag must not survive, got: {out}"
+        );
+    }
+
+    #[test]
+    fn samp_inline_html_becomes_code() {
+        // `<samp>` is the sample-program-output tag — same treatment as
+        // `<kbd>` since Confluence storage strips it the same way.
+        let out = convert("<samp>output</samp>");
+        assert!(
+            out.contains("<code>output</code>"),
+            "samp must be rewritten as code, got: {out}"
+        );
+        assert!(
+            !out.contains("<samp>") && !out.contains("</samp>"),
+            "samp tag must not survive, got: {out}"
+        );
+    }
+
+    #[test]
+    fn var_inline_html_becomes_code() {
+        // `<var>` is the variable / placeholder tag — third member of the
+        // keyboard / sample / variable trio that Confluence drops.
+        let out = convert("<var>x</var>");
+        assert!(
+            out.contains("<code>x</code>"),
+            "var must be rewritten as code, got: {out}"
+        );
+        assert!(
+            !out.contains("<var>") && !out.contains("</var>"),
+            "var tag must not survive, got: {out}"
+        );
+    }
+
+    #[test]
+    fn nested_kbd_with_other_content_preserves_surrounding() {
+        // The replacement is per-tag and must leave the surrounding markup
+        // alone — both `<kbd>` runs reach the API as `<code>` while the
+        // intervening literal text and the wrapping paragraph are kept as
+        // they would be without any rewrite.
+        let out = convert("Press <kbd>Ctrl</kbd> + <kbd>C</kbd> to copy");
+        assert!(
+            out.contains("Press <code>Ctrl</code> + <code>C</code> to copy"),
+            "back-to-back kbd runs must each become code with surrounding text intact, got: {out}"
+        );
+        assert!(
+            out.contains("<p>"),
+            "wrapping paragraph must still be emitted, got: {out}"
+        );
+        assert!(
+            !out.contains("<kbd>"),
+            "no kbd tags should remain, got: {out}"
         );
     }
 }

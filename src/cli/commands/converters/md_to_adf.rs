@@ -326,28 +326,26 @@ fn directive_to_adf_block(
 }
 
 /// `{"type": "panel", "attrs": {"panelType": "..."}, "content": [...]}`
+///
+/// The body is run through [`flatten_nested_panels_and_expands`] before
+/// emission because the ADF schema rejects `panel`-in-`panel` and
+/// `expand`-in-`panel` nesting (Jira returns `400 INVALID_INPUT`). Inner
+/// panels collapse to a strong-marked title paragraph followed by their
+/// own content so the user's text survives the schema constraint.
 fn panel_node(
     spec: &'static DirectiveSpec,
     params: &BTreeMap<String, String>,
     body: Vec<Value>,
 ) -> Value {
     let panel_type = spec.conf_adf_panel_type.unwrap_or("info");
-    let mut content = body;
+    let mut content = flatten_nested_panels_and_expands(body);
     if let Some(title) = params.get("title")
         && !title.is_empty()
     {
         // Prepend a strong-marked paragraph so the panel renders with a
         // visible title even though ADF panels don't have a dedicated title
         // attr. Documented in the module-level rustdoc.
-        let title_paragraph = json!({
-            "type": "paragraph",
-            "content": [{
-                "type": "text",
-                "text": title,
-                "marks": [{"type": "strong"}],
-            }],
-        });
-        content.insert(0, title_paragraph);
+        content.insert(0, strong_title_paragraph(title));
     }
     json!({
         "type": "panel",
@@ -357,13 +355,135 @@ fn panel_node(
 }
 
 /// `{"type": "expand", "attrs": {"title": "..."}, "content": [...]}`
+///
+/// Mirrors [`panel_node`]: ADF rejects `panel`-in-`expand` (and
+/// `expand`-in-`expand`), so we flatten any nested panel/expand block in
+/// the body before emission.
 fn expand_node(params: &BTreeMap<String, String>, body: Vec<Value>) -> Value {
     let title = params.get("title").cloned().unwrap_or_default();
     json!({
         "type": "expand",
         "attrs": {"title": title},
-        "content": body,
+        "content": flatten_nested_panels_and_expands(body),
     })
+}
+
+/// Flatten any `panel` / `expand` blocks in `body` to a strong-marked
+/// title paragraph followed by their (recursively flattened) content.
+///
+/// ADF disallows nesting `panel` inside `panel` or `expand` (and `expand`
+/// inside `expand` / `panel`); Confluence Cloud silently rescues by
+/// wrapping the inner panel in a legacy-content extension, but Jira
+/// rejects the document outright with `400 INVALID_INPUT`. To make the
+/// markdown source round-trip on both services we promote the inner
+/// panel's body to siblings of the outer panel's other children.
+///
+/// The substitution is intentionally lossy: we keep the user's text and
+/// the panel title (as a bold paragraph) but lose the visual chrome of
+/// the inner panel. That's the deliberate trade-off — a 400 with no panel
+/// at all is strictly worse than a flattened panel with a labelled
+/// section. Triple-deep nesting collapses the same way: every panel /
+/// expand below the outermost dissolves into siblings.
+///
+/// All other block types pass through untouched. In particular, an inner
+/// `code_block`, `bulletList`, `paragraph`, etc. is allowed by the ADF
+/// schema and stays a child of the parent panel.
+fn flatten_nested_panels_and_expands(body: Vec<Value>) -> Vec<Value> {
+    let mut out: Vec<Value> = Vec::with_capacity(body.len());
+    for block in body {
+        let kind = block.get("type").and_then(Value::as_str);
+        match kind {
+            Some("panel") => out.extend(flatten_panel(block)),
+            Some("expand") => out.extend(flatten_expand(block)),
+            _ => out.push(block),
+        }
+    }
+    out
+}
+
+/// Lower a `panel` block to its title-as-strong-paragraph plus its
+/// recursively flattened content. Used when the panel sits inside another
+/// panel or expand and would otherwise violate the ADF schema.
+fn flatten_panel(block: Value) -> Vec<Value> {
+    // Title fallback: use the explicit `title` attr if the user set one
+    // via `:::info title="..."`, otherwise expose the panel type
+    // (`info`/`warning`/`note`/`success`) capitalised so the section is at
+    // least labelled. Both `panel_node` and the markdown source guarantee
+    // we have a `panelType` here, but be defensive — the worst that
+    // happens with a missing one is the bold label is empty, and the body
+    // still survives.
+    let title = block
+        .pointer("/attrs/title")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .filter(|s| !s.is_empty())
+        .or_else(|| {
+            block
+                .pointer("/attrs/panelType")
+                .and_then(Value::as_str)
+                .map(capitalize_ascii)
+        })
+        .unwrap_or_default();
+
+    let inner = block
+        .get("content")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let flattened = flatten_nested_panels_and_expands(inner);
+
+    let mut out: Vec<Value> = Vec::with_capacity(flattened.len() + 1);
+    if !title.is_empty() {
+        out.push(strong_title_paragraph(&title));
+    }
+    out.extend(flattened);
+    out
+}
+
+/// Lower an `expand` block to its title-as-strong-paragraph plus its
+/// recursively flattened content. Same rationale as [`flatten_panel`].
+fn flatten_expand(block: Value) -> Vec<Value> {
+    let title = block
+        .pointer("/attrs/title")
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "Expand".to_string());
+
+    let inner = block
+        .get("content")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let flattened = flatten_nested_panels_and_expands(inner);
+
+    let mut out: Vec<Value> = Vec::with_capacity(flattened.len() + 1);
+    out.push(strong_title_paragraph(&title));
+    out.extend(flattened);
+    out
+}
+
+/// Build the `paragraph[strong text(text)]` ADF node used as a flattened
+/// panel/expand label.
+fn strong_title_paragraph(title: &str) -> Value {
+    json!({
+        "type": "paragraph",
+        "content": [{
+            "type": "text",
+            "text": title,
+            "marks": [{"type": "strong"}],
+        }],
+    })
+}
+
+/// Uppercase the first ASCII character of `s`. Used to derive a fallback
+/// label from a panel type (`"info"` → `"Info"`).
+fn capitalize_ascii(s: &str) -> String {
+    let mut chars = s.chars();
+    match chars.next() {
+        Some(c) => c.to_ascii_uppercase().to_string() + chars.as_str(),
+        None => String::new(),
+    }
 }
 
 /// `:::toc` has no native ADF node — emit a Confluence macro extension.
@@ -1409,15 +1529,197 @@ mod tests {
         assert_eq!(panel["attrs"]["panelType"], "success");
     }
 
+    // ---- nested panel/expand flattening ---------------------------------
+    //
+    // ADF rejects `panel`-in-`panel` and any `expand` nested inside another
+    // panel/expand: Jira returns `400 INVALID_INPUT`. The renderer flattens
+    // the inner block to a strong-marked title paragraph followed by its
+    // own (recursively flattened) content, preserving the user's text at
+    // the cost of the inner block's visual chrome. The tests below pin
+    // each case so we don't accidentally re-introduce the schema-invalid
+    // nesting that motivated the fix.
+    //
+    // Each test asserts three things:
+    //   1. The outer block survives.
+    //   2. The outer block contains NO nested panel/expand.
+    //   3. The inner block's title surfaces as a bold paragraph and its
+    //      body text remains accessible.
+
+    /// Convenience: pluck the first block from the doc and assert it has
+    /// the expected ADF type.
+    fn first_block_typed<'a>(doc: &'a Value, ty: &str) -> &'a Value {
+        let block = first_block(doc);
+        assert_eq!(
+            block["type"], ty,
+            "expected first block of type {ty}, got {block:#?}"
+        );
+        block
+    }
+
+    /// Returns true iff `block`'s `content` array contains any `panel` or
+    /// `expand` child — used by the flatten tests to confirm the inner
+    /// block has been promoted to a sibling of the outer.
+    fn has_nested_panel_or_expand(block: &Value) -> bool {
+        block["content"]
+            .as_array()
+            .map(|arr| {
+                arr.iter()
+                    .any(|c| c["type"] == "panel" || c["type"] == "expand")
+            })
+            .unwrap_or(false)
+    }
+
     #[test]
-    fn nested_expand_with_panel_inside() {
-        let doc = convert(":::expand title=\"Outer\"\n:::info\nInner.\n:::\n:::");
-        let outer = first_block(&doc);
-        assert_eq!(outer["type"], "expand");
+    fn panel_inside_panel_flattens_inner() {
+        // Nested `:::info` inside `:::warning`: ADF schema rejects panel
+        // inside panel. The renderer flattens — the outer `warning` panel
+        // remains, the inner `info` panel collapses to a bold "Info"
+        // header followed by its body text, both as siblings of any other
+        // children of the outer panel.
+        let doc = convert(":::warning\nOuter.\n\n:::info\nInner.\n:::\n:::");
+        let outer = first_block_typed(&doc, "panel");
+        assert_eq!(outer["attrs"]["panelType"], "warning");
+        assert!(
+            !has_nested_panel_or_expand(outer),
+            "outer panel must not contain a nested panel/expand: {outer:#?}"
+        );
+        // The inner panel was titled `Info` (capitalised type fallback)
+        // and the body text "Inner." appears as a plain paragraph after.
+        let printed = serde_json::to_string(outer).expect("serialise");
+        assert!(
+            printed.contains("\"Info\""),
+            "expected bold 'Info' label inside outer panel: {printed}"
+        );
+        assert!(
+            printed.contains("Inner."),
+            "expected inner panel body text to survive: {printed}"
+        );
+        assert!(
+            printed.contains("Outer."),
+            "outer panel's own text must still be present: {printed}"
+        );
+    }
+
+    #[test]
+    fn expand_inside_panel_flattens_inner() {
+        // `:::expand` inside `:::warning`: same flattening — the expand's
+        // title becomes a bold paragraph, its body becomes siblings of
+        // the outer panel's other children, and no `expand` block remains
+        // inside the panel.
+        let doc = convert(":::warning\nOuter.\n\n:::expand title=\"Details\"\nHidden.\n:::\n:::");
+        let outer = first_block_typed(&doc, "panel");
+        assert!(
+            !has_nested_panel_or_expand(outer),
+            "outer panel must not contain a nested expand: {outer:#?}"
+        );
+        let printed = serde_json::to_string(outer).expect("serialise");
+        assert!(
+            printed.contains("\"Details\""),
+            "expand title must become a bold label inside the outer panel: {printed}"
+        );
+        assert!(
+            printed.contains("Hidden."),
+            "expand body text must survive: {printed}"
+        );
+    }
+
+    #[test]
+    fn panel_inside_expand_flattens_inner() {
+        // `:::info` inside `:::expand title="Outer"`: same flattening
+        // direction but with an expand on the outside. The inner panel's
+        // type becomes the bold label.
+        let doc = convert(":::expand title=\"Outer\"\nOuter body.\n\n:::info\nInner.\n:::\n:::");
+        let outer = first_block_typed(&doc, "expand");
         assert_eq!(outer["attrs"]["title"], "Outer");
-        let inner = &outer["content"][0];
-        assert_eq!(inner["type"], "panel");
-        assert_eq!(inner["attrs"]["panelType"], "info");
+        assert!(
+            !has_nested_panel_or_expand(outer),
+            "outer expand must not contain a nested panel: {outer:#?}"
+        );
+        let printed = serde_json::to_string(outer).expect("serialise");
+        assert!(
+            printed.contains("\"Info\""),
+            "inner panel's type must surface as a bold label: {printed}"
+        );
+        assert!(
+            printed.contains("Inner."),
+            "inner panel body must survive: {printed}"
+        );
+        assert!(
+            printed.contains("Outer body."),
+            "outer expand's own text must still be present: {printed}"
+        );
+    }
+
+    #[test]
+    fn triple_nested_flattens_all() {
+        // Three levels deep — the outermost block is the only one that
+        // survives as a panel/expand. Every level below collapses, with
+        // its title (or capitalised type) becoming a bold paragraph
+        // ahead of its body. Confirms the recursion: inner flatten
+        // happens BEFORE outer emission so the outermost emit sees a
+        // already-flat content array.
+        let doc = convert(
+            ":::expand title=\"L1\"\nL1.\n\n:::warning\nL2.\n\n:::info\nL3.\n:::\n:::\n:::",
+        );
+        let outer = first_block_typed(&doc, "expand");
+        assert_eq!(outer["attrs"]["title"], "L1");
+        // The outer expand must have NO nested panel/expand at any
+        // depth — the flattening promotes the entire inner subtree to
+        // siblings of the outer expand's other children.
+        let outer_content = outer["content"].as_array().expect("array");
+        for child in outer_content {
+            assert!(
+                child["type"] != "panel" && child["type"] != "expand",
+                "no nested panel/expand allowed in flattened expand: {child:#?}"
+            );
+        }
+        let printed = serde_json::to_string(outer).expect("serialise");
+        for fragment in ["L1.", "L2.", "L3.", "\"Warning\"", "\"Info\""] {
+            assert!(
+                printed.contains(fragment),
+                "expected fragment {fragment:?} in flattened tree: {printed}"
+            );
+        }
+    }
+
+    #[test]
+    fn code_block_inside_panel_unchanged() {
+        // Code blocks are valid children of a panel. The flatten step
+        // must NOT touch them — only nested `panel` / `expand` blocks
+        // are rewritten.
+        let doc = convert(":::warning\n```\nfn main() {}\n```\n:::");
+        let outer = first_block_typed(&doc, "panel");
+        let code = outer["content"]
+            .as_array()
+            .and_then(|arr| arr.iter().find(|b| b["type"] == "codeBlock"))
+            .expect("expected codeBlock child of panel");
+        assert!(
+            code["content"].to_string().contains("fn main() {}"),
+            "code block content must be preserved verbatim: {code:#?}"
+        );
+        assert!(
+            !has_nested_panel_or_expand(outer),
+            "panel still must not nest panel/expand: {outer:#?}"
+        );
+    }
+
+    #[test]
+    fn list_inside_panel_unchanged() {
+        // Bullet lists are valid children of a panel — the flatten step
+        // leaves them alone. A bullet list inside `:::info` round-trips
+        // as a `bulletList` ADF block among the panel's children.
+        let doc = convert(":::info\n- a\n- b\n:::");
+        let outer = first_block_typed(&doc, "panel");
+        let list = outer["content"]
+            .as_array()
+            .and_then(|arr| arr.iter().find(|b| b["type"] == "bulletList"))
+            .expect("expected bulletList child of panel");
+        // bulletList has at least one listItem child.
+        let items = list["content"].as_array().expect("bulletList content");
+        assert!(
+            !items.is_empty(),
+            "bulletList must have list items: {list:#?}"
+        );
     }
 
     #[test]

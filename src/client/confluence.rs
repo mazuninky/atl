@@ -1170,27 +1170,50 @@ impl ConfluenceClient {
     // Confluence REST API v2 — Footer Comments
     // =========================================================================
 
-    pub async fn list_footer_comments_v2(&self, page_id: &str, limit: u32) -> Result<Value, Error> {
+    /// List footer comments on a page.
+    ///
+    /// `body_format` is forwarded to the v2 `body-format` query parameter
+    /// — `"storage"` (XHTML), `"view"` (rendered HTML), or
+    /// `"atlas_doc_format"` (ADF). The wire shape of the response mirrors
+    /// what page endpoints return.
+    pub async fn list_footer_comments_v2(
+        &self,
+        page_id: &str,
+        limit: u32,
+        body_format: &str,
+    ) -> Result<Value, Error> {
+        let limit_str = limit.to_string();
         self.get_v2(
             &format!("/pages/{page_id}/footer-comments"),
-            &[("limit", &limit.to_string())],
+            &[("limit", &limit_str), ("body-format", body_format)],
         )
         .await
     }
 
-    pub async fn get_footer_comment_v2(&self, comment_id: &str) -> Result<Value, Error> {
-        self.get_v2(&format!("/footer-comments/{comment_id}"), &[])
-            .await
+    pub async fn get_footer_comment_v2(
+        &self,
+        comment_id: &str,
+        body_format: &str,
+    ) -> Result<Value, Error> {
+        self.get_v2(
+            &format!("/footer-comments/{comment_id}"),
+            &[("body-format", body_format)],
+        )
+        .await
     }
 
+    /// Create a footer comment on a page.
+    ///
+    /// Accepts either storage XHTML or ADF (via [`BodyContent`]). The
+    /// payload is shaped the same way pages are — see [`body_payload`].
     pub async fn create_footer_comment_v2(
         &self,
         page_id: &str,
-        body: &str,
+        body: &BodyContent,
     ) -> Result<Value, Error> {
         let payload = serde_json::json!({
             "pageId": page_id,
-            "body": { "storage": { "value": body, "representation": "storage" } }
+            "body": body_payload(body),
         });
         self.post_v2("/footer-comments", &payload).await
     }
@@ -1198,12 +1221,12 @@ impl ConfluenceClient {
     pub async fn update_footer_comment_v2(
         &self,
         comment_id: &str,
-        body: &str,
+        body: &BodyContent,
         version: u32,
     ) -> Result<Value, Error> {
         let payload = serde_json::json!({
             "version": { "number": version },
-            "body": { "storage": { "value": body, "representation": "storage" } }
+            "body": body_payload(body),
         });
         self.put_v2(&format!("/footer-comments/{comment_id}"), &payload)
             .await
@@ -1285,9 +1308,11 @@ impl ConfluenceClient {
         page_id: &str,
         limit: u32,
         resolution_status: Option<&str>,
+        body_format: &str,
     ) -> Result<Value, Error> {
         let limit_str = limit.to_string();
-        let mut query: Vec<(&str, &str)> = vec![("limit", &limit_str)];
+        let mut query: Vec<(&str, &str)> =
+            vec![("limit", &limit_str), ("body-format", body_format)];
         if let Some(rs) = resolution_status {
             query.push(("resolution-status", rs));
         }
@@ -1295,21 +1320,28 @@ impl ConfluenceClient {
             .await
     }
 
-    pub async fn get_inline_comment_v2(&self, comment_id: &str) -> Result<Value, Error> {
-        self.get_v2(&format!("/inline-comments/{comment_id}"), &[])
-            .await
+    pub async fn get_inline_comment_v2(
+        &self,
+        comment_id: &str,
+        body_format: &str,
+    ) -> Result<Value, Error> {
+        self.get_v2(
+            &format!("/inline-comments/{comment_id}"),
+            &[("body-format", body_format)],
+        )
+        .await
     }
 
     pub async fn create_inline_comment_v2(
         &self,
         page_id: &str,
-        body: &str,
+        body: &BodyContent,
         inline_marker_ref: &str,
         text_selection: Option<&str>,
     ) -> Result<Value, Error> {
         let mut payload = serde_json::json!({
             "pageId": page_id,
-            "body": { "storage": { "value": body, "representation": "storage" } },
+            "body": body_payload(body),
             "inlineCommentProperties": { "inlineMarkerRef": inline_marker_ref }
         });
         if let Some(sel) = text_selection {
@@ -1321,13 +1353,13 @@ impl ConfluenceClient {
     pub async fn update_inline_comment_v2(
         &self,
         comment_id: &str,
-        body: &str,
+        body: &BodyContent,
         version: u32,
         resolved: Option<bool>,
     ) -> Result<Value, Error> {
         let mut payload = serde_json::json!({
             "version": { "number": version },
-            "body": { "storage": { "value": body, "representation": "storage" } }
+            "body": body_payload(body),
         });
         if let Some(r) = resolved {
             payload["resolved"] = serde_json::json!(r);

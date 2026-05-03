@@ -101,7 +101,15 @@ impl Default for ConvertOpts {
 /// assert!(md.contains("Hi"));
 /// ```
 pub fn storage_to_markdown(xhtml: &str, opts: ConvertOpts) -> Result<String, StorageToMdError> {
-    let nodes = parse(xhtml)?;
+    // Confluence Cloud serializes content with HTML named entities like
+    // `&mdash;`, `&nbsp;`, `&hellip;`, etc. quick-xml only knows the five
+    // XML predefined entities (`&lt;` `&gt;` `&amp;` `&quot;` `&apos;`) and
+    // rejects everything else as `unrecognized entity`. We pre-pass the
+    // input and rewrite known HTML named entities to their literal Unicode
+    // characters before parsing. CDATA sections are preserved verbatim
+    // because entities inside them are literal text, not entities.
+    let preprocessed = replace_html_entities(xhtml);
+    let nodes = parse(&preprocessed)?;
     let mut ctx = Context {
         opts,
         list_depth: 0,
@@ -109,6 +117,315 @@ pub fn storage_to_markdown(xhtml: &str, opts: ConvertOpts) -> Result<String, Sto
     let mut out = String::new();
     emit_nodes(&nodes, &mut out, &mut ctx);
     Ok(normalize_blank_lines(&out))
+}
+
+/// Table of HTML named entities Confluence is known to emit, mapped to their
+/// literal Unicode characters. The five XML-predefined entities (`amp`, `lt`,
+/// `gt`, `quot`, `apos`) are intentionally **omitted** — quick-xml decodes
+/// those itself and we must not double-decode `&amp;`.
+///
+/// Numeric entities (`&#65;` and `&#x41;`) are also handled by quick-xml and
+/// are skipped in the pre-pass.
+///
+/// This list covers the common HTML5 named character references that
+/// Confluence Cloud serializes (em/en dashes, smart quotes, accented Latin
+/// letters, common symbols). It is not exhaustive — if a user hits a missing
+/// entity the parser will surface the original `unrecognized entity` error
+/// and a new entry can be added here.
+static HTML_ENTITIES: &[(&str, &str)] = &[
+    // Whitespace and punctuation
+    ("nbsp", "\u{00A0}"),
+    ("ensp", "\u{2002}"),
+    ("emsp", "\u{2003}"),
+    ("thinsp", "\u{2009}"),
+    ("zwnj", "\u{200C}"),
+    ("zwj", "\u{200D}"),
+    ("shy", "\u{00AD}"),
+    // Dashes and ellipsis
+    ("mdash", "\u{2014}"),
+    ("ndash", "\u{2013}"),
+    ("hellip", "\u{2026}"),
+    ("bull", "\u{2022}"),
+    ("middot", "\u{00B7}"),
+    // Quotes
+    ("lsquo", "\u{2018}"),
+    ("rsquo", "\u{2019}"),
+    ("ldquo", "\u{201C}"),
+    ("rdquo", "\u{201D}"),
+    ("sbquo", "\u{201A}"),
+    ("bdquo", "\u{201E}"),
+    ("laquo", "\u{00AB}"),
+    ("raquo", "\u{00BB}"),
+    ("lsaquo", "\u{2039}"),
+    ("rsaquo", "\u{203A}"),
+    ("prime", "\u{2032}"),
+    ("Prime", "\u{2033}"),
+    // Symbols
+    ("copy", "\u{00A9}"),
+    ("reg", "\u{00AE}"),
+    ("trade", "\u{2122}"),
+    ("times", "\u{00D7}"),
+    ("divide", "\u{00F7}"),
+    ("dagger", "\u{2020}"),
+    ("Dagger", "\u{2021}"),
+    ("permil", "\u{2030}"),
+    ("oline", "\u{203E}"),
+    ("sect", "\u{00A7}"),
+    ("para", "\u{00B6}"),
+    ("deg", "\u{00B0}"),
+    ("plusmn", "\u{00B1}"),
+    ("micro", "\u{00B5}"),
+    ("not", "\u{00AC}"),
+    ("iquest", "\u{00BF}"),
+    ("iexcl", "\u{00A1}"),
+    ("cent", "\u{00A2}"),
+    ("pound", "\u{00A3}"),
+    ("yen", "\u{00A5}"),
+    ("euro", "\u{20AC}"),
+    ("curren", "\u{00A4}"),
+    ("brvbar", "\u{00A6}"),
+    ("uml", "\u{00A8}"),
+    ("ordf", "\u{00AA}"),
+    ("ordm", "\u{00BA}"),
+    ("acute", "\u{00B4}"),
+    ("cedil", "\u{00B8}"),
+    ("macr", "\u{00AF}"),
+    // Superscripts and fractions
+    ("sup1", "\u{00B9}"),
+    ("sup2", "\u{00B2}"),
+    ("sup3", "\u{00B3}"),
+    ("frac12", "\u{00BD}"),
+    ("frac14", "\u{00BC}"),
+    ("frac34", "\u{00BE}"),
+    // Math
+    ("infin", "\u{221E}"),
+    ("ne", "\u{2260}"),
+    ("le", "\u{2264}"),
+    ("ge", "\u{2265}"),
+    ("plus", "\u{002B}"),
+    ("minus", "\u{2212}"),
+    ("sum", "\u{2211}"),
+    ("prod", "\u{220F}"),
+    ("radic", "\u{221A}"),
+    ("part", "\u{2202}"),
+    ("int", "\u{222B}"),
+    // Arrows
+    ("larr", "\u{2190}"),
+    ("rarr", "\u{2192}"),
+    ("uarr", "\u{2191}"),
+    ("darr", "\u{2193}"),
+    ("harr", "\u{2194}"),
+    ("lArr", "\u{21D0}"),
+    ("rArr", "\u{21D2}"),
+    ("uArr", "\u{21D1}"),
+    ("dArr", "\u{21D3}"),
+    ("hArr", "\u{21D4}"),
+    // Latin lowercase accented
+    ("agrave", "\u{00E0}"),
+    ("aacute", "\u{00E1}"),
+    ("acirc", "\u{00E2}"),
+    ("atilde", "\u{00E3}"),
+    ("auml", "\u{00E4}"),
+    ("aring", "\u{00E5}"),
+    ("aelig", "\u{00E6}"),
+    ("ccedil", "\u{00E7}"),
+    ("egrave", "\u{00E8}"),
+    ("eacute", "\u{00E9}"),
+    ("ecirc", "\u{00EA}"),
+    ("euml", "\u{00EB}"),
+    ("igrave", "\u{00EC}"),
+    ("iacute", "\u{00ED}"),
+    ("icirc", "\u{00EE}"),
+    ("iuml", "\u{00EF}"),
+    ("ntilde", "\u{00F1}"),
+    ("ograve", "\u{00F2}"),
+    ("oacute", "\u{00F3}"),
+    ("ocirc", "\u{00F4}"),
+    ("otilde", "\u{00F5}"),
+    ("ouml", "\u{00F6}"),
+    ("oslash", "\u{00F8}"),
+    ("ugrave", "\u{00F9}"),
+    ("uacute", "\u{00FA}"),
+    ("ucirc", "\u{00FB}"),
+    ("uuml", "\u{00FC}"),
+    ("yacute", "\u{00FD}"),
+    ("yuml", "\u{00FF}"),
+    ("szlig", "\u{00DF}"),
+    ("eth", "\u{00F0}"),
+    ("thorn", "\u{00FE}"),
+    // Latin uppercase accented
+    ("Agrave", "\u{00C0}"),
+    ("Aacute", "\u{00C1}"),
+    ("Acirc", "\u{00C2}"),
+    ("Atilde", "\u{00C3}"),
+    ("Auml", "\u{00C4}"),
+    ("Aring", "\u{00C5}"),
+    ("AElig", "\u{00C6}"),
+    ("Ccedil", "\u{00C7}"),
+    ("Egrave", "\u{00C8}"),
+    ("Eacute", "\u{00C9}"),
+    ("Ecirc", "\u{00CA}"),
+    ("Euml", "\u{00CB}"),
+    ("Igrave", "\u{00CC}"),
+    ("Iacute", "\u{00CD}"),
+    ("Icirc", "\u{00CE}"),
+    ("Iuml", "\u{00CF}"),
+    ("Ntilde", "\u{00D1}"),
+    ("Ograve", "\u{00D2}"),
+    ("Oacute", "\u{00D3}"),
+    ("Ocirc", "\u{00D4}"),
+    ("Otilde", "\u{00D5}"),
+    ("Ouml", "\u{00D6}"),
+    ("Oslash", "\u{00D8}"),
+    ("Ugrave", "\u{00D9}"),
+    ("Uacute", "\u{00DA}"),
+    ("Ucirc", "\u{00DB}"),
+    ("Uuml", "\u{00DC}"),
+    ("Yacute", "\u{00DD}"),
+    ("ETH", "\u{00D0}"),
+    ("THORN", "\u{00DE}"),
+    // Greek (common)
+    ("alpha", "\u{03B1}"),
+    ("beta", "\u{03B2}"),
+    ("gamma", "\u{03B3}"),
+    ("delta", "\u{03B4}"),
+    ("epsilon", "\u{03B5}"),
+    ("pi", "\u{03C0}"),
+    ("sigma", "\u{03C3}"),
+    ("Alpha", "\u{0391}"),
+    ("Beta", "\u{0392}"),
+    ("Gamma", "\u{0393}"),
+    ("Delta", "\u{0394}"),
+    ("Pi", "\u{03A0}"),
+    ("Sigma", "\u{03A3}"),
+    ("Omega", "\u{03A9}"),
+];
+
+/// Replace HTML named entities (e.g. `&mdash;`, `&nbsp;`) with their literal
+/// Unicode characters so that [`quick_xml::Reader`] — which only knows the
+/// five XML predefined entities — does not error on `unrecognized entity`.
+///
+/// CDATA sections (`<![CDATA[ … ]]>`) are passed through unchanged because
+/// the bytes inside them are literal text, not entities.
+///
+/// XML predefined entities (`&amp;`, `&lt;`, `&gt;`, `&quot;`, `&apos;`) are
+/// left alone for quick-xml to decode — replacing `&amp;` here would let a
+/// subsequent `&mdash;` from the same input be wrongly decoded twice.
+///
+/// Numeric entities (`&#65;`, `&#x41;`) are also passed through; quick-xml
+/// handles those natively.
+///
+/// Unknown named entities (anything not in [`HTML_ENTITIES`]) are passed
+/// through unchanged so that legitimate `&someUnknownThing;` text is not
+/// corrupted, and so that a future Confluence-emitted entity not yet in the
+/// table still surfaces as the original "unrecognized entity" XML error
+/// rather than silently disappearing.
+fn replace_html_entities(input: &str) -> String {
+    let bytes = input.as_bytes();
+    let mut out = String::with_capacity(input.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        // Detect CDATA start — copy verbatim through `]]>`.
+        if bytes[i..].starts_with(b"<![CDATA[") {
+            // Find the closing `]]>`. If absent (malformed input), copy the
+            // rest of the buffer and let quick-xml report the parse error.
+            let start = i;
+            let mut end = start + b"<![CDATA[".len();
+            let mut closed = false;
+            while end + 2 < bytes.len() {
+                if &bytes[end..end + 3] == b"]]>" {
+                    end += 3;
+                    closed = true;
+                    break;
+                }
+                end += 1;
+            }
+            if !closed {
+                end = bytes.len();
+            }
+            // Safe: CDATA content is bytes from the original UTF-8 input,
+            // sliced on byte boundaries that don't split codepoints (the
+            // CDATA delimiters are pure ASCII).
+            out.push_str(std::str::from_utf8(&bytes[start..end]).unwrap_or(""));
+            i = end;
+            continue;
+        }
+
+        if bytes[i] != b'&' {
+            // Push the (possibly multi-byte) char.
+            let ch_len = utf8_char_len(bytes[i]);
+            let end = (i + ch_len).min(bytes.len());
+            if let Ok(s) = std::str::from_utf8(&bytes[i..end]) {
+                out.push_str(s);
+            }
+            i = end;
+            continue;
+        }
+
+        // We're at `&`. Look ahead for a `;` within a reasonable bound to
+        // identify the entity name. HTML5 entity names top out around 30
+        // characters; cap the search to avoid pathological scans.
+        let mut j = i + 1;
+        let max = (i + 1 + 32).min(bytes.len());
+        while j < max && bytes[j] != b';' {
+            j += 1;
+        }
+        if j >= max || bytes[j] != b';' {
+            // No terminator — emit the `&` and continue.
+            out.push('&');
+            i += 1;
+            continue;
+        }
+
+        let name = &bytes[i + 1..j];
+
+        // Skip XML-predefined entities — quick-xml handles these. Crucially,
+        // we must NOT decode `&amp;` here, otherwise a subsequent `&mdash;`
+        // in the same input could be decoded twice (`&amp;mdash;` should
+        // round-trip as the literal text `&mdash;`, not as an em-dash).
+        if matches!(name, b"amp" | b"lt" | b"gt" | b"quot" | b"apos") {
+            out.push('&');
+            // Safe: ASCII bytes only.
+            out.push_str(std::str::from_utf8(name).unwrap_or(""));
+            out.push(';');
+            i = j + 1;
+            continue;
+        }
+
+        // Skip numeric entities — quick-xml handles `&#NN;` and `&#xNN;`.
+        if name.first() == Some(&b'#') {
+            out.push('&');
+            out.push_str(std::str::from_utf8(name).unwrap_or(""));
+            out.push(';');
+            i = j + 1;
+            continue;
+        }
+
+        // Look up the named entity in the table. The table is small (~150
+        // entries) so a linear scan is fine.
+        let mut replaced = false;
+        if let Ok(name_str) = std::str::from_utf8(name) {
+            for (key, value) in HTML_ENTITIES {
+                if *key == name_str {
+                    out.push_str(value);
+                    replaced = true;
+                    break;
+                }
+            }
+        }
+        if replaced {
+            i = j + 1;
+        } else {
+            // Unknown entity — pass through so we don't corrupt legitimate
+            // `&unknownThing;` text. quick-xml will surface this as
+            // `unrecognized entity` if it really is meant to be an entity.
+            out.push('&');
+            out.push_str(std::str::from_utf8(name).unwrap_or(""));
+            out.push(';');
+            i = j + 1;
+        }
+    }
+    out
 }
 
 // =====================================================================
@@ -1833,5 +2150,131 @@ mod tests {
             !out.contains(":status["),
             "directive form leaked into strip mode: {out:?}"
         );
+    }
+
+    // ---- HTML named-entity pre-pass ---------------------------------------
+
+    #[test]
+    fn replace_html_entities_handles_mdash() {
+        // Confluence Cloud serializes `—` as `&mdash;`. quick-xml only
+        // knows the five XML predefined entities, so without the pre-pass
+        // we'd error out on `unrecognized entity mdash`.
+        assert_eq!(replace_html_entities("a &mdash; b"), "a \u{2014} b");
+    }
+
+    #[test]
+    fn replace_html_entities_handles_nbsp() {
+        assert_eq!(replace_html_entities("a&nbsp;b"), "a\u{00A0}b");
+    }
+
+    #[test]
+    fn replace_html_entities_handles_hellip() {
+        assert_eq!(replace_html_entities("wait&hellip;"), "wait\u{2026}");
+    }
+
+    #[test]
+    fn replace_html_entities_passes_through_unknown() {
+        // An unknown named entity must be preserved verbatim. We don't drop
+        // it (which would corrupt legitimate text) and we don't error
+        // ourselves — quick-xml will surface "unrecognized entity" if it
+        // really is meant as XML.
+        assert_eq!(replace_html_entities("&unknownEntity;"), "&unknownEntity;");
+    }
+
+    #[test]
+    fn replace_html_entities_does_not_double_decode_amp() {
+        // `&amp;mdash;` must stay literal `&mdash;` text — that is, the
+        // `&amp;` is preserved as-is so quick-xml can later decode it to
+        // `&`. If we expanded `&amp;` first and then expanded the resulting
+        // `&mdash;` to an em-dash, the round-trip would be wrong.
+        assert_eq!(replace_html_entities("&amp;mdash;"), "&amp;mdash;");
+    }
+
+    #[test]
+    fn replace_html_entities_skips_numeric_entities() {
+        // quick-xml handles `&#NN;` and `&#xNN;` natively; we leave them
+        // alone in the pre-pass.
+        assert_eq!(replace_html_entities("&#65; &#x41;"), "&#65; &#x41;");
+    }
+
+    #[test]
+    fn replace_html_entities_preserves_xml_predefined() {
+        // The five XML predefined entities are passed through verbatim so
+        // quick-xml decodes them once and only once.
+        assert_eq!(
+            replace_html_entities("&amp; &lt; &gt; &quot; &apos;"),
+            "&amp; &lt; &gt; &quot; &apos;",
+        );
+    }
+
+    #[test]
+    fn replace_html_entities_skips_inside_cdata() {
+        // Entities inside CDATA are literal text, not entities. Replacing
+        // `&mdash;` inside a CDATA block would corrupt user data.
+        let input = "<p><![CDATA[raw &mdash; literal]]></p>";
+        assert_eq!(replace_html_entities(input), input);
+    }
+
+    #[test]
+    fn replace_html_entities_handles_entity_outside_cdata_after_cdata() {
+        // After a CDATA section closes, regular entity replacement resumes.
+        let input = "<p><![CDATA[raw &mdash; literal]]> then &mdash; here</p>";
+        let expected = "<p><![CDATA[raw &mdash; literal]]> then \u{2014} here</p>";
+        assert_eq!(replace_html_entities(input), expected);
+    }
+
+    #[test]
+    fn replace_html_entities_handles_lone_ampersand() {
+        // A bare `&` that doesn't form an entity is left as-is; quick-xml
+        // will still error if it really isn't escapable, but we must not
+        // turn it into garbage here.
+        assert_eq!(replace_html_entities("foo & bar"), "foo & bar");
+    }
+
+    #[test]
+    fn replace_html_entities_empty_input() {
+        assert_eq!(replace_html_entities(""), "");
+    }
+
+    #[test]
+    fn storage_to_markdown_em_dash_round_trip() {
+        // Regression test: a Confluence storage page containing `&mdash;`
+        // used to error with `unrecognized entity 'mdash'`. It must now
+        // convert successfully and contain the literal em-dash.
+        let out = convert("<p>hello &mdash; world</p>");
+        assert!(out.contains("hello \u{2014} world"), "got: {out:?}");
+    }
+
+    #[test]
+    fn storage_to_markdown_non_breaking_space() {
+        let out = convert("<p>a&nbsp;b</p>");
+        assert!(out.contains("a\u{00A0}b"), "got: {out:?}");
+    }
+
+    #[test]
+    fn storage_to_markdown_smart_quotes() {
+        let out = convert("<p>&ldquo;hi&rdquo; she said</p>");
+        assert!(out.contains("\u{201C}hi\u{201D}"), "got: {out:?}");
+    }
+
+    #[test]
+    fn storage_to_markdown_accented_latin_in_attribute() {
+        // Named entities in attribute values are also covered by the
+        // pre-pass.
+        let out = convert(r#"<p><a href="http://x?q=caf&eacute;">link</a></p>"#);
+        assert!(out.contains("caf\u{00E9}"), "got: {out:?}");
+    }
+
+    #[test]
+    fn storage_to_markdown_unknown_entity_still_errors() {
+        // If a Confluence-emitted entity is not in our table, the original
+        // `unrecognized entity` XML error must still surface (rather than
+        // silently disappearing) so we can add it.
+        let result =
+            storage_to_markdown("<p>&someBogusUnknownThingyXyz;</p>", ConvertOpts::default());
+        match result {
+            Err(StorageToMdError::Xml(_)) => {}
+            other => panic!("expected XML error for unknown entity, got: {other:?}"),
+        }
     }
 }

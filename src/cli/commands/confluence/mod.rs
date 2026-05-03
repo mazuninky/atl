@@ -21,7 +21,7 @@ use crate::output::{OutputFormat, Transforms, write_output};
 
 use super::confluence_url::build_confluence_url;
 use super::read_body_arg;
-use page::{convert_input, copy_tree, export_page, render_tree};
+use page::{ExtractOpts, convert_input, copy_tree, export_page, extract_body, render_tree};
 
 pub async fn run(
     cmd: &ConfluenceSubcommand,
@@ -169,6 +169,12 @@ fn flatten_confluence_search(value: Value) -> Value {
 /// key-value object that the console reporter renders as a readable list
 /// instead of a giant JSON blob.
 ///
+/// `body` is the pre-rendered body string in the user's requested
+/// `--body-format`. The caller is responsible for running the page
+/// through `extract_body` so that the markdown / ADF conversion happens
+/// before the value reaches the console reporter — this helper does not
+/// re-extract from the raw `body.<repr>.value` field.
+///
 /// The emitted `url` field is anchored to the locally configured
 /// `instance.domain` — never to the host of `_links.base`. The path
 /// component of `_links.base` is used as a context prefix only after its
@@ -178,7 +184,7 @@ fn flatten_confluence_search(value: Value) -> Value {
 /// MITM-proxied Confluence instance would otherwise be able to inject
 /// an attacker-controlled origin into output that downstream tools or
 /// copy-paste would treat as trusted.
-fn flatten_confluence_page(value: Value, instance: &AtlassianInstance) -> Value {
+fn flatten_confluence_page(value: Value, instance: &AtlassianInstance, body: &str) -> Value {
     let id = value.get("id").and_then(Value::as_str).unwrap_or_default();
     let title = value
         .get("title")
@@ -237,15 +243,6 @@ fn flatten_confluence_page(value: Value, instance: &AtlassianInstance) -> Value 
         }
     };
 
-    // Extract body content from whatever representation is available
-    let body = value
-        .get("body")
-        .and_then(Value::as_object)
-        .and_then(|obj| obj.values().next())
-        .and_then(|repr| repr.get("value"))
-        .and_then(Value::as_str)
-        .unwrap_or_default();
-
     let mut map = serde_json::Map::new();
     map.insert("id".into(), Value::String(id.into()));
     map.insert("title".into(), Value::String(title.into()));
@@ -263,6 +260,37 @@ fn flatten_confluence_page(value: Value, instance: &AtlassianInstance) -> Value 
     Value::Object(map)
 }
 
+/// Replace the page's `body` object with a single-key wrapper carrying
+/// the pre-rendered body string under the user's requested format.
+///
+/// The wrapper mirrors the shape of the API's existing `body.storage`
+/// / `body.atlas_doc_format` payload (`{"representation": "<key>",
+/// "value": "<rendered>"}`) so downstream consumers see a predictable
+/// structure regardless of `--body-format`. Crucially it removes the
+/// other representations from the response — when the user asks for
+/// `markdown`, the raw storage XHTML must not leak through alongside
+/// the converted markdown.
+///
+/// For `Storage` / `View` / `Adf`, `rendered` is the same string the
+/// API already returned in `body.<key>.value`, so the rewrite is
+/// effectively a normalisation step.
+fn rewrite_body_field(mut value: Value, body_format: BodyFormat, rendered: String) -> Value {
+    let key = match body_format {
+        BodyFormat::Markdown => "markdown",
+        BodyFormat::Storage => "storage",
+        BodyFormat::View => "view",
+        BodyFormat::Adf => "atlas_doc_format",
+    };
+    if let Some(obj) = value.as_object_mut() {
+        let body = serde_json::json!({
+            "representation": key,
+            "value": rendered,
+        });
+        obj.insert("body".into(), serde_json::json!({ key: body }));
+    }
+    value
+}
+
 async fn dispatch(
     cmd: &ConfluenceSubcommand,
     client: &ConfluenceClient,
@@ -277,10 +305,21 @@ async fn dispatch(
             let value = client
                 .get_page(&args.page_id, args.body_format.wire_format(), &expand)
                 .await?;
+            // Convert the raw API body into the user's requested format
+            // *before* flattening or shaping the response. Without this,
+            // `--body-format markdown` (the default) returned raw storage
+            // XHTML because the conversion was wired only into `export`.
+            let rendered = extract_body(
+                &value,
+                args.body_format,
+                ExtractOpts {
+                    render_directives: !args.no_directives,
+                },
+            )?;
             if matches!(format, OutputFormat::Console) && expand.is_empty() {
-                flatten_confluence_page(value, instance)
+                flatten_confluence_page(value, instance, &rendered)
             } else {
-                value
+                rewrite_body_field(value, args.body_format, rendered)
             }
         }
         ConfluenceSubcommand::Info(args) => client.get_page_info(&args.page_id).await?,
@@ -713,7 +752,11 @@ mod tests {
             "lastOwnerId": null,
             "position": 195
         });
-        let result = flatten_confluence_page(input, &test_instance("example.atlassian.net"));
+        let result = flatten_confluence_page(
+            input,
+            &test_instance("example.atlassian.net"),
+            "<p>Hello world</p>",
+        );
         let obj = result.as_object().expect("should be an object");
 
         assert_eq!(obj.get("id").and_then(Value::as_str), Some("98420"));
@@ -763,7 +806,7 @@ mod tests {
             "status": "current",
             "_links": { "webui": "/spaces/X/overview" }
         });
-        let result = flatten_confluence_page(input, &test_instance("example.atlassian.net"));
+        let result = flatten_confluence_page(input, &test_instance("example.atlassian.net"), "");
         assert_eq!(
             result.get("url").and_then(Value::as_str),
             Some("https://example.atlassian.net/spaces/X/overview"),
@@ -778,7 +821,7 @@ mod tests {
             "title": "T",
             "status": "current"
         });
-        let result = flatten_confluence_page(input, &test_instance("example.atlassian.net"));
+        let result = flatten_confluence_page(input, &test_instance("example.atlassian.net"), "");
         assert!(
             result.get("body").is_none(),
             "body key should be absent when no body content exists"
@@ -792,7 +835,7 @@ mod tests {
             "title": "T",
             "status": "current"
         });
-        let result = flatten_confluence_page(input, &test_instance("example.atlassian.net"));
+        let result = flatten_confluence_page(input, &test_instance("example.atlassian.net"), "");
         assert!(
             result.get("url").is_none(),
             "url key should be absent when _links is missing"
@@ -811,7 +854,8 @@ mod tests {
             "_links": { "webui": "/x", "base": "https://example.com" },
             "body": { "storage": { "value": "content" } }
         });
-        let result = flatten_confluence_page(input, &test_instance("example.atlassian.net"));
+        let result =
+            flatten_confluence_page(input, &test_instance("example.atlassian.net"), "content");
         let obj = result.as_object().unwrap();
         let keys: Vec<&String> = obj.keys().collect();
         assert_eq!(
@@ -839,7 +883,7 @@ mod tests {
                 "base": "https://attacker.example/wiki"
             }
         });
-        let result = flatten_confluence_page(input, &test_instance("example.atlassian.net"));
+        let result = flatten_confluence_page(input, &test_instance("example.atlassian.net"), "");
         assert_eq!(
             result.get("url").and_then(Value::as_str),
             Some("https://example.atlassian.net/x"),
@@ -863,7 +907,7 @@ mod tests {
                 "base": "https://example.atlassian.net/wiki"
             }
         });
-        let result = flatten_confluence_page(input, &test_instance("example.atlassian.net"));
+        let result = flatten_confluence_page(input, &test_instance("example.atlassian.net"), "");
         assert_eq!(
             result.get("url").and_then(Value::as_str),
             Some("https://example.atlassian.net/wiki/spaces/X/pages/123"),
@@ -883,7 +927,7 @@ mod tests {
             "status": "current",
             "_links": { "webui": "//attacker.example/x" }
         });
-        let result = flatten_confluence_page(input, &test_instance("example.atlassian.net"));
+        let result = flatten_confluence_page(input, &test_instance("example.atlassian.net"), "");
         assert!(
             result.get("url").is_none(),
             "url must be dropped when webui fails validation"
@@ -1131,22 +1175,28 @@ mod tests {
     // ---- flatten_confluence_page additional cases ----
 
     #[test]
-    fn flatten_page_extracts_view_body_when_storage_absent() {
-        // The body extractor reaches for the first representation under `body`.
-        // Confirming it tolerates `view` (not just `storage`) protects the
-        // `--body-format view` code path.
+    fn flatten_page_uses_provided_body_verbatim() {
+        // The helper must surface the body string passed by the caller —
+        // never re-extract from the raw `body.<repr>.value` field. If the
+        // caller already converted storage XHTML to markdown, the helper
+        // must trust that string and not re-render the original storage.
         let input = json!({
             "id": "1",
             "title": "T",
             "status": "current",
             "body": {
-                "view": {"value": "<h1>rendered</h1>", "representation": "view"}
+                "storage": {"value": "<p>raw storage</p>", "representation": "storage"}
             }
         });
-        let result = flatten_confluence_page(input, &test_instance("example.atlassian.net"));
+        let result = flatten_confluence_page(
+            input,
+            &test_instance("example.atlassian.net"),
+            "converted markdown",
+        );
         assert_eq!(
             result.get("body").and_then(Value::as_str),
-            Some("<h1>rendered</h1>")
+            Some("converted markdown"),
+            "body field must come from the parameter, not the raw API value"
         );
     }
 
@@ -1155,8 +1205,216 @@ mod tests {
         // The console reporter renders `version: ""` rather than dropping
         // the field — confirms `unwrap_or_default` on the version path.
         let input = json!({"id": "1", "title": "T", "status": "current"});
-        let result = flatten_confluence_page(input, &test_instance("example.atlassian.net"));
+        let result = flatten_confluence_page(input, &test_instance("example.atlassian.net"), "");
         assert_eq!(result.get("version").and_then(Value::as_str), Some(""));
+    }
+
+    // ---- rewrite_body_field ----
+
+    #[test]
+    fn rewrite_body_field_markdown_replaces_raw_storage() {
+        // The user asked for `--body-format markdown`. The non-Console
+        // dispatcher must replace the API's raw `body.storage` payload with
+        // a markdown-shaped wrapper carrying the converted text — the raw
+        // storage XHTML must NOT leak through alongside the markdown.
+        let api_value = json!({
+            "id": "1",
+            "title": "T",
+            "body": {
+                "storage": {"value": "<h1>Hi</h1>", "representation": "storage"}
+            }
+        });
+        let result = rewrite_body_field(api_value, BodyFormat::Markdown, "# Hi".into());
+        let body = result.get("body").expect("body must exist");
+        assert!(
+            body.get("storage").is_none(),
+            "raw storage representation must be replaced, got: {body:?}"
+        );
+        let md = body.get("markdown").expect("markdown wrapper must exist");
+        assert_eq!(md.get("value").and_then(Value::as_str), Some("# Hi"));
+        assert_eq!(
+            md.get("representation").and_then(Value::as_str),
+            Some("markdown")
+        );
+    }
+
+    #[test]
+    fn rewrite_body_field_storage_normalises_shape() {
+        // Even when the user keeps `--body-format storage`, the helper
+        // normalises the shape to a single-key `body.storage` wrapper so
+        // downstream consumers always see a predictable structure.
+        let api_value = json!({
+            "id": "1",
+            "body": {
+                "storage": {"value": "<p>x</p>", "representation": "storage"}
+            }
+        });
+        let result = rewrite_body_field(api_value, BodyFormat::Storage, "<p>x</p>".into());
+        let storage = result
+            .pointer("/body/storage")
+            .expect("storage wrapper must exist");
+        assert_eq!(
+            storage.get("value").and_then(Value::as_str),
+            Some("<p>x</p>")
+        );
+        assert_eq!(
+            storage.get("representation").and_then(Value::as_str),
+            Some("storage")
+        );
+    }
+
+    #[test]
+    fn rewrite_body_field_adf_uses_atlas_doc_format_key() {
+        // ADF must be wrapped under `atlas_doc_format` to match the API's
+        // own naming, so existing JSON consumers don't have to special-case
+        // a new key for `--body-format adf`.
+        let api_value = json!({"id": "1"});
+        let result = rewrite_body_field(api_value, BodyFormat::Adf, "{}".into());
+        assert!(
+            result.pointer("/body/atlas_doc_format").is_some(),
+            "ADF wrapper must use atlas_doc_format key, got: {result:?}"
+        );
+    }
+
+    // ---- Read-pipeline behaviour (extract_body + rewrite/flatten) ----
+    //
+    // The `Read` arm of `dispatch` runs the API page value through
+    // `extract_body` and then passes the result to either
+    // `flatten_confluence_page` (Console) or `rewrite_body_field` (other
+    // formats). These tests pin down the end-to-end shape for each
+    // `--body-format` choice without spinning up the HTTP layer.
+
+    fn fake_storage_page(storage: &str) -> Value {
+        json!({
+            "id": "1",
+            "title": "T",
+            "status": "current",
+            "body": {"storage": {"value": storage, "representation": "storage"}},
+        })
+    }
+
+    #[test]
+    fn read_default_markdown_returns_markdown_in_body_field() {
+        // The default `--body-format markdown` path must run storage XHTML
+        // through the converter. Before the fix, the raw `<p>hi</p>` was
+        // echoed back as-is on the read path.
+        let page = fake_storage_page("<p>hi</p>");
+        let rendered = extract_body(&page, BodyFormat::Markdown, ExtractOpts::default()).unwrap();
+        // Console flattening shape — what the user sees by default.
+        let flat = flatten_confluence_page(
+            page.clone(),
+            &test_instance("example.atlassian.net"),
+            &rendered,
+        );
+        let body = flat
+            .get("body")
+            .and_then(Value::as_str)
+            .expect("body field");
+        assert!(
+            !body.contains("<p>"),
+            "markdown body must not contain raw HTML, got: {body:?}"
+        );
+        assert!(
+            body.contains("hi"),
+            "markdown body must preserve the paragraph text, got: {body:?}"
+        );
+        // JSON shape — what `--format json` consumers see.
+        let json = rewrite_body_field(page, BodyFormat::Markdown, rendered.clone());
+        assert_eq!(
+            json.pointer("/body/markdown/value").and_then(Value::as_str),
+            Some(rendered.as_str())
+        );
+        assert!(
+            json.pointer("/body/storage").is_none(),
+            "raw storage representation must not leak through on markdown read"
+        );
+    }
+
+    #[test]
+    fn read_storage_returns_raw_storage_unchanged() {
+        // `--body-format storage` must not touch the body — the user gets
+        // the raw XHTML byte-for-byte.
+        let xhtml = "<h1>raw</h1>";
+        let page = fake_storage_page(xhtml);
+        let rendered = extract_body(&page, BodyFormat::Storage, ExtractOpts::default()).unwrap();
+        assert_eq!(rendered, xhtml);
+        let json = rewrite_body_field(page, BodyFormat::Storage, rendered);
+        assert_eq!(
+            json.pointer("/body/storage/value").and_then(Value::as_str),
+            Some(xhtml)
+        );
+    }
+
+    #[test]
+    fn read_adf_returns_pretty_adf_json() {
+        // `--body-format adf` must emit pretty-printed canonical ADF JSON,
+        // delivered through both Console (flat body string) and JSON
+        // (`body.atlas_doc_format.value`) paths.
+        let adf_compact = r#"{"type":"doc","version":1,"content":[]}"#;
+        let page = json!({
+            "id": "1",
+            "title": "T",
+            "status": "current",
+            "body": {"atlas_doc_format": {"value": adf_compact, "representation": "atlas_doc_format"}},
+        });
+        let rendered = extract_body(&page, BodyFormat::Adf, ExtractOpts::default()).unwrap();
+        assert!(
+            rendered.contains('\n'),
+            "ADF body must be pretty-printed, got: {rendered:?}"
+        );
+        let parsed: Value =
+            serde_json::from_str(&rendered).expect("pretty ADF must still be valid JSON");
+        assert_eq!(parsed.get("type").and_then(Value::as_str), Some("doc"));
+        let json = rewrite_body_field(page, BodyFormat::Adf, rendered);
+        assert!(
+            json.pointer("/body/atlas_doc_format/value").is_some(),
+            "ADF JSON path must use atlas_doc_format key"
+        );
+    }
+
+    #[test]
+    fn read_no_directives_strips_directive_fence() {
+        // `--body-format markdown --no-directives` must flatten Confluence
+        // info macros into plain text — the `:::info` fence must not appear
+        // in the output.
+        let storage = r#"<ac:structured-macro ac:name="info"><ac:rich-text-body><p>note</p></ac:rich-text-body></ac:structured-macro>"#;
+        let page = fake_storage_page(storage);
+        let rendered = extract_body(
+            &page,
+            BodyFormat::Markdown,
+            ExtractOpts {
+                render_directives: false,
+            },
+        )
+        .unwrap();
+        assert!(
+            !rendered.contains(":::info"),
+            "no_directives must strip the :::info fence, got: {rendered:?}"
+        );
+        assert!(
+            rendered.contains("note"),
+            "macro body text must be preserved, got: {rendered:?}"
+        );
+    }
+
+    #[test]
+    fn rewrite_body_field_preserves_sibling_fields() {
+        // Only the `body` key is replaced — `id`, `title`, `_links`, etc.
+        // must round-trip untouched so JSON consumers still see the page
+        // metadata they expect.
+        let api_value = json!({
+            "id": "1",
+            "title": "T",
+            "_links": {"webui": "/x"},
+            "body": {"storage": {"value": "old"}}
+        });
+        let result = rewrite_body_field(api_value, BodyFormat::Markdown, "new".into());
+        assert_eq!(result.get("id").and_then(Value::as_str), Some("1"));
+        assert_eq!(result.get("title").and_then(Value::as_str), Some("T"));
+        assert!(
+            result.get("_links").is_some(),
+            "_links must round-trip untouched"
+        );
     }
 
     // ---- run() error paths ----

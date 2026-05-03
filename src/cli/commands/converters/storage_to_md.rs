@@ -38,6 +38,7 @@ use quick_xml::events::{BytesStart, Event};
 use quick_xml::reader::Reader;
 use thiserror::Error;
 
+use super::code_fence::pick_code_fence;
 use crate::cli::commands::directives::{DirectiveKind, lookup, render_attrs};
 
 // =====================================================================
@@ -687,15 +688,21 @@ fn emit_element(
         "pre" => {
             // Look for a single <code> child; if present, use its language.
             let (lang, body) = extract_code_block(children);
+            // Pick a fence long enough to safely wrap any backtick run in the
+            // body — CommonMark §4.5 closes the block on the first run of >=
+            // fence-length backticks, so plain ``` would be unsafe when the
+            // body contains triple-or-more backticks.
+            let fence = pick_code_fence(&body);
             ensure_blank_line(out);
-            out.push_str("```");
+            out.push_str(&fence);
             out.push_str(&lang);
             out.push('\n');
             out.push_str(&body);
             if !body.ends_with('\n') {
                 out.push('\n');
             }
-            out.push_str("```\n\n");
+            out.push_str(&fence);
+            out.push_str("\n\n");
         }
         "code" => {
             // Inline code (when not inside <pre>).
@@ -1711,6 +1718,66 @@ mod tests {
         let out = convert("<pre><code>plain code</code></pre>");
         assert!(out.contains("```\n"), "got: {out:?}");
         assert!(out.contains("plain code"), "got: {out:?}");
+    }
+
+    #[test]
+    fn code_block_no_backticks_uses_three_tick_fence() {
+        // Body has zero backticks, so the default 3-backtick fence is safe.
+        let out = convert("<pre><code>hello</code></pre>");
+        assert!(
+            out.contains("```\nhello\n```\n"),
+            "expected default 3-tick fence, got: {out:?}"
+        );
+        assert!(
+            !out.contains("````"),
+            "did not expect a 4-tick fence, got: {out:?}"
+        );
+    }
+
+    #[test]
+    fn code_block_with_double_backticks_still_three_tick_fence() {
+        // Two consecutive backticks fit inside a 3-backtick fence.
+        let out = convert("<pre><code>a `` b</code></pre>");
+        assert!(
+            out.contains("```\na `` b\n```\n"),
+            "expected 3-tick fence, got: {out:?}"
+        );
+        assert!(
+            !out.contains("````"),
+            "did not expect a 4-tick fence, got: {out:?}"
+        );
+    }
+
+    #[test]
+    fn code_block_with_triple_backticks_uses_four_tick_fence() {
+        // A run of 3 backticks would close a 3-tick fence prematurely; we must
+        // emit at least a 4-tick fence.
+        let out = convert("<pre><code>a ``` b</code></pre>");
+        assert!(
+            out.contains("````\na ``` b\n````\n"),
+            "expected 4-tick fence, got: {out:?}"
+        );
+    }
+
+    #[test]
+    fn code_block_with_quadruple_backticks_uses_five_tick_fence() {
+        let out = convert("<pre><code>a ```` b</code></pre>");
+        assert!(
+            out.contains("`````\na ```` b\n`````\n"),
+            "expected 5-tick fence, got: {out:?}"
+        );
+    }
+
+    #[test]
+    fn code_block_with_language_and_long_run() {
+        // Regression for the language case: a `<code class="language-rust">`
+        // body with a quadruple-backtick run must emit a 5-tick fence and keep
+        // the `rust` language tag adjacent to the opening fence.
+        let out = convert(r#"<pre><code class="language-rust">a ```` b</code></pre>"#);
+        assert!(
+            out.contains("`````rust\na ```` b\n`````\n"),
+            "expected 5-tick fence with rust language, got: {out:?}"
+        );
     }
 
     #[test]

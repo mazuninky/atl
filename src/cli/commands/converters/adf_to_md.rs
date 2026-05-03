@@ -43,6 +43,7 @@ use std::fmt::Write as _;
 use serde_json::Value;
 use thiserror::Error;
 
+use super::code_fence::pick_code_fence;
 use crate::cli::commands::directives::render_attrs;
 
 // =====================================================================
@@ -211,15 +212,21 @@ fn render_block(node: &Value, out: &mut String, ctx: &mut Ctx) {
                 .and_then(Value::as_str)
                 .unwrap_or("");
             let body = collect_code_text(content);
+            // Pick a fence long enough to safely wrap any backtick run in the
+            // body — CommonMark §4.5 closes the block on the first run of >=
+            // fence-length backticks, so plain ``` would be unsafe when the
+            // body contains triple-or-more backticks.
+            let fence = pick_code_fence(&body);
             ensure_blank_line(out);
-            out.push_str("```");
+            out.push_str(&fence);
             out.push_str(language);
             out.push('\n');
             out.push_str(&body);
             if !body.ends_with('\n') {
                 out.push('\n');
             }
-            out.push_str("```\n\n");
+            out.push_str(&fence);
+            out.push_str("\n\n");
         }
         "blockquote" => {
             let mut inner = String::new();
@@ -1389,6 +1396,78 @@ mod tests {
         assert!(
             md.contains("line1\n\n\nline2"),
             "blank lines inside fenced code block must be preserved, got:\n{md:?}"
+        );
+    }
+
+    #[test]
+    fn adf_code_block_no_backticks_uses_three_tick_fence() {
+        let adf = doc(json!([
+            {
+                "type": "codeBlock",
+                "content": [{"type": "text", "text": "hello"}]
+            }
+        ]));
+        let md = convert(&adf);
+        assert!(
+            md.contains("```\nhello\n```\n"),
+            "expected default 3-tick fence, got: {md:?}"
+        );
+        assert!(
+            !md.contains("````"),
+            "did not expect a 4-tick fence, got: {md:?}"
+        );
+    }
+
+    #[test]
+    fn adf_code_block_with_double_backticks_still_three_tick_fence() {
+        let adf = doc(json!([
+            {
+                "type": "codeBlock",
+                "content": [{"type": "text", "text": "a `` b"}]
+            }
+        ]));
+        let md = convert(&adf);
+        assert!(
+            md.contains("```\na `` b\n```\n"),
+            "expected 3-tick fence, got: {md:?}"
+        );
+        assert!(
+            !md.contains("````"),
+            "did not expect a 4-tick fence, got: {md:?}"
+        );
+    }
+
+    #[test]
+    fn adf_code_block_with_triple_backticks_uses_four_tick_fence() {
+        // Regression: a triple-backtick run inside the body used to close the
+        // 3-tick fence early. Verify the language tag is still adjacent to a
+        // 4-tick opening fence.
+        let adf = doc(json!([
+            {
+                "type": "codeBlock",
+                "attrs": {"language": "python"},
+                "content": [{"type": "text", "text": "```triple```"}]
+            }
+        ]));
+        let md = convert(&adf);
+        assert!(
+            md.contains("````python\n```triple```\n````\n"),
+            "expected 4-tick fence with python language, got: {md:?}"
+        );
+    }
+
+    #[test]
+    fn adf_code_block_with_quadruple_backticks_uses_five_tick_fence() {
+        let adf = doc(json!([
+            {
+                "type": "codeBlock",
+                "content": [{"type": "text", "text": "a ```` b"}]
+            }
+        ]));
+        let md = convert(&adf);
+        assert!(
+            md.contains("`````\na ```` b\n`````\n"),
+            "expected 5-tick fence, got: {md:?}"
         );
     }
 

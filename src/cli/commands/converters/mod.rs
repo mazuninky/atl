@@ -25,6 +25,7 @@
 
 pub mod adf_to_md;
 pub mod body_content;
+mod code_fence;
 pub mod md_to_adf;
 pub mod md_to_storage;
 pub mod md_to_wiki;

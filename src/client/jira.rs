@@ -3102,7 +3102,7 @@ mod automation_component_tests {
         assert_eq!(second, "memo-id");
         // Only ONE upstream hit despite two client calls — the OnceCell did
         // its job.
-        mock.assert_hits_async(1).await;
+        mock.assert_calls_async(1).await;
     }
 
     #[tokio::test]
@@ -3290,14 +3290,9 @@ mod automation_component_tests {
                         "/automation/public/jira/{TEST_CLOUD_ID}/rest/v1/rule/summary"
                     ))
                     // No `limit` or `cursor` should appear in the
-                    // querystring when both parameters are None. We use a
-                    // matcher closure because httpmock 0.7 lacks a
-                    // `query_param_missing` helper.
-                    .matches(|req| {
-                        req.query_params
-                            .as_ref()
-                            .is_none_or(|qs| !qs.iter().any(|(k, _)| k == "limit" || k == "cursor"))
-                    })
+                    // querystring when both parameters are None.
+                    .query_param_missing("limit")
+                    .query_param_missing("cursor")
                     // Basic auth header must be set even with the test seam
                     // pointing at localhost — this proves the auth layer
                     // isn't bypassed by the override.
@@ -3439,8 +3434,8 @@ mod automation_component_tests {
                     // The body must contain the `name` field verbatim — we
                     // assert the substring rather than full equality so the
                     // test isn't sensitive to JSON key ordering.
-                    .body_contains("\"name\":\"My new rule\"")
-                    .body_contains("\"trigger\"");
+                    .body_includes("\"name\":\"My new rule\"")
+                    .body_includes("\"trigger\"");
                 then.status(201)
                     .header("content-type", "application/json")
                     .json_body(serde_json::json!({
@@ -3476,7 +3471,7 @@ mod automation_component_tests {
                         "/automation/public/jira/{TEST_CLOUD_ID}/rest/v1/rule/{TEST_RULE_UUID}"
                     ))
                     .header("content-type", "application/json")
-                    .body_contains("\"name\":\"Renamed rule\"");
+                    .body_includes("\"name\":\"Renamed rule\"");
                 then.status(200)
                     .json_body(serde_json::json!({"id": TEST_RULE_UUID}));
             })
@@ -3504,7 +3499,7 @@ mod automation_component_tests {
                         "/automation/public/jira/{TEST_CLOUD_ID}/rest/v1/rule/{TEST_RULE_UUID}/state"
                     ))
                     .header("content-type", "application/json")
-                    .json_body_partial(r#"{"state":"ENABLED"}"#);
+                    .json_body_includes(r#"{"state":"ENABLED"}"#);
                 // Atlassian returns 204 No Content here in practice — make
                 // sure the maybe-empty handler accepts that.
                 then.status(204);
@@ -3529,7 +3524,7 @@ mod automation_component_tests {
                     .path(format!(
                         "/automation/public/jira/{TEST_CLOUD_ID}/rest/v1/rule/{TEST_RULE_UUID}/state"
                     ))
-                    .json_body_partial(r#"{"state":"DISABLED"}"#);
+                    .json_body_includes(r#"{"state":"DISABLED"}"#);
                 then.status(204);
             })
             .await;

@@ -936,9 +936,15 @@ fn emit_emoticon(attrs: &BTreeMap<String, String>, out: &mut String, ctx: &mut C
 
 fn emit_link(children: &[XNode], out: &mut String, ctx: &mut Context) {
     // Find the resource identifier child (`<ri:user/>`, `<ri:page/>`, …) and
-    // the optional `<ac:link-body>` text.
+    // the optional link-body text. Prefer `<ac:plain-text-link-body>` over
+    // `<ac:link-body>` when both are present — the plain-text variant is
+    // the authoritative display text written by the storage-format
+    // serializer; the rich-text `<ac:link-body>` form is older and may
+    // contain additional formatting we don't want to fold into the
+    // bracketed directive content.
     let mut ri: Option<(&str, &BTreeMap<String, String>)> = None;
-    let mut body_text: Option<String> = None;
+    let mut plain_body: Option<String> = None;
+    let mut rich_body: Option<String> = None;
     for c in children {
         if let XNode::Element {
             name,
@@ -949,11 +955,14 @@ fn emit_link(children: &[XNode], out: &mut String, ctx: &mut Context) {
         {
             if name.starts_with("ri:") {
                 ri = Some((name.as_str(), attrs));
-            } else if name == "ac:link-body" || name == "ac:plain-text-link-body" {
-                body_text = Some(collect_text(kids).trim().to_string());
+            } else if name == "ac:plain-text-link-body" {
+                plain_body = Some(collect_text(kids).trim().to_string());
+            } else if name == "ac:link-body" {
+                rich_body = Some(collect_text(kids).trim().to_string());
             }
         }
     }
+    let body_text = plain_body.or(rich_body);
 
     match ri {
         Some(("ri:user", a)) => {
@@ -987,16 +996,30 @@ fn emit_link(children: &[XNode], out: &mut String, ctx: &mut Context) {
                 return;
             }
             let mut params: BTreeMap<String, String> = BTreeMap::new();
-            if let Some(id) = a.get("ri:content-id") {
+            // Prefer `ri:page-id` (the supported attribute on Data Center)
+            // but also accept `ri:content-id` for backwards compatibility
+            // with content stored by the previous, broken serializer. When
+            // a numeric id is present we keep just `pageId=` in the
+            // directive — the title is implicit in the bracketed display
+            // content, so duplicating it as `title=` would only add noise.
+            // We still emit both `ri:page-id` and `ri:content-title` on the
+            // forward path (md→storage) so the page works on Cloud, but the
+            // reverse direction collapses them back to a single `pageId=`.
+            let page_id = a.get("ri:page-id").or_else(|| a.get("ri:content-id"));
+            if let Some(id) = page_id {
                 params.insert("pageId".to_string(), id.clone());
-            }
-            if let Some(title) = a.get("ri:content-title") {
+            } else if let Some(title) = a.get("ri:content-title") {
                 params.insert("title".to_string(), title.clone());
             }
             if let Some(space) = a.get("ri:space-key") {
                 params.insert("spaceKey".to_string(), space.clone());
             }
-            let display = body_text.unwrap_or_default();
+            // Use the link body when present; otherwise fall back to the
+            // page title from `ri:content-title` so the bracketed
+            // directive content matches what the user sees on the page.
+            let display = body_text
+                .or_else(|| a.get("ri:content-title").cloned())
+                .unwrap_or_default();
             out.push_str(":link[");
             out.push_str(&display);
             out.push(']');
@@ -1528,8 +1551,68 @@ mod tests {
     #[test]
     fn link_to_page_with_title() {
         let out = convert(r#"<p><ac:link><ri:page ri:content-title="Page X"/></ac:link></p>"#);
-        assert!(out.contains(":link[]"), "got: {out:?}");
+        // No `<ac:plain-text-link-body>` is present, so we fall back to
+        // the page title for the bracketed display content.
+        assert!(out.contains(":link[Page X]"), "got: {out:?}");
         assert!(out.contains(r#"title="Page X""#), "got: {out:?}");
+    }
+
+    #[test]
+    fn link_with_page_id_attribute_round_trips() {
+        // `ri:page-id` (the new authoritative attribute) is parsed and the
+        // `<ac:plain-text-link-body>` becomes the bracketed display text.
+        let xhtml = r#"<p><ac:link><ri:page ri:page-id="98420"/><ac:plain-text-link-body><![CDATA[Parent]]></ac:plain-text-link-body></ac:link></p>"#;
+        let out = convert(xhtml);
+        assert!(out.contains(":link[Parent]"), "got: {out:?}");
+        assert!(out.contains("pageId=98420"), "got: {out:?}");
+    }
+
+    #[test]
+    fn link_with_both_page_id_and_content_title_prefers_page_id_in_directive() {
+        // The forward (md→storage) path emits both `ri:page-id` and
+        // `ri:content-title` so the link works on both Confluence Cloud and
+        // Data Center. On the reverse path we keep only `pageId=` in the
+        // directive: the title is already implicit in the bracketed
+        // display content, so a redundant `title=` attribute would be
+        // noise. PageId wins because the numeric reference survives a
+        // page rename.
+        let xhtml = r#"<p><ac:link><ri:page ri:page-id="42" ri:content-title="Foo"/><ac:plain-text-link-body><![CDATA[Foo]]></ac:plain-text-link-body></ac:link></p>"#;
+        let out = convert(xhtml);
+        assert!(out.contains(":link[Foo]"), "got: {out:?}");
+        assert!(out.contains("pageId=42"), "got: {out:?}");
+        assert!(
+            !out.contains("title="),
+            "title= attribute must be omitted when pageId is present (title is implicit in the bracketed content): {out:?}"
+        );
+    }
+
+    #[test]
+    fn link_with_legacy_content_id_attribute_still_parses() {
+        // Pages stored by the previous, broken serializer used
+        // `ri:content-id`. We must still surface the id as `pageId=` so
+        // those documents remain readable.
+        let xhtml = r#"<p><ac:link><ri:page ri:content-id="98420"/></ac:link></p>"#;
+        let out = convert(xhtml);
+        assert!(out.contains("pageId=98420"), "got: {out:?}");
+    }
+
+    #[test]
+    fn link_extracts_plain_text_link_body() {
+        // The text inside `<ac:plain-text-link-body><![CDATA[…]]>` becomes
+        // the bracketed directive content, beating the `ri:content-title`
+        // fallback when both are present.
+        let xhtml = r#"<p><ac:link><ri:page ri:content-title="Stale"/><ac:plain-text-link-body><![CDATA[Fresh]]></ac:plain-text-link-body></ac:link></p>"#;
+        let out = convert(xhtml);
+        assert!(out.contains(":link[Fresh]"), "got: {out:?}");
+    }
+
+    #[test]
+    fn link_prefers_plain_text_body_over_link_body() {
+        // When both `<ac:plain-text-link-body>` and `<ac:link-body>` are
+        // present, the plain-text variant wins.
+        let xhtml = r#"<p><ac:link><ri:page ri:page-id="42"/><ac:link-body>RichText</ac:link-body><ac:plain-text-link-body><![CDATA[PlainText]]></ac:plain-text-link-body></ac:link></p>"#;
+        let out = convert(xhtml);
+        assert!(out.contains(":link[PlainText]"), "got: {out:?}");
     }
 
     #[test]

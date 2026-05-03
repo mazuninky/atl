@@ -657,8 +657,10 @@ fn restore_inline_directives(html: &str, placeholders: &[InlineDirective]) -> St
 ///   maps the user-facing `color` attribute to `colour` in the output.
 /// - `emoticon` becomes `<ac:emoticon ac:name="…"/>` — NOT a structured macro.
 /// - `mention` becomes `<ac:link><ri:user ri:account-id="…"/></ac:link>`.
-/// - `link` becomes `<ac:link><ri:page …/></ac:link>` — `pageId` (resource id)
-///   wins over `title` (content title) when both are present.
+/// - `link` becomes `<ac:link><ri:page …/></ac:link>`. When `pageId` is set
+///   we emit `ri:page-id` (DC/Server resolves this, Cloud strips it) and,
+///   if the user bracketed display content, also `ri:content-title` (Cloud
+///   resolves this) so the same storage works on both flavours.
 /// - `image` becomes `<ac:image><ri:url ri:value="…"/></ac:image>`.
 fn render_inline_storage(d: &InlineDirective) -> String {
     match d.name.as_str() {
@@ -730,22 +732,63 @@ fn render_link(d: &InlineDirective) -> String {
 
     let mut out = String::new();
     out.push_str("<ac:link>");
-    // Prefer pageId when present (numeric content id), otherwise fall back to
-    // the bracketed display title as `ri:content-title`. If neither is given
-    // we still emit a `<ri:page/>` self-closing element with no attribute.
+    // Emit BOTH `ri:page-id` and `ri:content-title` when we have them so the
+    // same storage XML renders correctly on Cloud and Data Center:
+    //
+    // - Cloud silently strips `ri:page-id` (and the legacy `ri:content-id`)
+    //   from `<ri:page>` references, leaving an empty self-link unless
+    //   `ri:content-title` is also present. So Cloud needs the title.
+    // - DC/Server uses `ri:page-id` directly and ignores the title attribute,
+    //   which means it works even when the page has been retitled.
+    //
+    // Emitting both gives a working link in both flavours. When the user
+    // didn't bracket any content (so no title to use), we fall back to
+    // `ri:page-id` alone — DC will resolve it; Cloud will render an empty
+    // link, which is the existing behaviour and can't be fixed without a
+    // title to emit.
+    //
+    // TODO: support `spaceKey=` to emit `ri:space-key` for cross-space
+    // links — currently only same-space title resolution works.
+    let title_for_page = d.content.as_deref().filter(|s| !s.is_empty());
     if let Some(page_id) = d.params.get("pageId") {
-        out.push_str(r#"<ri:page ri:content-id=""#);
+        out.push_str(r#"<ri:page ri:page-id=""#);
         out.push_str(&xml_escape(page_id));
-        out.push_str(r#""/>"#);
-    } else if let Some(title) = d.content.as_ref() {
+        out.push('"');
+        if let Some(title) = title_for_page {
+            out.push_str(r#" ri:content-title=""#);
+            out.push_str(&xml_escape(title));
+            out.push('"');
+        }
+        out.push_str("/>");
+    } else if let Some(title) = title_for_page {
         out.push_str(r#"<ri:page ri:content-title=""#);
         out.push_str(&xml_escape(title));
         out.push_str(r#""/>"#);
     } else {
         out.push_str("<ri:page/>");
     }
+    // Emit `<ac:plain-text-link-body>` so the user's bracketed display text
+    // is preserved on the page. Without it, Confluence falls back to
+    // rendering the page title — which is empty when the resource ref is
+    // unresolved. Wrap in CDATA, splitting any literal `]]>` sequence
+    // across two CDATA sections so it doesn't terminate the body early.
+    if let Some(content) = d.content.as_ref().filter(|s| !s.is_empty()) {
+        out.push_str("<ac:plain-text-link-body><![CDATA[");
+        out.push_str(&cdata_escape(content));
+        out.push_str("]]></ac:plain-text-link-body>");
+    }
     out.push_str("</ac:link>");
     out
+}
+
+/// Escape literal `]]>` inside CDATA content by splitting it across two
+/// CDATA sections — the only sequence that can prematurely terminate a
+/// CDATA block. Returns a borrowed slice when the content is already safe.
+fn cdata_escape(s: &str) -> Cow<'_, str> {
+    if !s.contains("]]>") {
+        return Cow::Borrowed(s);
+    }
+    Cow::Owned(s.replace("]]>", "]]]]><![CDATA[>"))
 }
 
 fn render_image(d: &InlineDirective) -> String {
@@ -1130,9 +1173,15 @@ mod tests {
     #[test]
     fn inline_link_with_page_id() {
         let out = convert(":link[Page Title]{pageId=12345}");
+        // Both `ri:page-id` (for DC/Server) and `ri:content-title` (for Cloud,
+        // which strips `ri:page-id`) must be emitted on the same `<ri:page>`.
         assert!(
-            out.contains(r#"<ri:page ri:content-id="12345"/>"#),
-            "pageId should produce ri:content-id, got: {out}"
+            out.contains(r#"ri:page-id="12345""#),
+            "pageId should produce ri:page-id, got: {out}"
+        );
+        assert!(
+            out.contains(r#"ri:content-title="Page Title""#),
+            "bracketed content should also be emitted as ri:content-title for Cloud, got: {out}"
         );
         assert!(out.contains("<ac:link>"), "got: {out}");
     }
@@ -1144,6 +1193,108 @@ mod tests {
             out.contains(r#"<ri:page ri:content-title="Page Title"/>"#),
             "got: {out}"
         );
+    }
+
+    #[test]
+    fn link_with_pageid_emits_page_id_attribute_and_link_body() {
+        let out = convert(":link[Parent]{pageId=98420}");
+        // The single `<ri:page>` element must carry both `ri:page-id` (which
+        // DC honours) and `ri:content-title` (which Cloud needs because it
+        // silently strips `ri:page-id`).
+        assert!(
+            out.contains(r#"ri:page-id="98420""#),
+            "pageId must emit ri:page-id (not ri:content-id), got: {out}"
+        );
+        assert!(
+            out.contains(r#"ri:content-title="Parent""#),
+            "bracketed content must also be emitted as ri:content-title so Cloud can resolve the link, got: {out}"
+        );
+        assert!(
+            out.contains(
+                r#"<ac:plain-text-link-body><![CDATA[Parent]]></ac:plain-text-link-body>"#
+            ),
+            "display text must be wrapped in plain-text-link-body, got: {out}"
+        );
+    }
+
+    #[test]
+    fn link_with_pageid_and_content_emits_both_attrs_for_cloud_and_dc() {
+        // Confluence Cloud silently strips `ri:page-id` from `<ri:page>` but
+        // honours `ri:content-title`; DC honours `ri:page-id` and ignores the
+        // title. Emitting both means the same storage XML renders correctly
+        // on both flavours.
+        let out = convert(":link[Parent]{pageId=98420}");
+        assert!(
+            out.contains(r#"ri:page-id="98420""#),
+            "ri:page-id must be present for DC/Server: {out}"
+        );
+        assert!(
+            out.contains(r#"ri:content-title="Parent""#),
+            "ri:content-title must be present for Cloud: {out}"
+        );
+        // Both attributes must live on the same `<ri:page>` element, not in
+        // sibling resource references.
+        let opens: Vec<_> = out.match_indices("<ri:page").collect();
+        assert_eq!(
+            opens.len(),
+            1,
+            "expected exactly one <ri:page> element, got: {out}"
+        );
+    }
+
+    #[test]
+    fn link_with_pageid_only_no_content_omits_content_title() {
+        // No bracketed content means we have nothing meaningful to put in
+        // `ri:content-title`. Emit just `ri:page-id` so DC still resolves
+        // the link; on Cloud the link will render empty (same as before —
+        // can't be fixed without a title).
+        let out = convert(":link[]{pageId=99}");
+        assert!(
+            out.contains(r#"<ri:page ri:page-id="99"/>"#),
+            "no content means only ri:page-id, no ri:content-title, got: {out}"
+        );
+        assert!(
+            !out.contains("ri:content-title"),
+            "no content means no ri:content-title attribute, got: {out}"
+        );
+    }
+
+    #[test]
+    fn link_with_title_only_emits_content_title_and_link_body() {
+        let out = convert(":link[Foo]");
+        assert!(
+            out.contains(r#"<ri:page ri:content-title="Foo"/>"#),
+            "title-only link must use ri:content-title, got: {out}"
+        );
+        assert!(
+            out.contains(r#"<ac:plain-text-link-body><![CDATA[Foo]]></ac:plain-text-link-body>"#),
+            "display text must also appear in plain-text-link-body, got: {out}"
+        );
+    }
+
+    #[test]
+    fn link_with_pageid_and_no_content_omits_link_body() {
+        let out = convert(":link[]{pageId=99}");
+        assert!(
+            out.contains(r#"<ri:page ri:page-id="99"/>"#),
+            "pageId must still emit ri:page-id, got: {out}"
+        );
+        assert!(
+            !out.contains("ac:plain-text-link-body"),
+            "no content means no link body, got: {out}"
+        );
+    }
+
+    #[test]
+    fn link_body_cdata_escapes_close_marker() {
+        // The CDATA body must split a literal `]]>` so it doesn't terminate
+        // the CDATA section early. The standard escape is `]]]]><![CDATA[>`.
+        // Test the helper directly because the inline directive parser
+        // stops bracket content at the first `]`, so `]]>` cannot reach
+        // the renderer through normal markdown source.
+        assert_eq!(cdata_escape("safe"), "safe");
+        assert_eq!(cdata_escape("a]]>b"), "a]]]]><![CDATA[>b");
+        assert_eq!(cdata_escape("]]>x]]>y"), "]]]]><![CDATA[>x]]]]><![CDATA[>y");
     }
 
     #[test]
@@ -1416,11 +1567,20 @@ body
     #[test]
     fn link_directive_without_url_falls_back_to_page_link() {
         // Regression check: when neither `url` nor `pageId` is set, but
-        // content is, fall back to the existing `ri:content-title` behaviour.
+        // content is, fall back to the existing `ri:content-title`
+        // behaviour. The display text is also emitted as
+        // `<ac:plain-text-link-body>` so Confluence renders the user's
+        // chosen label rather than guessing from the page title.
         let out = convert(":link[Some Page]");
         assert!(
-            out.contains(r#"<ac:link><ri:page ri:content-title="Some Page"/></ac:link>"#),
+            out.contains(r#"<ri:page ri:content-title="Some Page"/>"#),
             "expected page-title fallback: {out}"
+        );
+        assert!(
+            out.contains(
+                r#"<ac:plain-text-link-body><![CDATA[Some Page]]></ac:plain-text-link-body>"#
+            ),
+            "expected plain-text link body: {out}"
         );
     }
 }

@@ -1,4 +1,4 @@
-use serde_json::Value;
+use serde_json::{Value, json};
 
 use crate::cli::args::*;
 use crate::cli::commands::read_body_arg;
@@ -45,12 +45,16 @@ pub(super) fn resolve_blog_create_space(args: &ConfluenceBlogCreateArgs) -> &str
 /// Rewrite the body value of a blog post response to the requested
 /// `body_format`, converting markdown / pretty-printing ADF as needed.
 ///
-/// Operates in place on the JSON returned by the Confluence API: locates
-/// `body.{representation}.value` (where `representation` matches the wire
-/// key requested by `body_format`) and replaces that string with the
-/// converted output produced by [`extract_body`]. When the wire-format key
-/// is missing we still write an empty string so the consumer always sees a
-/// `body.{repr}.value` field.
+/// Operates in place on the JSON returned by the Confluence API: writes
+/// the converted output produced by [`extract_body`] to
+/// `body.{repr}.value`, where `repr` is the user-facing key for the
+/// requested `body_format` (e.g. `markdown` for [`BodyFormat::Markdown`],
+/// matching the shape produced by `rewrite_body_field`).
+///
+/// The path is created on demand: if `body` or `body.{repr}` is missing
+/// (e.g. the API returned ADF when storage was requested, or vice versa,
+/// and our converter recovered via the alternative representation), the
+/// converted result is still surfaced rather than silently dropped.
 ///
 /// Mirrors the page export flow so blog Read returns the same shape page
 /// readers expect — without this step, `--body-format markdown` would
@@ -61,12 +65,29 @@ pub(super) fn convert_blog_body(
     render_directives: bool,
 ) -> anyhow::Result<()> {
     let converted = extract_body(response, body_format, ExtractOpts { render_directives })?;
-    let repr = body_format.wire_format();
-    if let Some(body_obj) = response.get_mut("body").and_then(Value::as_object_mut)
-        && let Some(repr_obj) = body_obj.get_mut(repr).and_then(Value::as_object_mut)
-    {
-        repr_obj.insert("value".into(), Value::String(converted));
-    }
+    let repr = match body_format {
+        BodyFormat::Markdown => "markdown",
+        BodyFormat::Storage => "storage",
+        BodyFormat::View => "view",
+        BodyFormat::Adf => "atlas_doc_format",
+    };
+    let Some(obj) = response.as_object_mut() else {
+        return Ok(());
+    };
+    let body = obj
+        .entry("body")
+        .or_insert_with(|| json!({}))
+        .as_object_mut()
+        .expect("body must be an object after or_insert_with(json!({}))");
+    let repr_obj = body
+        .entry(repr.to_string())
+        .or_insert_with(|| json!({"representation": repr}))
+        .as_object_mut()
+        .expect("body.{repr} must be an object after or_insert_with(json!({}))");
+    repr_obj.insert("value".into(), Value::String(converted));
+    repr_obj
+        .entry("representation".to_string())
+        .or_insert_with(|| Value::String(repr.to_string()));
     Ok(())
 }
 
@@ -309,9 +330,9 @@ mod tests {
     #[test]
     fn convert_blog_body_markdown_replaces_storage_xhtml() {
         // The default `--body-format markdown` requested markdown but the
-        // wire format is still `storage`. Conversion must replace the
-        // XHTML-shaped value with the converted markdown so the consumer
-        // never sees raw storage.
+        // wire format is still `storage`. Conversion must write the
+        // converted markdown to `body.markdown.value` so the consumer
+        // never has to inspect the wire-format key.
         let mut response = serde_json::json!({
             "id": "1",
             "title": "post",
@@ -319,9 +340,9 @@ mod tests {
         });
         convert_blog_body(&mut response, BodyFormat::Markdown, true).unwrap();
         let value = response
-            .pointer("/body/storage/value")
+            .pointer("/body/markdown/value")
             .and_then(Value::as_str)
-            .expect("body.storage.value should still be a string");
+            .expect("body.markdown.value should be populated");
         assert!(
             value.contains("Hello"),
             "expected markdown to contain the paragraph text, got: {value:?}"
@@ -343,9 +364,9 @@ mod tests {
         });
         convert_blog_body(&mut response, BodyFormat::Markdown, false).unwrap();
         let value = response
-            .pointer("/body/storage/value")
+            .pointer("/body/markdown/value")
             .and_then(Value::as_str)
-            .expect("body.storage.value should still be a string");
+            .expect("body.markdown.value should be populated");
         assert!(
             !value.contains(":::info"),
             "no_directives must strip the :::info fence, got: {value:?}"
@@ -375,11 +396,54 @@ mod tests {
     }
 
     #[test]
-    fn convert_blog_body_missing_body_is_safe() {
-        // A response without a `body` object must not panic; `extract_body`
-        // returns "" and the function leaves the response unchanged.
+    fn convert_blog_body_missing_body_creates_path() {
+        // A response without a `body` object must surface the converted
+        // value rather than dropping it. The path is created on demand
+        // so the consumer always sees `body.{repr}.value`.
         let mut response = serde_json::json!({"id": "1", "title": "post"});
         convert_blog_body(&mut response, BodyFormat::Markdown, true).unwrap();
-        assert_eq!(response.get("body"), None);
+        assert_eq!(
+            response
+                .pointer("/body/markdown/value")
+                .and_then(Value::as_str),
+            Some(""),
+            "body.markdown.value must be created even when the input has no body"
+        );
+        assert_eq!(
+            response
+                .pointer("/body/markdown/representation")
+                .and_then(Value::as_str),
+            Some("markdown"),
+            "body.markdown.representation must be set when the path is created"
+        );
+    }
+
+    #[test]
+    fn convert_blog_body_writes_value_when_body_repr_missing() {
+        // When `body` exists but the requested representation key is
+        // absent (e.g. the API returned ADF when storage was requested
+        // and our converter recovered via the alternative form), the
+        // converted result must be upserted into `body.{repr}.value`
+        // rather than silently dropped.
+        let mut response = serde_json::json!({
+            "id": "1",
+            "title": "post",
+            "body": {}
+        });
+        convert_blog_body(&mut response, BodyFormat::Markdown, true).unwrap();
+        let value = response
+            .pointer("/body/markdown/value")
+            .and_then(Value::as_str)
+            .expect("body.markdown.value must be populated when the repr key was missing");
+        // No source body was present, so `extract_body` returned an empty
+        // string; the upsert path is what we care about here.
+        assert_eq!(value, "");
+        assert_eq!(
+            response
+                .pointer("/body/markdown/representation")
+                .and_then(Value::as_str),
+            Some("markdown"),
+            "representation tag must be set when the repr key is created on demand"
+        );
     }
 }

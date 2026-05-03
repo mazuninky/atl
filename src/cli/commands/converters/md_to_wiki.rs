@@ -52,6 +52,7 @@
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use comrak::nodes::{AstNode, ListType, NodeValue};
 use comrak::{Arena, Options, parse_document};
@@ -67,14 +68,27 @@ use crate::cli::commands::directives::{
 /// comrak runs and post-processed back into wiki tokens after rendering.
 /// The text is plain ASCII with no markdown specials so comrak passes it
 /// through unchanged.
+///
+/// Each `render_md_chunk` call produces placeholders of the form
+/// `ATLINLPLACEHOLDER<nonce>_<idx>` where `<nonce>` is a monotonically
+/// increasing per-call value (see [`PH_NONCE_COUNTER`]). The nonce makes
+/// it effectively impossible for user-authored text to collide with the
+/// lexer's output: a literal `ATLINLPLACEHOLDER1` in the source markdown
+/// stays verbatim because it lacks the `<nonce>_` separator.
 const PH_PREFIX: &str = "ATLINLPLACEHOLDER";
+
+/// Global counter used to mint a unique nonce for each `render_md_chunk`
+/// call. Wrapping is safe because the nonce only needs to be distinct from
+/// any literal text the user might plausibly type, not globally unique
+/// across all time.
+static PH_NONCE_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 thread_local! {
     /// Buffer of inline directives extracted by [`substitute_inline_directives`]
     /// for the current `render_md_chunk` call. Indexed by the integer that
-    /// follows `ATLINLPLACEHOLDER` in placeholder text. Cleared at the start
-    /// of every `render_md_chunk` invocation so render calls never see stale
-    /// directives.
+    /// follows `ATLINLPLACEHOLDER<nonce>_` in placeholder text. Cleared at
+    /// the start of every `render_md_chunk` invocation so render calls
+    /// never see stale directives.
     static INLINE_DIRECTIVES: RefCell<Vec<InlineDirective>> = const { RefCell::new(Vec::new()) };
 }
 
@@ -429,7 +443,10 @@ fn render_md_chunk(md: &str) -> String {
         return String::new();
     }
     INLINE_DIRECTIVES.with(|cell| cell.borrow_mut().clear());
-    let with_placeholders = substitute_inline_directives(md);
+    // Mint a fresh nonce for this call so user text containing literal
+    // `ATLINLPLACEHOLDER<n>` cannot collide with lexer-emitted placeholders.
+    let nonce = PH_NONCE_COUNTER.fetch_add(1, Ordering::Relaxed);
+    let with_placeholders = substitute_inline_directives(md, nonce);
 
     let arena = Arena::new();
     let mut options = Options::default();
@@ -444,15 +461,16 @@ fn render_md_chunk(md: &str) -> String {
     if !wiki.ends_with('\n') {
         wiki.push('\n');
     }
-    replace_placeholders(&wiki)
+    replace_placeholders(&wiki, nonce)
 }
 
 /// Walk `md` line by line and replace every inline directive token with a
-/// placeholder of the form `ATLINLPLACEHOLDER{n}`. Lines inside a CommonMark
-/// fenced code block are passed through verbatim so that `:status[…]` inside
-/// a fence stays as code text. The extracted [`InlineDirective`] values are
-/// pushed into the thread-local [`INLINE_DIRECTIVES`] buffer.
-fn substitute_inline_directives(md: &str) -> String {
+/// placeholder of the form `ATLINLPLACEHOLDER<nonce>_<idx>`. Lines inside a
+/// CommonMark fenced code block are passed through verbatim so that
+/// `:status[…]` inside a fence stays as code text. The extracted
+/// [`InlineDirective`] values are pushed into the thread-local
+/// [`INLINE_DIRECTIVES`] buffer.
+fn substitute_inline_directives(md: &str, nonce: u64) -> String {
     let mut out = String::with_capacity(md.len());
     let mut code_fence: Option<CodeFence> = None;
     let mut first = true;
@@ -475,7 +493,7 @@ fn substitute_inline_directives(md: &str) -> String {
                     out.push_str(line);
                     code_fence = Some(open);
                 } else {
-                    substitute_line(line, &mut out);
+                    substitute_line(line, &mut out, nonce);
                 }
             }
         }
@@ -550,16 +568,16 @@ fn split_code_span_segments(line: &str) -> Vec<LineSegment<'_>> {
     segments
 }
 
-fn substitute_line(line: &str, out: &mut String) {
+fn substitute_line(line: &str, out: &mut String, nonce: u64) {
     for segment in split_code_span_segments(line) {
         match segment {
-            LineSegment::Outside(s) => substitute_outside_segment(s, out),
+            LineSegment::Outside(s) => substitute_outside_segment(s, out, nonce),
             LineSegment::CodeSpan(s) => out.push_str(s),
         }
     }
 }
 
-fn substitute_outside_segment(segment: &str, out: &mut String) {
+fn substitute_outside_segment(segment: &str, out: &mut String, nonce: u64) {
     let tokens = parse_inline(segment);
     if tokens.iter().all(|t| matches!(t, InlineToken::Text(_))) {
         out.push_str(segment);
@@ -575,20 +593,24 @@ fn substitute_outside_segment(segment: &str, out: &mut String) {
                     v.push(d);
                     n
                 });
-                let _ = write!(out, "{PH_PREFIX}{idx}");
+                let _ = write!(out, "{PH_PREFIX}{nonce}_{idx}");
             }
         }
     }
 }
 
-/// Walk `wiki` and substitute every `ATLINLPLACEHOLDER{n}` substring with
-/// the rendered wiki form of the directive at index `n`.
-fn replace_placeholders(wiki: &str) -> String {
+/// Walk `wiki` and substitute every `ATLINLPLACEHOLDER<nonce>_<idx>`
+/// substring (matching the supplied `nonce`) with the rendered wiki form
+/// of the directive at index `<idx>`. Substrings whose nonce does not
+/// match — including ones written by the user as literal text — are
+/// passed through verbatim.
+fn replace_placeholders(wiki: &str, nonce: u64) -> String {
+    let expected_prefix = format!("{PH_PREFIX}{nonce}_");
     let mut out = String::with_capacity(wiki.len());
     let mut rest = wiki;
-    while let Some(pos) = rest.find(PH_PREFIX) {
+    while let Some(pos) = rest.find(&expected_prefix) {
         out.push_str(&rest[..pos]);
-        let after = &rest[pos + PH_PREFIX.len()..];
+        let after = &rest[pos + expected_prefix.len()..];
         let digit_end = after
             .as_bytes()
             .iter()
@@ -596,7 +618,7 @@ fn replace_placeholders(wiki: &str) -> String {
             .count();
         if digit_end == 0 {
             // Malformed placeholder — emit prefix as text and continue.
-            out.push_str(PH_PREFIX);
+            out.push_str(&expected_prefix);
             rest = after;
             continue;
         }
@@ -606,7 +628,7 @@ fn replace_placeholders(wiki: &str) -> String {
             Some(d) => out.push_str(&render_inline_directive(&d)),
             None => {
                 // Index out of range — keep the literal.
-                out.push_str(PH_PREFIX);
+                out.push_str(&expected_prefix);
                 out.push_str(&after[..digit_end]);
             }
         }
@@ -1007,6 +1029,35 @@ mod tests {
 
     fn convert(md: &str) -> String {
         markdown_to_wiki(md).expect("conversion succeeded")
+    }
+
+    #[test]
+    fn placeholder_replacement_does_not_corrupt_user_text_containing_marker() {
+        // User content that legitimately contains the literal token
+        // `ATLINLPLACEHOLDER1` must not be rewritten by the directive
+        // post-pass — even if the same chunk also contains a real inline
+        // directive that happens to be assigned an internal index `1`.
+        // The lexer mints a per-call nonce so the literal user text and
+        // the lexer's placeholder no longer share the same prefix.
+        let input = ":status[Active] then ATLINLPLACEHOLDER0 done";
+        let result = convert(input);
+        assert!(
+            result.contains("ATLINLPLACEHOLDER0"),
+            "literal user text must survive the directive post-pass, got: {result:?}"
+        );
+        // The real directive must still render — sanity check.
+        assert!(
+            result.contains("{status:title=Active}"),
+            "real :status[…] directive must still render to a wiki status macro, got: {result:?}"
+        );
+    }
+
+    #[test]
+    fn placeholder_replacement_preserves_literal_marker_with_no_directives() {
+        // Pure literal — no inline directives in this chunk. The user's
+        // `ATLINLPLACEHOLDER1` text must round-trip unchanged.
+        let result = convert("Hello ATLINLPLACEHOLDER1 world");
+        assert!(result.contains("ATLINLPLACEHOLDER1"));
     }
 
     // ===== Existing tests preserved from markdown.rs (22 tests) =====

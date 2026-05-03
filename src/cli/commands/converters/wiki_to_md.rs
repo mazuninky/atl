@@ -55,6 +55,7 @@ use std::fmt::Write as _;
 
 use thiserror::Error;
 
+use super::code_fence::pick_code_fence;
 use crate::cli::commands::directives::render_attrs;
 
 // =====================================================================
@@ -406,10 +407,13 @@ fn is_valid_macro_name(s: &str) -> bool {
 }
 
 /// Parse pipe-separated `key=value` pairs (e.g. `title=Heads up|key=val`).
-/// Values continue until the next `|` (no quoting). Stops on malformed entries.
+/// Splits on unescaped `|` only — `\|` inside a value is preserved as a
+/// literal pipe. The shared [`split_unescaped_pipe`] splitter also decodes
+/// `\\` → `\` and `\}` → `}` while walking, so values come back already
+/// unescaped.
 fn parse_pipe_params(s: &str) -> BTreeMap<String, String> {
     let mut out = BTreeMap::new();
-    for piece in s.split('|') {
+    for piece in split_unescaped_pipe(s) {
         if let Some((k, v)) = piece.split_once('=') {
             let key = k.trim();
             if !key.is_empty() && is_valid_macro_name(key) {
@@ -717,7 +721,11 @@ fn render_block(block: &Block, out: &mut String, opts: &ConvertOpts) {
         }
         Block::Code { lang, body } => {
             ensure_blank_line(out);
-            out.push_str("```");
+            // Pick a fence at least one backtick longer than any run inside
+            // the body so inner ``` strings cannot prematurely close the
+            // block (CommonMark §4.5).
+            let fence = pick_code_fence(body);
+            out.push_str(&fence);
             if let Some(l) = lang {
                 out.push_str(l);
             }
@@ -726,7 +734,8 @@ fn render_block(block: &Block, out: &mut String, opts: &ConvertOpts) {
             if !body.ends_with('\n') {
                 out.push('\n');
             }
-            out.push_str("```\n");
+            out.push_str(&fence);
+            out.push('\n');
         }
         Block::List(items) => {
             ensure_blank_line(out);
@@ -1686,6 +1695,55 @@ mod tests {
     #[test]
     fn convert_opts_default_renders_directives() {
         assert!(ConvertOpts::default().render_directives);
+    }
+
+    // ---- parse_pipe_params ------------------------------------------------
+
+    #[test]
+    fn parse_pipe_params_handles_escaped_pipe() {
+        // `\|` inside a value must NOT split the parameter list. The
+        // value's `\|` decodes to a literal `|`.
+        let params = parse_pipe_params(r"title=A\|B|color=red");
+        assert_eq!(params.get("title").map(String::as_str), Some("A|B"));
+        assert_eq!(params.get("color").map(String::as_str), Some("red"));
+    }
+
+    #[test]
+    fn parse_pipe_params_handles_escaped_brace() {
+        // `\}` inside a value decodes to a literal `}`.
+        let params = parse_pipe_params(r"title=A\}B");
+        assert_eq!(params.get("title").map(String::as_str), Some("A}B"));
+    }
+
+    #[test]
+    fn parse_pipe_params_handles_escaped_backslash() {
+        // `\\` decodes to a single literal `\`. The trailing `foo`
+        // following the escaped backslash must not be re-escaped.
+        let params = parse_pipe_params(r"path=C:\\foo");
+        assert_eq!(params.get("path").map(String::as_str), Some(r"C:\foo"));
+    }
+
+    // ---- code-block fence picking -----------------------------------------
+
+    #[test]
+    fn wiki_to_md_code_block_no_backticks_uses_three_tick_fence() {
+        // No backticks in the body — three-tick fence is sufficient.
+        let out = convert("{code}\nhello\n{code}");
+        assert!(
+            out.contains("```\nhello\n```"),
+            "expected a 3-tick fence around plain text, got: {out:?}"
+        );
+    }
+
+    #[test]
+    fn wiki_to_md_code_block_with_triple_backticks_uses_four_tick_fence() {
+        // Body contains a 3-backtick run — fence must be at least 4 ticks
+        // so the body's run cannot close the block prematurely.
+        let out = convert("{code}\na ``` b\n{code}");
+        assert!(
+            out.contains("````\na ``` b\n````"),
+            "expected a 4-tick fence around code containing ```, got: {out:?}"
+        );
     }
 
     // ---- headings ---------------------------------------------------------

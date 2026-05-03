@@ -1312,6 +1312,15 @@ fn emit_link(children: &[XNode], out: &mut String, ctx: &mut Context) {
             if !ctx.opts.render_directives {
                 if let Some(t) = body_text {
                     out.push_str(&t);
+                } else if let Some(id) = a.get("ri:account-id").or_else(|| a.get("ri:userkey")) {
+                    // Storage `<ac:link><ri:user ri:account-id="…"/></ac:link>`
+                    // commonly omits any inner text — Confluence renders
+                    // the display name from the user lookup. With
+                    // `--no-directives`, fall back to a stable
+                    // `@<account-id>` (Cloud) or `@<userkey>` (DC) token
+                    // so the mention does not silently disappear.
+                    out.push('@');
+                    out.push_str(id);
                 }
                 return;
             }
@@ -2006,6 +2015,50 @@ mod tests {
         let out = convert(r#"<p><ac:link><ri:user ri:account-id="abc"/></ac:link></p>"#);
         assert!(out.contains(":mention[]"), "got: {out:?}");
         assert!(out.contains("accountId=abc"), "got: {out:?}");
+    }
+
+    #[test]
+    fn mention_no_directives_falls_back_to_at_account_id() {
+        // Storage `<ac:link><ri:user ri:account-id="…"/></ac:link>` with
+        // no inner text. With `--no-directives`, the mention must not
+        // disappear silently — fall back to `@<account-id>` so the
+        // reference survives in plain text.
+        let out =
+            convert_no_directives(r#"<p><ac:link><ri:user ri:account-id="abc123"/></ac:link></p>"#);
+        assert!(
+            out.contains("@abc123"),
+            "expected @<account-id> fallback, got: {out:?}"
+        );
+    }
+
+    #[test]
+    fn mention_no_directives_falls_back_to_userkey() {
+        // Older Confluence DC uses `ri:userkey` instead of `ri:account-id`.
+        // The fallback must prefer account-id but accept userkey when
+        // account-id is absent.
+        let out =
+            convert_no_directives(r#"<p><ac:link><ri:user ri:userkey="legacy123"/></ac:link></p>"#);
+        assert!(
+            out.contains("@legacy123"),
+            "expected @<userkey> fallback, got: {out:?}"
+        );
+    }
+
+    #[test]
+    fn mention_no_directives_with_body_text_uses_body() {
+        // When an explicit `<ac:plain-text-link-body>` is present,
+        // `--no-directives` must prefer the body text over the
+        // account-id fallback.
+        let xhtml = r#"<p><ac:link><ri:user ri:account-id="abc123"/><ac:plain-text-link-body><![CDATA[Jane Doe]]></ac:plain-text-link-body></ac:link></p>"#;
+        let out = convert_no_directives(xhtml);
+        assert!(
+            out.contains("Jane Doe"),
+            "expected the link body to render, got: {out:?}"
+        );
+        assert!(
+            !out.contains("@abc123"),
+            "must not emit the @<account-id> fallback when body text exists, got: {out:?}"
+        );
     }
 
     #[test]

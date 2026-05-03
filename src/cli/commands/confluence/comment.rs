@@ -103,7 +103,7 @@ pub(super) async fn dispatch_footer_comment(
         ConfluenceFooterCommentSubcommand::Create(args) => {
             let body = convert_input(read_body_arg(&args.body)?, &args.input_format)?;
             client
-                .create_footer_comment_v2(&args.page_id, &body)
+                .create_footer_comment_v2(&args.page_id, &body, args.parent_comment_id.as_deref())
                 .await?
         }
         ConfluenceFooterCommentSubcommand::Update(args) => {
@@ -197,6 +197,7 @@ pub(super) async fn dispatch_inline_comment(
                     &body,
                     &args.inline_marker_ref,
                     args.text_selection.as_deref(),
+                    args.parent_comment_id.as_deref(),
                 )
                 .await?
         }

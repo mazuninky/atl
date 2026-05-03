@@ -119,8 +119,8 @@ inline image :image{src="https://x/y.png" alt="diagram"}
 | Block | Confluence | Jira |
 |---|---|---|
 | `:::info`, `:::warning`, `:::note`, `:::tip` | `<ac:structured-macro ac:name="info">…` (and ADF `panel` with matching `panelType`) | `{info}…{info}` (and ADF `panel`) |
-| `:::expand title="…"` | `<ac:structured-macro ac:name="expand">` / ADF `expand` | No native equivalent — falls back to `*Title*\n\nbody` |
-| `:::toc [maxLevel=N]` | `<ac:structured-macro ac:name="toc">` / ADF `extension` | `{toc}` macro |
+| `:::expand title="…"` | `<ac:structured-macro ac:name="expand">` / ADF `expand` | Jira ADF `expand` (Cloud); Jira wiki has no equivalent — falls back to `*Title*\n\nbody` |
+| `:::toc [maxLevel=N]` | `<ac:structured-macro ac:name="toc">` / ADF `extension` | Confluence-only; no Jira equivalent |
 
 | Inline | Confluence | Jira |
 |---|---|---|

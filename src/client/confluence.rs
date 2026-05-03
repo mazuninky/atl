@@ -34,6 +34,69 @@ fn body_payload(content: &BodyContent) -> Value {
     }
 }
 
+/// Build the JSON payload for `POST /footer-comments`.
+///
+/// The Cloud API requires that exactly one of `blogPostId`, `pageId`,
+/// `attachmentId`, `customContentId`, or `parentCommentId` be supplied
+/// — they are mutually exclusive anchors. So when `parent_comment_id`
+/// is `Some` we send `parentCommentId` only (the parent already pins
+/// the comment to its page); when it is `None` we send `pageId` to
+/// create a top-level comment. Extracted so the conditional shape can
+/// be unit-tested without an HTTP client.
+fn build_create_footer_comment_payload(
+    page_id: &str,
+    body: &BodyContent,
+    parent_comment_id: Option<&str>,
+) -> Value {
+    let mut payload = json!({
+        "body": body_payload(body),
+    });
+    match parent_comment_id {
+        Some(parent) => {
+            payload["parentCommentId"] = Value::String(parent.to_string());
+        }
+        None => {
+            payload["pageId"] = Value::String(page_id.to_string());
+        }
+    }
+    payload
+}
+
+/// Build the JSON payload for `POST /inline-comments`.
+///
+/// Same mutual-exclusion rule as
+/// [`build_create_footer_comment_payload`] applies: send either
+/// `pageId` or `parentCommentId`, never both. The
+/// `inlineCommentProperties.inlineMarkerRef` is always required (the
+/// API uses it to anchor the inline highlight regardless of whether
+/// the comment is top-level or a reply); `textSelection` is included
+/// only when supplied. Extracted so the conditional shape can be
+/// unit-tested without an HTTP client.
+fn build_create_inline_comment_payload(
+    page_id: &str,
+    body: &BodyContent,
+    inline_marker_ref: &str,
+    text_selection: Option<&str>,
+    parent_comment_id: Option<&str>,
+) -> Value {
+    let mut payload = json!({
+        "body": body_payload(body),
+        "inlineCommentProperties": { "inlineMarkerRef": inline_marker_ref }
+    });
+    if let Some(sel) = text_selection {
+        payload["inlineCommentProperties"]["textSelection"] = Value::String(sel.to_string());
+    }
+    match parent_comment_id {
+        Some(parent) => {
+            payload["parentCommentId"] = Value::String(parent.to_string());
+        }
+        None => {
+            payload["pageId"] = Value::String(page_id.to_string());
+        }
+    }
+    payload
+}
+
 pub struct ConfluenceClient {
     http: HttpClient,
     /// A client without retry middleware, used for multipart/streaming
@@ -1204,17 +1267,18 @@ impl ConfluenceClient {
 
     /// Create a footer comment on a page.
     ///
-    /// Accepts either storage XHTML or ADF (via [`BodyContent`]). The
-    /// payload is shaped the same way pages are — see [`body_payload`].
+    /// Accepts either storage XHTML or ADF (via [`BodyContent`]). When
+    /// `parent_comment_id` is `Some`, the new comment is created as a
+    /// reply to that comment (Confluence Cloud REST v2 supports threaded
+    /// replies via `parentCommentId`). The payload is shaped the same
+    /// way pages are — see [`body_payload`].
     pub async fn create_footer_comment_v2(
         &self,
         page_id: &str,
         body: &BodyContent,
+        parent_comment_id: Option<&str>,
     ) -> Result<Value, Error> {
-        let payload = serde_json::json!({
-            "pageId": page_id,
-            "body": body_payload(body),
-        });
+        let payload = build_create_footer_comment_payload(page_id, body, parent_comment_id);
         self.post_v2("/footer-comments", &payload).await
     }
 
@@ -1332,21 +1396,25 @@ impl ConfluenceClient {
         .await
     }
 
+    /// Create an inline comment anchored to a specific marker ref on a
+    /// page. When `parent_comment_id` is `Some`, the new comment is
+    /// created as a reply to that comment via Confluence Cloud REST v2's
+    /// `parentCommentId` field.
     pub async fn create_inline_comment_v2(
         &self,
         page_id: &str,
         body: &BodyContent,
         inline_marker_ref: &str,
         text_selection: Option<&str>,
+        parent_comment_id: Option<&str>,
     ) -> Result<Value, Error> {
-        let mut payload = serde_json::json!({
-            "pageId": page_id,
-            "body": body_payload(body),
-            "inlineCommentProperties": { "inlineMarkerRef": inline_marker_ref }
-        });
-        if let Some(sel) = text_selection {
-            payload["inlineCommentProperties"]["textSelection"] = Value::String(sel.to_string());
-        }
+        let payload = build_create_inline_comment_payload(
+            page_id,
+            body,
+            inline_marker_ref,
+            text_selection,
+            parent_comment_id,
+        );
         self.post_v2("/inline-comments", &payload).await
     }
 
@@ -1916,6 +1984,164 @@ mod tests {
         assert_eq!(
             parsed, adf,
             "stringified ADF must be lossless when parsed back"
+        );
+    }
+
+    // ---- create_footer_comment payload --------------------------------
+
+    #[test]
+    fn create_footer_comment_v2_includes_parent_comment_id_when_set() {
+        // When the caller supplies a parent comment id, the v2 payload
+        // must include `parentCommentId` so the Cloud API creates a
+        // threaded reply rather than a top-level comment.
+        let payload = build_create_footer_comment_payload(
+            "12345",
+            &BodyContent::Storage("<p>reply</p>".into()),
+            Some("99999"),
+        );
+        assert_eq!(
+            payload.get("parentCommentId").and_then(Value::as_str),
+            Some("99999"),
+            "parentCommentId must be threaded into the payload when set"
+        );
+    }
+
+    #[test]
+    fn create_footer_comment_v2_omits_page_id_when_replying() {
+        // The Cloud API rejects payloads carrying BOTH `pageId` and
+        // `parentCommentId` with `INVALID_REQUEST_BODY: "Must specify
+        // one and only one of blogPostId, pageId, attachmentId,
+        // customContentId or parentCommentId"`. When replying, the
+        // parent already anchors the comment to its page, so we must
+        // omit `pageId` entirely.
+        let payload = build_create_footer_comment_payload(
+            "12345",
+            &BodyContent::Storage("<p>reply</p>".into()),
+            Some("99999"),
+        );
+        assert!(
+            !payload
+                .as_object()
+                .expect("payload is an object")
+                .contains_key("pageId"),
+            "pageId must be absent when replying to a parent comment, got: {payload}"
+        );
+    }
+
+    #[test]
+    fn create_footer_comment_v2_omits_parent_comment_id_when_none() {
+        // No parent — the payload must not contain `parentCommentId`,
+        // otherwise the Cloud API would reject the empty/null value.
+        // `pageId` MUST be present so the comment is anchored to a page.
+        let payload = build_create_footer_comment_payload(
+            "12345",
+            &BodyContent::Storage("<p>top-level</p>".into()),
+            None,
+        );
+        assert!(
+            !payload
+                .as_object()
+                .expect("payload is an object")
+                .contains_key("parentCommentId"),
+            "parentCommentId must be absent when no parent is supplied, got: {payload}"
+        );
+        assert_eq!(
+            payload.get("pageId").and_then(Value::as_str),
+            Some("12345"),
+            "pageId must be present for a top-level comment"
+        );
+    }
+
+    // ---- create_inline_comment payload --------------------------------
+
+    #[test]
+    fn create_inline_comment_v2_includes_parent_comment_id_when_set() {
+        // The inline-comment variant carries additional inlineMarkerRef /
+        // textSelection fields, but `parentCommentId` lives at the top
+        // level alongside `body` — same shape as footer.
+        let payload = build_create_inline_comment_payload(
+            "12345",
+            &BodyContent::Storage("<p>reply</p>".into()),
+            "marker-1",
+            Some("highlighted"),
+            Some("88888"),
+        );
+        assert_eq!(
+            payload.get("parentCommentId").and_then(Value::as_str),
+            Some("88888"),
+            "parentCommentId must be threaded into the inline-comment payload"
+        );
+        assert_eq!(
+            payload
+                .pointer("/inlineCommentProperties/inlineMarkerRef")
+                .and_then(Value::as_str),
+            Some("marker-1"),
+            "inlineMarkerRef must remain in inlineCommentProperties even on replies"
+        );
+        assert_eq!(
+            payload
+                .pointer("/inlineCommentProperties/textSelection")
+                .and_then(Value::as_str),
+            Some("highlighted"),
+            "textSelection must remain in inlineCommentProperties"
+        );
+    }
+
+    #[test]
+    fn create_inline_comment_v2_omits_page_id_when_replying() {
+        // Mirror of the footer test: the API rejects payloads with
+        // both `pageId` and `parentCommentId`. `inlineMarkerRef` MUST
+        // still be present — it's required for inline comments
+        // regardless of top-level vs reply.
+        let payload = build_create_inline_comment_payload(
+            "12345",
+            &BodyContent::Storage("<p>reply</p>".into()),
+            "marker-1",
+            None,
+            Some("88888"),
+        );
+        assert!(
+            !payload
+                .as_object()
+                .expect("payload is an object")
+                .contains_key("pageId"),
+            "pageId must be absent when replying to a parent comment, got: {payload}"
+        );
+        assert_eq!(
+            payload
+                .pointer("/inlineCommentProperties/inlineMarkerRef")
+                .and_then(Value::as_str),
+            Some("marker-1"),
+            "inlineMarkerRef must remain in inlineCommentProperties even when replying"
+        );
+    }
+
+    #[test]
+    fn create_inline_comment_v2_omits_parent_comment_id_when_none() {
+        let payload = build_create_inline_comment_payload(
+            "12345",
+            &BodyContent::Storage("<p>top-level</p>".into()),
+            "marker-1",
+            None,
+            None,
+        );
+        assert!(
+            !payload
+                .as_object()
+                .expect("payload is an object")
+                .contains_key("parentCommentId"),
+            "parentCommentId must be absent when no parent is supplied, got: {payload}"
+        );
+        assert_eq!(
+            payload.get("pageId").and_then(Value::as_str),
+            Some("12345"),
+            "pageId must be present for a top-level inline comment"
+        );
+        assert!(
+            payload
+                .pointer("/inlineCommentProperties/textSelection")
+                .is_none(),
+            "textSelection must be absent when no selection is supplied, got: {payload}"
         );
     }
 }

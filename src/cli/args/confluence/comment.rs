@@ -130,6 +130,11 @@ pub struct ConfluenceFooterCommentCreateArgs {
     /// Input format for the body
     #[arg(long, default_value = "markdown", value_enum)]
     pub input_format: InputFormat,
+
+    /// Parent comment ID. When set, the new comment is created as a
+    /// reply to this comment (threaded). Omit for a top-level comment.
+    #[arg(long)]
+    pub parent_comment_id: Option<String>,
 }
 
 #[derive(Debug, Args)]
@@ -256,6 +261,11 @@ pub struct ConfluenceInlineCommentCreateArgs {
     /// Input format for the body
     #[arg(long, default_value = "markdown", value_enum)]
     pub input_format: InputFormat,
+
+    /// Parent comment ID. When set, the new comment is created as a
+    /// reply to this comment (threaded). Omit for a top-level comment.
+    #[arg(long)]
+    pub parent_comment_id: Option<String>,
 }
 
 #[derive(Debug, Args)]

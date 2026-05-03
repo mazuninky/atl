@@ -2775,6 +2775,7 @@ Usage: atl confluence footer-comment create [OPTIONS] --body <BODY> <PAGE_ID>
 - `<PAGE_ID>` — Page ID
 - `--body, -b` — Comment body. Use @file to read from file, or - for stdin
 - `--input-format` — Input format for the body
+- `--parent-comment-id` — Parent comment ID. When set, the new comment is created as a reply to this comment (threaded). Omit for a top-level comment
 - `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
 - `--quiet, -q` — Suppress all output except errors
 - `--config` — Path to configuration file
@@ -3264,6 +3265,7 @@ Usage: atl confluence inline-comment create [OPTIONS] --body <BODY> --inline-mar
 - `--inline-marker-ref` — Inline marker reference (from the page content)
 - `--text-selection` — Text selection to highlight
 - `--input-format` — Input format for the body
+- `--parent-comment-id` — Parent comment ID. When set, the new comment is created as a reply to this comment (threaded). Omit for a top-level comment
 - `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
 - `--quiet, -q` — Suppress all output except errors
 - `--config` — Path to configuration file

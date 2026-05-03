@@ -6,6 +6,17 @@ use crate::client::ConfluenceClient;
 
 use super::property::dispatch_resource_property;
 
+/// Build the nested `body.storage` sub-object for custom-content payloads
+/// from a storage XHTML string. The custom-content v2 endpoint uses a
+/// different envelope shape than `pages`/`blogposts`
+/// (`body.storage.{value,representation}` instead of
+/// `body.{representation,value}`), so this helper is local to the file.
+fn storage_body(value: &str) -> Value {
+    serde_json::json!({
+        "storage": { "value": value, "representation": "storage" }
+    })
+}
+
 /// Build the create-payload for a content-type (whiteboard / database /
 /// folder / etc.). `space_id` is required; `title`, `parent_id`, and
 /// `template_key` are appended only when present.
@@ -34,7 +45,7 @@ pub(super) fn build_custom_content_create_payload(
         "type": args.content_type,
         "spaceId": args.space_id,
         "title": args.title,
-        "body": { "storage": { "value": body, "representation": "storage" } }
+        "body": storage_body(body)
     })
 }
 
@@ -50,8 +61,7 @@ pub(super) fn build_custom_content_update_payload(
         payload["title"] = Value::String(t.clone());
     }
     if let Some(b) = body {
-        payload["body"] =
-            serde_json::json!({ "storage": { "value": b, "representation": "storage" } });
+        payload["body"] = storage_body(b);
     }
     payload
 }

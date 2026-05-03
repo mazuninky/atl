@@ -95,16 +95,16 @@ atl self update --to 2026.16.4   # pin to a specific version
 # First-time setup: interactive profile wizard
 atl init
 
-# Confluence
+# Confluence — markdown is the default on read and write
 atl confluence read 123456
 atl confluence search "space = DEV AND type = page" --limit 10
-atl confluence create --space DEV --title "Design notes" --body @notes.md --body-format markdown
+atl confluence create --space DEV --title "Design notes" --body @notes.md
 
-# Jira
+# Jira — markdown is the default on read and write
 atl jira me
 atl jira search "project = PROJ AND status = Open" --limit 20
 atl jira view PROJ-123
-atl jira create --project PROJ --issue-type Task --summary "Fix bug"
+atl jira create --project PROJ --issue-type Task --summary "Fix bug" --description @body.md
 atl jira move PROJ-123 --transition 31
 atl jira comment PROJ-123 --body "Done"
 
@@ -114,6 +114,37 @@ atl j view PROJ-123
 ```
 
 Command-line syntax notation used throughout the help text is documented in [`docs/command-line-syntax.md`](docs/command-line-syntax.md).
+
+## Working with markdown
+
+Markdown is the default body format for both Confluence and Jira on read and write. `atl c read` returns markdown; `atl c create --body @file.md` accepts markdown. Same for Jira: `atl j view` shows description and comments as markdown; `atl j create --description @file.md` and `atl j comment` accept markdown.
+
+For things markdown can't natively express — Confluence info panels, Jira `{warning}` macros, expanding sections, status lozenges, mentions, emoticons — `atl` extends markdown with MyST-style directives:
+
+```markdown
+:::info
+This is a panel — same syntax for `<ac:structured-macro ac:name="info">` (Confluence) and `{info}…{info}` (Jira).
+:::
+
+:::warning title="Heads up"
+Block panels accept attributes; nest by depth.
+:::
+
+:::expand title="Click me"
+Expand sections.
+:::
+
+:::toc maxLevel=3
+:::
+
+inline release :status[DONE]{color=green} ready
+notify :mention[@john]{accountId=abc123}
+:emoticon{name=warning} careful
+```
+
+Round-trip works in both directions: `read | $EDITOR | update` preserves panels, lists, code blocks, tables, mentions, status badges, etc. Raw formats are still available via `--body-format storage` / `wiki` / `adf` on read and `--input-format storage` / `wiki` / `adf` on write.
+
+Full reference (six converters, lossy mappings, edge cases) lives in [`skill/references/body-formats.md`](skill/references/body-formats.md).
 
 ## Configuration
 

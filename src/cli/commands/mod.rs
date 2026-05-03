@@ -5,10 +5,11 @@ pub mod browse;
 pub mod config;
 pub mod confluence;
 pub mod confluence_url;
+pub mod converters;
+pub mod directives;
 pub mod docs;
 pub mod init;
 pub mod jira;
-pub mod markdown;
 pub mod updater;
 pub mod updater_notifier;
 

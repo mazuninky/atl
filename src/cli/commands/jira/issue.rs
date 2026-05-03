@@ -271,7 +271,9 @@ async fn check(
     let fields_value = client.list_fields().await?;
     let all_fields: Vec<Value> = fields_value.as_array().cloned().unwrap_or_default();
 
-    let issue = client.get_issue(&args.key, &[]).await?;
+    let issue = client
+        .get_issue(&args.key, &[], crate::client::JiraApiVersion::V2)
+        .await?;
     let issue_fields = issue.get("fields").cloned().unwrap_or(Value::Null);
 
     let rows = build_report(&require, &warn, &issue_fields, &all_fields);

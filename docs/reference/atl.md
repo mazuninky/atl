@@ -119,6 +119,7 @@ Usage: atl confluence read [OPTIONS] <PAGE_ID>
 
 - `<PAGE_ID>` — Page ID
 - `--body-format` — Body format
+- `--no-directives` — Strip MyST-style directives (`:::info`/`:::warning`/etc.) from markdown output. No effect when `--body-format` is not `markdown`
 - `--include-labels` — Include labels in the response
 - `--include-properties` — Include properties in the response
 - `--include-operations` — Include operations in the response
@@ -1514,6 +1515,7 @@ Usage: atl confluence export [OPTIONS] <PAGE_ID>
 - `<PAGE_ID>` — Page ID
 - `--output-dir, -o` — Output directory (default: current directory)
 - `--body-format` — Body format for the page content
+- `--no-directives` — Strip MyST-style directives (`:::info`/`:::warning`/etc.) from markdown output. No effect when `--body-format` is not `markdown`
 - `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
 - `--quiet, -q` — Suppress all output except errors
 - `--config` — Path to configuration file
@@ -1966,6 +1968,7 @@ Usage: atl confluence blog read [OPTIONS] <BLOG_ID>
 
 - `<BLOG_ID>` — Blog post ID
 - `--body-format` — Body format
+- `--no-directives` — Strip MyST-style directives (`:::info`/`:::warning`/etc.) from markdown output. No effect when `--body-format` is not `markdown`
 - `--include-labels` — Include labels in the response
 - `--include-properties` — Include properties in the response
 - `--include-operations` — Include operations in the response
@@ -2716,6 +2719,8 @@ Usage: atl confluence footer-comment list [OPTIONS] <PAGE_ID>
 
 - `<PAGE_ID>` — Page ID
 - `--limit, -l` — Max results
+- `--body-format` — Body format for the comment body field in the response
+- `--no-directives` — Strip MyST-style directives (`:::info`/`:::warning`/etc.) from markdown output. No effect when `--body-format` is not `markdown`
 - `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
 - `--quiet, -q` — Suppress all output except errors
 - `--config` — Path to configuration file
@@ -2741,6 +2746,8 @@ Usage: atl confluence footer-comment get [OPTIONS] <COMMENT_ID>
 **Options**
 
 - `<COMMENT_ID>` — Comment ID
+- `--body-format` — Body format for the comment body field in the response
+- `--no-directives` — Strip MyST-style directives (`:::info`/`:::warning`/etc.) from markdown output. No effect when `--body-format` is not `markdown`
 - `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
 - `--quiet, -q` — Suppress all output except errors
 - `--config` — Path to configuration file
@@ -2766,7 +2773,9 @@ Usage: atl confluence footer-comment create [OPTIONS] --body <BODY> <PAGE_ID>
 **Options**
 
 - `<PAGE_ID>` — Page ID
-- `--body, -b` — Comment body (storage format). Use @file to read from file, or - for stdin
+- `--body, -b` — Comment body. Use @file to read from file, or - for stdin
+- `--input-format` — Input format for the body
+- `--parent-comment-id` — Parent comment ID. When set, the new comment is created as a reply to this comment (threaded). Omit for a top-level comment
 - `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
 - `--quiet, -q` — Suppress all output except errors
 - `--config` — Path to configuration file
@@ -2792,7 +2801,8 @@ Usage: atl confluence footer-comment update [OPTIONS] --body <BODY> --version <V
 **Options**
 
 - `<COMMENT_ID>` — Comment ID
-- `--body, -b` — Comment body (storage format). Use @file to read from file, or - for stdin
+- `--body, -b` — Comment body. Use @file to read from file, or - for stdin
+- `--input-format` — Input format for the body
 - `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
 - `--quiet, -q` — Suppress all output except errors
 - `--config` — Path to configuration file
@@ -3197,6 +3207,8 @@ Usage: atl confluence inline-comment list [OPTIONS] <PAGE_ID>
 - `<PAGE_ID>` — Page ID
 - `--limit, -l` — Max results
 - `--resolution-status` — Filter by resolution status (open, resolved, dangling)
+- `--body-format` — Body format for the comment body field in the response
+- `--no-directives` — Strip MyST-style directives (`:::info`/`:::warning`/etc.) from markdown output. No effect when `--body-format` is not `markdown`
 - `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
 - `--quiet, -q` — Suppress all output except errors
 - `--config` — Path to configuration file
@@ -3222,6 +3234,8 @@ Usage: atl confluence inline-comment get [OPTIONS] <COMMENT_ID>
 **Options**
 
 - `<COMMENT_ID>` — Comment ID
+- `--body-format` — Body format for the comment body field in the response
+- `--no-directives` — Strip MyST-style directives (`:::info`/`:::warning`/etc.) from markdown output. No effect when `--body-format` is not `markdown`
 - `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
 - `--quiet, -q` — Suppress all output except errors
 - `--config` — Path to configuration file
@@ -3247,9 +3261,11 @@ Usage: atl confluence inline-comment create [OPTIONS] --body <BODY> --inline-mar
 **Options**
 
 - `<PAGE_ID>` — Page ID
-- `--body, -b` — Comment body (storage format). Use @file to read from file, or - for stdin
+- `--body, -b` — Comment body. Use @file to read from file, or - for stdin
 - `--inline-marker-ref` — Inline marker reference (from the page content)
 - `--text-selection` — Text selection to highlight
+- `--input-format` — Input format for the body
+- `--parent-comment-id` — Parent comment ID. When set, the new comment is created as a reply to this comment (threaded). Omit for a top-level comment
 - `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
 - `--quiet, -q` — Suppress all output except errors
 - `--config` — Path to configuration file
@@ -3275,8 +3291,9 @@ Usage: atl confluence inline-comment update [OPTIONS] --body <BODY> --version <V
 **Options**
 
 - `<COMMENT_ID>` — Comment ID
-- `--body, -b` — Comment body (storage format). Use @file to read from file, or - for stdin
+- `--body, -b` — Comment body. Use @file to read from file, or - for stdin
 - `--resolved` — Mark as resolved or unresolved
+- `--input-format` — Input format for the body
 - `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
 - `--quiet, -q` — Suppress all output except errors
 - `--config` — Path to configuration file
@@ -6397,6 +6414,8 @@ Usage: atl jira view [OPTIONS] <KEY>
 
 - `<KEY>` — Issue key (e.g. PROJ-123)
 - `--web` — Open the issue in a browser instead of printing
+- `--body-format` — Output format for description and comment bodies
+- `--no-directives` — Strip MyST-style directives (`:::info`/`:::warning`/etc.) from markdown output. No effect when `--body-format` is not `markdown`
 - `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
 - `--quiet, -q` — Suppress all output except errors
 - `--config` — Path to configuration file
@@ -6597,6 +6616,8 @@ Usage: atl jira comments [OPTIONS] <KEY>
 **Options**
 
 - `<KEY>` — Issue key (e.g. PROJ-123)
+- `--body-format` — Output format for comment bodies
+- `--no-directives` — Strip MyST-style directives (`:::info`/`:::warning`/etc.) from markdown output. No effect when `--body-format` is not `markdown`
 - `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
 - `--quiet, -q` — Suppress all output except errors
 - `--config` — Path to configuration file
@@ -6623,6 +6644,8 @@ Usage: atl jira comment-get [OPTIONS] <KEY> <COMMENT_ID>
 
 - `<KEY>` — Issue key (e.g. PROJ-123)
 - `<COMMENT_ID>` — Comment ID
+- `--body-format` — Output format for the comment body
+- `--no-directives` — Strip MyST-style directives (`:::info`/`:::warning`/etc.) from markdown output. No effect when `--body-format` is not `markdown`
 - `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
 - `--quiet, -q` — Suppress all output except errors
 - `--config` — Path to configuration file

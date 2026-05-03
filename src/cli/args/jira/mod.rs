@@ -27,10 +27,40 @@ pub use workflow::*;
 #[derive(Debug, Clone, Copy, Default, ValueEnum)]
 pub enum JiraInputFormat {
     /// Jira wiki syntax (sent as-is)
-    #[default]
     Wiki,
-    /// Markdown (converted to Jira wiki syntax)
+    /// Markdown — converted to ADF on Cloud (v3 API), Jira wiki on Data Center / Server (v2 API)
+    #[default]
     Markdown,
+    /// ADF JSON (sent via Cloud v3 API; not available on Data Center / Server)
+    Adf,
+}
+
+/// Output format for Jira description and comment bodies on read.
+///
+/// `Wiki` and `Adf` return the raw API representation untouched. `Markdown`
+/// auto-detects the body shape (string = wiki, object with `"type": "doc"` =
+/// ADF) and runs it through the matching converter so the user gets a
+/// MyST-flavoured markdown string regardless of the upstream API version.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, ValueEnum)]
+pub enum JiraBodyFormat {
+    /// Jira wiki syntax (raw, as returned by the API)
+    Wiki,
+    /// Markdown — wiki/ADF descriptions and comments are converted to MyST-style markdown
+    #[default]
+    Markdown,
+    /// ADF JSON (Cloud only; uses v3 API)
+    Adf,
+}
+
+impl JiraBodyFormat {
+    /// Stable short identifier suitable for log/diagnostic output.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Wiki => "wiki",
+            Self::Markdown => "markdown",
+            Self::Adf => "adf",
+        }
+    }
 }
 
 #[derive(Debug, Args)]
@@ -66,7 +96,7 @@ pub enum JiraSubcommand {
     Comment(JiraCommentArgs),
 
     /// List comments for an issue
-    Comments(JiraIssueKeyArgs),
+    Comments(JiraCommentsArgs),
 
     /// Get a specific comment
     CommentGet(JiraCommentGetArgs),

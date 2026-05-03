@@ -647,6 +647,20 @@ fn cmd_uses_pager(cmd: &JiraSubcommand) -> bool {
     matches!(cmd, JiraSubcommand::View(_) | JiraSubcommand::Search(_))
 }
 
+/// Returns true when `dispatch` should run the read-side flatten helpers
+/// (`flatten_issue` / `flatten_issues`) on the response.
+///
+/// Flattening is purely a presentation step for the console table reporter:
+/// it drops `id`, `self`, `expand`, and the entire nested `fields.*` subtree
+/// in favour of a hand-picked set of human-friendly columns. When `--jq` or
+/// `--template` is set the user is operating on structured data, and
+/// silently throwing away fields their filter may reference (the classic
+/// `--template '{{ id }}' → "none"` footgun) is worse than printing raw
+/// JSON. Only flatten for plain `--format console` with no transforms.
+fn should_flatten_for_console(format: &OutputFormat, transforms: &Transforms<'_>) -> bool {
+    matches!(format, OutputFormat::Console) && transforms.is_noop()
+}
+
 /// Flattens Jira issue objects for human-readable console table display.
 ///
 /// Extracts key fields from the nested `fields` object and drops metadata
@@ -837,9 +851,12 @@ async fn dispatch(
             // For human-readable output, extract the issues array and flatten
             // nested fields so the console reporter renders a clean table
             // instead of a raw JSON blob. Skip flattening when the user
-            // requested custom fields — flatten would drop them.
+            // requested custom fields — flatten would drop them. Also skip
+            // when `--jq` or `--template` is set: the user is operating on
+            // structured data and flattening silently strips fields like
+            // `.id` and `.self` that their filter may reference.
             let is_default_fields = args.fields == "key,summary,status,assignee,priority";
-            if matches!(format, OutputFormat::Console) {
+            if should_flatten_for_console(format, transforms) {
                 let issues = value.get("issues").cloned().unwrap_or(value);
                 if is_default_fields {
                     flatten_issues(issues)
@@ -855,7 +872,12 @@ async fn dispatch(
             let api_version = read_api_version_for(args.body_format, client.flavor());
             let mut value = client.get_issue(&args.key, &[], api_version).await?;
             convert_issue_bodies(&mut value, args.body_format, !args.no_directives)?;
-            if matches!(format, OutputFormat::Console) {
+            // Flatten only for the human-readable console table. Skip when
+            // `--jq` or `--template` is set: flatten drops `.id`, `.self`,
+            // and the full `.fields.*` subtree, which silently turns the
+            // user's filter into garbage (e.g. `.id` becomes null and a
+            // template renders it as `none`).
+            if should_flatten_for_console(format, transforms) {
                 if matches!(args.body_format, JiraBodyFormat::Adf) {
                     stringify_adf_bodies(&mut value);
                 }
@@ -2213,6 +2235,64 @@ mod tests {
             transition: "31".into(),
         });
         assert!(!cmd_uses_pager(&cmd));
+    }
+
+    // ---- should_flatten_for_console ----
+    //
+    // Regression tests for the bug where `--template '{{ id }}'` rendered
+    // `none` because `flatten_issue` ran before the transform pipeline saw
+    // the value, dropping `.id`/`.self`/`.fields.*`. With this gate the
+    // flatten step only fires when there is no `--jq` or `--template`.
+
+    #[test]
+    fn should_flatten_for_console_default_console_with_no_transforms() {
+        // Plain `atl jira view ORB-1` — flatten enables the console table.
+        assert!(should_flatten_for_console(
+            &OutputFormat::Console,
+            &Transforms::none()
+        ));
+    }
+
+    #[test]
+    fn should_flatten_for_console_skipped_when_template_set() {
+        // `atl jira view ORB-1 --template '{{ id }}'` — the template needs
+        // the full structured response, so flatten must NOT run even though
+        // the format is still Console (templates override format to text
+        // downstream in `apply`).
+        let t = Transforms {
+            jq: None,
+            template: Some("{{ id }}"),
+        };
+        assert!(!should_flatten_for_console(&OutputFormat::Console, &t));
+    }
+
+    #[test]
+    fn should_flatten_for_console_skipped_when_jq_set() {
+        // `atl jira view ORB-1 --jq '.id'` — same reason as the template
+        // case: flatten would silently turn `.id` into null.
+        let t = Transforms {
+            jq: Some(".id"),
+            template: None,
+        };
+        assert!(!should_flatten_for_console(&OutputFormat::Console, &t));
+    }
+
+    #[test]
+    fn should_flatten_for_console_skipped_for_non_console_formats() {
+        // `-F json`/`-F toon`/etc. always preserve the raw response, with or
+        // without transforms — flatten only ever made sense for the console
+        // table reporter.
+        for fmt in [
+            OutputFormat::Json,
+            OutputFormat::Toon,
+            OutputFormat::Toml,
+            OutputFormat::Csv,
+        ] {
+            assert!(
+                !should_flatten_for_console(&fmt, &Transforms::none()),
+                "flatten must be skipped for {fmt:?}"
+            );
+        }
     }
 
     // ---- today_date ----

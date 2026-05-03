@@ -66,6 +66,22 @@ pub async fn run(
     dispatch(cmd, &client, instance, format, io, transforms).await
 }
 
+/// Returns true when `dispatch` should run the read-side flatten helpers
+/// (`flatten_confluence_page` / `flatten_confluence_search`) and the inline
+/// tree renderer on the response.
+///
+/// Flattening (and the tree print) is purely a presentation step for the
+/// console reporter: it drops fields like `_links`, `_expandable`, and
+/// nested metadata in favour of a hand-picked set of human-friendly
+/// columns. When `--jq` or `--template` is set the user is operating on
+/// structured data, and silently throwing away fields their filter may
+/// reference (e.g. `--jq '._links.webui'` collapsing to `null`) is worse
+/// than letting the raw JSON flow through. Only flatten / tree-render for
+/// plain `--format console` with no transforms.
+fn should_flatten_for_console(format: &OutputFormat, transforms: &Transforms<'_>) -> bool {
+    matches!(format, OutputFormat::Console) && transforms.is_noop()
+}
+
 /// Returns true when the long-form output of `cmd` would benefit from a
 /// pager. Only the read-heavy "view" commands qualify; mutating or
 /// short-output commands are excluded so user-facing prompts and progress
@@ -316,7 +332,7 @@ async fn dispatch(
                     render_directives: !args.no_directives,
                 },
             )?;
-            if matches!(format, OutputFormat::Console) && expand.is_empty() {
+            if should_flatten_for_console(format, transforms) && expand.is_empty() {
                 flatten_confluence_page(value, instance, &rendered)
             } else {
                 rewrite_body_field(value, args.body_format, rendered)
@@ -329,7 +345,7 @@ async fn dispatch(
             } else {
                 client.search(&args.cql, args.limit).await?
             };
-            if matches!(format, OutputFormat::Console) {
+            if should_flatten_for_console(format, transforms) {
                 flatten_confluence_search(value)
             } else {
                 value
@@ -341,7 +357,12 @@ async fn dispatch(
                 let tree_value = client
                     .get_children_recursive(&args.page_id, args.depth, args.limit)
                     .await?;
-                if args.tree && matches!(format, OutputFormat::Console) {
+                // Only render the inline ASCII tree on plain console output.
+                // When `--jq` / `--template` is set the user wants to operate
+                // on the raw JSON tree value — printing the tree directly to
+                // stdout here would bypass the transform pipeline and force
+                // a non-JSON view of the data.
+                if args.tree && should_flatten_for_console(format, transforms) {
                     let mut stdout = io.stdout();
                     render_tree(&tree_value, 0, true, &mut stdout)?;
                     stdout.flush()?;
@@ -396,7 +417,7 @@ async fn dispatch(
         ConfluenceSubcommand::Find(args) => {
             let cql = build_find_cql(&args.title, args.space.as_deref());
             let value = client.search(&cql, args.limit).await?;
-            if matches!(format, OutputFormat::Console) {
+            if should_flatten_for_console(format, transforms) {
                 flatten_confluence_search(value)
             } else {
                 value
@@ -1134,6 +1155,66 @@ mod tests {
             draft: false,
         });
         assert!(!cmd_uses_pager(&cmd));
+    }
+
+    // ---- should_flatten_for_console ----
+    //
+    // Regression tests for the bug where `--jq '._links.webui'` rendered
+    // `null` because `flatten_confluence_page` ran before the transform
+    // pipeline saw the value, dropping `_links` (and other nested fields)
+    // off the response. With this gate the flatten / tree-render step only
+    // fires when there is no `--jq` or `--template`.
+
+    #[test]
+    fn should_flatten_for_console_default_console_no_transforms() {
+        // Plain `atl confluence read 1` — flatten enables the console table.
+        assert!(should_flatten_for_console(
+            &OutputFormat::Console,
+            &Transforms::none()
+        ));
+    }
+
+    #[test]
+    fn should_flatten_for_console_skipped_when_template_set() {
+        // `atl confluence read 1 --template '{{ _links.webui }}'` — the
+        // template needs the full structured response, so flatten must NOT
+        // run even though the format is still Console (templates override
+        // format to text downstream in `apply`).
+        let t = Transforms {
+            jq: None,
+            template: Some("{{ _links.webui }}"),
+        };
+        assert!(!should_flatten_for_console(&OutputFormat::Console, &t));
+    }
+
+    #[test]
+    fn should_flatten_for_console_skipped_when_jq_set() {
+        // `atl confluence read 1 --jq '._links.webui'` — same reason as the
+        // template case: flatten would silently turn `._links.webui` into
+        // null because the field is dropped.
+        let t = Transforms {
+            jq: Some("._links.webui"),
+            template: None,
+        };
+        assert!(!should_flatten_for_console(&OutputFormat::Console, &t));
+    }
+
+    #[test]
+    fn should_flatten_for_console_skipped_for_json_format() {
+        // `-F json` / `-F toon` / etc. always preserve the raw response, with
+        // or without transforms — flatten only ever made sense for the
+        // console reporter.
+        for fmt in [
+            OutputFormat::Json,
+            OutputFormat::Toon,
+            OutputFormat::Toml,
+            OutputFormat::Csv,
+        ] {
+            assert!(
+                !should_flatten_for_console(&fmt, &Transforms::none()),
+                "flatten must be skipped for {fmt:?}"
+            );
+        }
     }
 
     // ---- flatten_confluence_search additional cases ----

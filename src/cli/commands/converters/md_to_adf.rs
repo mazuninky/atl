@@ -1475,6 +1475,44 @@ mod tests {
     }
 
     #[test]
+    fn hard_break_emits_hard_break_node() {
+        // Spec check: `Foo  \nBar` parses to a paragraph whose inline content
+        // is `[text "Foo", hardBreak, text "Bar"]`. The two trailing spaces
+        // before the newline are the CommonMark "hard line break" marker —
+        // the resulting `hardBreak` ADF node carries no attrs.
+        let doc = convert("Foo  \nBar");
+        let inline = doc["content"][0]["content"].as_array().unwrap();
+        assert_eq!(
+            inline.len(),
+            3,
+            "expected [text, hardBreak, text], got: {inline:#?}"
+        );
+        assert_eq!(inline[0]["type"], "text");
+        assert_eq!(inline[0]["text"], "Foo");
+        assert_eq!(inline[1]["type"], "hardBreak");
+        assert!(
+            inline[1].get("attrs").is_none(),
+            "hardBreak must not carry attrs, got: {:#?}",
+            inline[1]
+        );
+        assert_eq!(inline[2]["type"], "text");
+        assert_eq!(inline[2]["text"], "Bar");
+    }
+
+    #[test]
+    fn soft_break_does_not_emit_hard_break() {
+        // A regular newline (no two trailing spaces) is a CommonMark "soft
+        // break", which the renderer collapses to a single space inside the
+        // surrounding text run. No `hardBreak` node should be produced.
+        let doc = convert("Foo\nBar");
+        let inline = doc["content"][0]["content"].as_array().unwrap();
+        assert!(
+            inline.iter().all(|n| n["type"] != "hardBreak"),
+            "soft break must not produce hardBreak: {inline:#?}"
+        );
+    }
+
+    #[test]
     fn plain_text_omits_marks_field() {
         let doc = convert("plain");
         let t = text_node_at(&doc, 0);

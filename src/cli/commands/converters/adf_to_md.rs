@@ -575,15 +575,29 @@ fn is_strong_only_paragraph(node: &Value) -> bool {
 }
 
 fn render_expand(node: &Value, body: &[Value], out: &mut String, ctx: &mut Ctx) {
-    if !ctx.opts.render_directives {
-        render_blocks(body, out, ctx);
-        return;
-    }
     let title = node
         .get("attrs")
         .and_then(|a| a.get("title"))
         .and_then(Value::as_str)
         .unwrap_or("");
+
+    if !ctx.opts.render_directives {
+        // Strip the wrapper, but preserve the title as a bold paragraph so
+        // it isn't silently dropped. ADF panels stash their title as a
+        // strong-marked first paragraph inside the panel body — those
+        // already survive a `--no-directives` round-trip naturally because
+        // we just render the body. ADF `expand`, by contrast, keeps the
+        // title on the node's `attrs.title` field (no body paragraph), so
+        // we have to materialise it here for parity with the panel path.
+        if !title.is_empty() {
+            ensure_blank_line(out);
+            out.push_str("**");
+            out.push_str(title);
+            out.push_str("**\n\n");
+        }
+        render_blocks(body, out, ctx);
+        return;
+    }
     let mut params: BTreeMap<String, String> = BTreeMap::new();
     if !title.is_empty() {
         params.insert("title".to_string(), title.to_string());
@@ -1693,6 +1707,49 @@ mod tests {
     }
 
     #[test]
+    fn hard_break_round_trips_as_two_spaces_newline() {
+        // ADF paragraph `[text "Foo", hardBreak, text "Bar"]` must render
+        // as `Foo  \nBar` so feeding the result back through md_to_adf
+        // reproduces the same hardBreak node.
+        let adf = one_para(json!([
+            {"type": "text", "text": "Foo"},
+            {"type": "hardBreak"},
+            {"type": "text", "text": "Bar"}
+        ]));
+        let md = convert(&adf);
+        assert!(
+            md.contains("Foo  \nBar"),
+            "expected 'Foo  \\nBar' (two spaces + newline), got: {md:?}"
+        );
+    }
+
+    #[test]
+    fn hard_break_at_end_of_paragraph_not_emitted() {
+        // A trailing hardBreak at the end of paragraph content is redundant —
+        // the paragraph's closing `\n\n` already separates blocks, so any
+        // stray two-space marker would show up as ugly whitespace in the
+        // rendered output. `push_block` trims trailing whitespace from the
+        // inline buffer, so the hardBreak collapses away naturally.
+        let adf = one_para(json!([
+            {"type": "text", "text": "Foo"},
+            {"type": "hardBreak"}
+        ]));
+        let md = convert(&adf);
+        // Each non-empty block ends with `\n\n`. The trailing hardBreak
+        // means the inline buffer ends with `Foo  \n`, but `push_block`
+        // calls `.trim()` so the final output ends in `Foo\n\n`, no stray
+        // trailing spaces before the block separator.
+        assert!(
+            md.ends_with("Foo\n\n") || md.ends_with("Foo\n") || md.trim_end() == "Foo",
+            "expected paragraph to end cleanly with 'Foo' (no trailing two-space marker), got: {md:?}"
+        );
+        assert!(
+            !md.contains("Foo  \n\n"),
+            "trailing hardBreak must not leave a stray two-space marker before the block separator, got: {md:?}"
+        );
+    }
+
+    #[test]
     fn underline_emits_html_tag() {
         let adf = one_para(json!([
             {"type": "text", "text": "x", "marks": [{"type": "underline"}]}
@@ -1839,6 +1896,65 @@ mod tests {
         let md = convert(&adf);
         assert!(md.contains(":::expand\n"), "got: {md:?}");
         assert!(!md.contains("title="), "got: {md:?}");
+    }
+
+    #[test]
+    fn expand_node_no_directives_renders_title_as_bold() {
+        // ADF `expand` keeps its title on `attrs.title` (no body paragraph),
+        // so a `--no-directives` strip would drop it without explicit
+        // handling. Render the title as a bold paragraph so it survives —
+        // matches how panel titles flow through as strong-marked first
+        // paragraphs.
+        let adf = doc(json!([
+            {
+                "type": "expand",
+                "attrs": {"title": "Click to expand"},
+                "content": [
+                    {"type": "paragraph", "content": [{"type": "text", "text": "Hidden"}]}
+                ]
+            }
+        ]));
+        let md = convert_no_directives(&adf);
+        assert!(
+            md.contains("**Click to expand**"),
+            "expected bold title, got: {md:?}"
+        );
+        assert!(md.contains("Hidden"), "got: {md:?}");
+        assert!(
+            !md.contains(":::expand"),
+            "directive wrapper must be stripped, got: {md:?}"
+        );
+        // Title must precede body.
+        let title_idx = md.find("**Click to expand**").expect("title present");
+        let body_idx = md.find("Hidden").expect("body present");
+        assert!(
+            title_idx < body_idx,
+            "title must come before body, got: {md:?}"
+        );
+    }
+
+    #[test]
+    fn expand_node_no_directives_no_title_emits_only_body() {
+        // No title attribute → emit just the body, no stray bold marker.
+        let adf = doc(json!([
+            {
+                "type": "expand",
+                "attrs": {"title": ""},
+                "content": [
+                    {"type": "paragraph", "content": [{"type": "text", "text": "Hidden"}]}
+                ]
+            }
+        ]));
+        let md = convert_no_directives(&adf);
+        assert!(md.contains("Hidden"), "got: {md:?}");
+        assert!(
+            !md.contains("**"),
+            "must not emit empty bold marker when no title present, got: {md:?}"
+        );
+        assert!(
+            !md.contains(":::expand"),
+            "directive wrapper must be stripped, got: {md:?}"
+        );
     }
 
     #[test]

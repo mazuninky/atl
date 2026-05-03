@@ -1111,6 +1111,25 @@ fn emit_structured_macro(
             }
             return;
         }
+        // The `expand` macro keeps its title in an `<ac:parameter>` element
+        // rather than as a bold paragraph at the top of its rich-text body,
+        // so a naive `--no-directives` strip would drop it. Materialise the
+        // title as a bold paragraph so users still see what the expand was
+        // labelled as. Mirrors the equivalent fix in adf_to_md::render_expand.
+        if macro_name == "expand" {
+            let title = params.get("title").cloned().unwrap_or_default();
+            if !title.is_empty() {
+                ensure_blank_line(out);
+                out.push_str("**");
+                out.push_str(&title);
+                out.push_str("**\n\n");
+            }
+            if !body_md.is_empty() {
+                out.push_str(&body_md);
+                out.push_str("\n\n");
+            }
+            return;
+        }
         if !body_md.is_empty() {
             ensure_blank_line(out);
             out.push_str(&body_md);
@@ -1804,6 +1823,18 @@ mod tests {
         assert!(out.contains("  \n"), "got: {out:?}");
     }
 
+    #[test]
+    fn br_tag_becomes_two_spaces_newline() {
+        // Storage `<p>Foo<br/>Bar</p>` must render as markdown `Foo  \nBar`
+        // — the two-space marker is the CommonMark "hard line break" that a
+        // round-trip through md_to_storage reproduces as `<br/>`.
+        let out = convert("<p>Foo<br/>Bar</p>");
+        assert!(
+            out.contains("Foo  \nBar"),
+            "expected 'Foo  \\nBar' (two spaces + newline), got: {out:?}"
+        );
+    }
+
     // ---- tables -----------------------------------------------------------
 
     #[test]
@@ -1914,6 +1945,51 @@ mod tests {
         let out = convert_no_directives(xhtml);
         assert!(out.contains("Just the body"), "got: {out:?}");
         assert!(!out.contains(":::info"), "got: {out:?}");
+    }
+
+    #[test]
+    fn expand_no_directives_renders_title_as_bold() {
+        // `:::expand title="Click me"` → storage stashes the title in an
+        // `<ac:parameter ac:name="title">` element. With render_directives
+        // off, a naive strip would drop the title entirely; we render it as
+        // a bold paragraph so the user still sees what the expand was
+        // labelled as (mirrors how the warning panel preserves its title
+        // through a strong-marked first paragraph in its body).
+        let xhtml = r#"<ac:structured-macro ac:name="expand"><ac:parameter ac:name="title">Click me</ac:parameter><ac:rich-text-body><p>Hidden</p></ac:rich-text-body></ac:structured-macro>"#;
+        let out = convert_no_directives(xhtml);
+        assert!(
+            out.contains("**Click me**"),
+            "expected bold title, got: {out:?}"
+        );
+        assert!(out.contains("Hidden"), "got: {out:?}");
+        assert!(
+            !out.contains(":::expand"),
+            "directive wrapper must be stripped, got: {out:?}"
+        );
+        // Title must precede body.
+        let title_idx = out.find("**Click me**").expect("title present");
+        let body_idx = out.find("Hidden").expect("body present");
+        assert!(
+            title_idx < body_idx,
+            "title must come before body, got: {out:?}"
+        );
+    }
+
+    #[test]
+    fn expand_no_directives_no_title_emits_only_body() {
+        // No `<ac:parameter ac:name="title">` element → we emit just the
+        // body, no stray empty bold paragraph.
+        let xhtml = r#"<ac:structured-macro ac:name="expand"><ac:rich-text-body><p>Hidden</p></ac:rich-text-body></ac:structured-macro>"#;
+        let out = convert_no_directives(xhtml);
+        assert!(out.contains("Hidden"), "got: {out:?}");
+        assert!(
+            !out.contains("**"),
+            "must not emit empty bold marker when no title present, got: {out:?}"
+        );
+        assert!(
+            !out.contains(":::expand"),
+            "directive wrapper must be stripped, got: {out:?}"
+        );
     }
 
     // ---- inline macros ----------------------------------------------------

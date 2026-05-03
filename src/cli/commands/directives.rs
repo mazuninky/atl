@@ -385,10 +385,37 @@ pub fn parse_attrs(s: &str) -> Result<BTreeMap<String, String>, DirectiveError> 
     Ok(out)
 }
 
+/// Preferred attribute key order. Keys appearing in this list are emitted
+/// first, in this order, before any other keys (which then sort
+/// alphabetically). This produces output that matches how a human would
+/// naturally write the attribute list — e.g. `src=… alt=…` instead of the
+/// raw `BTreeMap` alphabetical ordering `alt=… src=…`.
+///
+/// The list deliberately includes the union of well-known attributes across
+/// every directive (image, link, mention, status, panel, expand, toc, …) so
+/// the canonical ordering is stable regardless of which directive is being
+/// rendered.
+const PREFERRED_ATTR_ORDER: &[&str] = &[
+    "src",
+    "alt",
+    "title",
+    "url",
+    "pageId",
+    "spaceKey",
+    "accountId",
+    "name",
+    "color",
+    "kind",
+    "maxLevel",
+];
+
 /// Render an attribute map as a canonical string.
 ///
-/// - Keys are emitted in alphabetical order (the `BTreeMap` ordering is
-///   already alphabetical, but this is documented as part of the contract).
+/// - Keys listed in [`PREFERRED_ATTR_ORDER`] are emitted first, in that order
+///   (when present). Remaining keys follow, sorted alphabetically. The
+///   preferred ordering matches how a human would write the directive
+///   (`src=… alt=…`) rather than the raw `BTreeMap` alphabetical ordering
+///   (`alt=… src=…`).
 /// - Values are quoted only when they contain whitespace, `=`, `"`, or `\`.
 /// - `"` and `\` inside quoted values are escaped with `\`.
 /// - Pairs are separated by a single space.
@@ -397,14 +424,31 @@ pub fn parse_attrs(s: &str) -> Result<BTreeMap<String, String>, DirectiveError> 
 ///
 /// ```ignore
 /// let mut m = BTreeMap::new();
-/// m.insert("title".into(), "Heads up".into());
-/// m.insert("mode".into(), "collapsed".into());
-/// assert_eq!(render_attrs(&m), r#"mode=collapsed title="Heads up""#);
+/// m.insert("alt".into(), "x".into());
+/// m.insert("src".into(), "a.png".into());
+/// assert_eq!(render_attrs(&m), "src=a.png alt=x");
 /// ```
 #[must_use]
 pub fn render_attrs(params: &BTreeMap<String, String>) -> String {
-    let mut parts = Vec::with_capacity(params.len());
-    for (k, v) in params {
+    let mut ordered: Vec<&String> = Vec::with_capacity(params.len());
+    // Preferred keys first, in canonical order.
+    for &preferred in PREFERRED_ATTR_ORDER {
+        if let Some((k, _)) = params.get_key_value(preferred) {
+            ordered.push(k);
+        }
+    }
+    // Remaining keys (not in PREFERRED_ATTR_ORDER), alphabetically. The
+    // BTreeMap already iterates alphabetically, so a single linear scan is
+    // enough.
+    for k in params.keys() {
+        if !PREFERRED_ATTR_ORDER.contains(&k.as_str()) {
+            ordered.push(k);
+        }
+    }
+
+    let mut parts = Vec::with_capacity(ordered.len());
+    for k in ordered {
+        let v = &params[k];
         parts.push(format!("{k}={}", quote_value_if_needed(v)));
     }
     parts.join(" ")
@@ -922,11 +966,57 @@ mod tests {
 
     #[test]
     fn render_attrs_sorted_keys() {
+        // None of these keys are in PREFERRED_ATTR_ORDER, so they fall back
+        // to alphabetical ordering (the second tier of the canonical sort).
         let mut m = BTreeMap::new();
         m.insert("z".to_string(), "1".to_string());
         m.insert("a".to_string(), "2".to_string());
         m.insert("m".to_string(), "3".to_string());
         assert_eq!(render_attrs(&m), "a=2 m=3 z=1");
+    }
+
+    #[test]
+    fn render_attrs_uses_canonical_order_for_known_keys() {
+        // `src` and `alt` are both in PREFERRED_ATTR_ORDER. Even though the
+        // underlying BTreeMap iterates alphabetically (`alt` first), the
+        // canonical render emits `src` first because it precedes `alt` in
+        // the preferred list — matching how a human would naturally write
+        // an `:image{src=… alt=…}` directive.
+        let mut m = BTreeMap::new();
+        m.insert("alt".to_string(), "diagram".to_string());
+        m.insert("src".to_string(), "https://example.com/img.png".to_string());
+        assert_eq!(
+            render_attrs(&m),
+            "src=https://example.com/img.png alt=diagram"
+        );
+    }
+
+    #[test]
+    fn render_attrs_appends_unknown_keys_alphabetized() {
+        // Preferred keys (`src`, `alt`) come first in canonical order;
+        // unknown keys (`bar`, `foo`) follow, sorted alphabetically.
+        let mut m = BTreeMap::new();
+        m.insert("foo".to_string(), "1".to_string());
+        m.insert("src".to_string(), "u".to_string());
+        m.insert("bar".to_string(), "2".to_string());
+        m.insert("alt".to_string(), "a".to_string());
+        assert_eq!(render_attrs(&m), "src=u alt=a bar=2 foo=1");
+    }
+
+    #[test]
+    fn render_attrs_handles_only_unknown_keys() {
+        // No preferred keys at all → fall back to alphabetical ordering.
+        let mut m = BTreeMap::new();
+        m.insert("x".to_string(), "1".to_string());
+        m.insert("a".to_string(), "2".to_string());
+        m.insert("m".to_string(), "3".to_string());
+        assert_eq!(render_attrs(&m), "a=2 m=3 x=1");
+    }
+
+    #[test]
+    fn render_attrs_empty_map_returns_empty() {
+        // Regression: empty input must produce empty output (no stray space).
+        assert_eq!(render_attrs(&BTreeMap::new()), "");
     }
 
     #[test]

@@ -930,6 +930,22 @@ mod tests {
     }
 
     #[test]
+    fn hard_break_emits_br_tag() {
+        // CommonMark hard break: two trailing spaces before a newline. The
+        // storage XML must preserve the break as a `<br/>` element so a
+        // round-trip through storage_to_markdown reproduces the two-space
+        // marker. Comrak emits `<br />` (with a space and self-closing
+        // slash) — both are valid in Confluence storage XHTML.
+        let out = convert("Foo  \nBar");
+        assert!(
+            out.contains("<br />") || out.contains("<br/>"),
+            "expected <br/> between Foo and Bar, got: {out}"
+        );
+        assert!(out.contains("Foo"), "got: {out}");
+        assert!(out.contains("Bar"), "got: {out}");
+    }
+
+    #[test]
     fn link_passes_through() {
         let out = convert("[t](https://e.com)");
         assert!(out.contains(r#"href="https://e.com""#), "got: {out}");

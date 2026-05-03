@@ -54,9 +54,11 @@ Search issues. JQL is optional — filter flags can be used standalone or combin
 
 View an issue.
 
-| Flag | Description |
-|---|---|
-| `--web` | Open in browser |
+| Flag | Default | Description |
+|---|---|---|
+| `--body-format` | `markdown` | Output format for description and comments: `markdown` (default), `wiki` (raw Jira wiki), `adf` (Cloud only — uses v3 API) |
+| `--no-directives` | | Strip MyST-style directives (`:::info`, `:status[…]`, etc.) from markdown output |
+| `--web` | | Open in browser |
 
 ### `atl j create`
 
@@ -75,6 +77,7 @@ Create a new issue.
 | `--fix-version` | | | Fix version(s), comma-separated |
 | `--component` | | | Component(s), comma-separated |
 | `--custom` | | | Custom field (repeatable): `customfield_10001=value` |
+| `--input-format` | | | Format of `--description`: `markdown` (default), `wiki`, `adf` (Cloud only) |
 
 ### `atl j update <KEY>`
 
@@ -90,6 +93,7 @@ Update an issue. All flags are optional — only specified fields are changed.
 | `--fix-version` | | Fix version(s), comma-separated |
 | `--component` | | Component(s), comma-separated |
 | `--custom` | | Custom field (repeatable) |
+| `--input-format` | | Format of `--description`: `markdown` (default), `wiki`, `adf` (Cloud only) |
 
 ### `atl j delete <KEY>`
 
@@ -209,13 +213,27 @@ List all labels.
 
 Add a comment. Body supports `@file` and `-` (stdin).
 
+| Flag | Default | Description |
+|---|---|---|
+| `--input-format` | `markdown` | Body format: `markdown` (default), `wiki`, `adf` (Cloud only) |
+
 ### `atl j comments <KEY>`
 
 List comments for an issue.
 
+| Flag | Default | Description |
+|---|---|---|
+| `--body-format` | `markdown` | Output format for comment bodies: `markdown` (default), `wiki`, `adf` (Cloud only) |
+| `--no-directives` | | Strip MyST-style directives from markdown output |
+
 ### `atl j comment-get <KEY> <COMMENT_ID>`
 
 Get a specific comment.
+
+| Flag | Default | Description |
+|---|---|---|
+| `--body-format` | `markdown` | Output format: `markdown` (default), `wiki`, `adf` (Cloud only) |
+| `--no-directives` | | Strip MyST-style directives from markdown output |
 
 ### `atl j comment-delete <KEY> <COMMENT_ID>`
 

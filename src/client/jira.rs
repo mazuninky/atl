@@ -3,6 +3,7 @@ use tokio::sync::OnceCell;
 use tracing::debug;
 
 use crate::auth::SecretStore;
+use crate::cli::commands::converters::body_content::JiraBodyContent;
 use crate::config::{AtlassianInstance, JiraFlavor};
 use crate::error::Error;
 
@@ -10,6 +11,21 @@ use super::{
     HttpClient, RetryConfig, build_base_url, build_http_client, handle_response,
     handle_response_maybe_empty, read_sanitized_error_body,
 };
+
+/// Selects which Jira REST API version to call.
+///
+/// The Jira v2 API (`/rest/api/2`) is universally available and accepts wiki
+/// text as the description / comment body. The Jira v3 API (`/rest/api/3`) is
+/// Cloud-only and accepts ADF JSON objects in those same fields. Callers pick
+/// the version based on the user-supplied [`JiraBodyContent`] variant.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum JiraApiVersion {
+    /// `/rest/api/2` — wiki text payloads. Available on Cloud and Data Center.
+    #[default]
+    V2,
+    /// `/rest/api/3` — ADF JSON payloads. Cloud only.
+    V3,
+}
 
 pub struct JiraClient {
     http: HttpClient,
@@ -88,6 +104,23 @@ impl JiraClient {
     /// Public accessor for the REST API base URL.
     pub fn base_url(&self) -> &str {
         &self.base_url
+    }
+
+    /// Public accessor for the deployment flavor (Cloud vs Data Center).
+    ///
+    /// Command handlers use this to validate that ADF input — which requires
+    /// the v3 API — is only attempted against Cloud instances.
+    #[must_use]
+    pub fn flavor(&self) -> JiraFlavor {
+        self.flavor
+    }
+
+    /// Pick the right REST base URL for the given API version.
+    fn base_url_for(&self, version: JiraApiVersion) -> String {
+        match version {
+            JiraApiVersion::V2 => self.base_url.clone(),
+            JiraApiVersion::V3 => self.v3_base_url(),
+        }
     }
 
     /// Search for issues matching a JQL query.
@@ -230,8 +263,21 @@ impl JiraClient {
         }))
     }
 
-    pub async fn get_issue(&self, issue_key: &str, fields: &[&str]) -> Result<Value, Error> {
-        let url = format!("{}/issue/{issue_key}", self.base_url);
+    /// Fetch a single issue.
+    ///
+    /// `version` selects between the v2 API (wiki-text descriptions / comments)
+    /// and the v3 API (ADF JSON objects, Cloud only). Callers asking for ADF
+    /// output must pass [`JiraApiVersion::V3`] AND verify the deployment flavor
+    /// upstream — the client does not enforce the Cloud-only invariant on
+    /// reads since the v3 host returning a 404 is a perfectly informative
+    /// failure mode for a misconfigured Data Center call.
+    pub async fn get_issue(
+        &self,
+        issue_key: &str,
+        fields: &[&str],
+        version: JiraApiVersion,
+    ) -> Result<Value, Error> {
+        let url = format!("{}/issue/{issue_key}", self.base_url_for(version));
         let fields_str = if fields.is_empty() {
             None
         } else {
@@ -246,9 +292,19 @@ impl JiraClient {
         handle_response(resp).await
     }
 
-    pub async fn create_issue(&self, payload: &Value) -> Result<Value, Error> {
+    /// Create an issue.
+    ///
+    /// `version` picks the API path: v2 for wiki-text bodies, v3 for ADF
+    /// bodies (Cloud only). The `payload` is passed through verbatim — callers
+    /// must build the `description` field shape that matches the chosen
+    /// version (a string for v2, an ADF object for v3).
+    pub async fn create_issue(
+        &self,
+        payload: &Value,
+        version: JiraApiVersion,
+    ) -> Result<Value, Error> {
         self.assert_writable()?;
-        let url = format!("{}/issue", self.base_url);
+        let url = format!("{}/issue", self.base_url_for(version));
         debug!("POST {url}");
         let resp = self.http.post(&url).json(payload).send().await?;
         handle_response(resp).await
@@ -268,9 +324,20 @@ impl JiraClient {
         handle_response(resp).await
     }
 
-    pub async fn update_issue(&self, issue_key: &str, payload: &Value) -> Result<(), Error> {
+    /// Update an issue.
+    ///
+    /// `version` picks the API path: v2 for wiki-text bodies, v3 for ADF
+    /// bodies (Cloud only). The `payload` is passed through verbatim — callers
+    /// must build the `description` field shape that matches the chosen
+    /// version.
+    pub async fn update_issue(
+        &self,
+        issue_key: &str,
+        payload: &Value,
+        version: JiraApiVersion,
+    ) -> Result<(), Error> {
         self.assert_writable()?;
-        let url = format!("{}/issue/{issue_key}", self.base_url);
+        let url = format!("{}/issue/{issue_key}", self.base_url_for(version));
         debug!("PUT {url}");
         let resp = self.http.put(&url).json(payload).send().await?;
         handle_response_maybe_empty(resp).await?;
@@ -310,24 +377,63 @@ impl JiraClient {
         Ok(())
     }
 
-    pub async fn add_comment(&self, issue_key: &str, body: &str) -> Result<Value, Error> {
+    /// Add a comment to an issue.
+    ///
+    /// The variant of `body` selects the API path: [`JiraBodyContent::Wiki`]
+    /// goes through v2 with a string `body` field; [`JiraBodyContent::Adf`]
+    /// goes through v3 with an ADF document object as the `body` field.
+    /// ADF input requires a Cloud instance — the caller is responsible for
+    /// rejecting Data Center / Server before reaching this method.
+    pub async fn add_comment(
+        &self,
+        issue_key: &str,
+        body: &JiraBodyContent,
+    ) -> Result<Value, Error> {
         self.assert_writable()?;
-        let url = format!("{}/issue/{issue_key}/comment", self.base_url);
-        let payload = serde_json::json!({ "body": body });
+        let (url, payload) = match body {
+            JiraBodyContent::Wiki(text) => (
+                format!("{}/issue/{issue_key}/comment", self.base_url),
+                serde_json::json!({ "body": text }),
+            ),
+            JiraBodyContent::Adf(adf) => (
+                format!("{}/issue/{issue_key}/comment", self.v3_base_url()),
+                serde_json::json!({ "body": adf }),
+            ),
+        };
         debug!("POST {url}");
         let resp = self.http.post(&url).json(&payload).send().await?;
         handle_response(resp).await
     }
 
-    pub async fn list_comments(&self, issue_key: &str) -> Result<Value, Error> {
-        let url = format!("{}/issue/{issue_key}/comment", self.base_url);
+    /// List all comments for an issue.
+    ///
+    /// `version` selects between v2 (wiki-text comment bodies) and v3 (ADF
+    /// JSON comment bodies, Cloud only).
+    pub async fn list_comments(
+        &self,
+        issue_key: &str,
+        version: JiraApiVersion,
+    ) -> Result<Value, Error> {
+        let url = format!("{}/issue/{issue_key}/comment", self.base_url_for(version));
         debug!("GET {url}");
         let resp = self.http.get(&url).send().await?;
         handle_response(resp).await
     }
 
-    pub async fn get_comment(&self, issue_key: &str, comment_id: &str) -> Result<Value, Error> {
-        let url = format!("{}/issue/{issue_key}/comment/{comment_id}", self.base_url);
+    /// Fetch a single comment.
+    ///
+    /// `version` selects between v2 (wiki-text body) and v3 (ADF JSON body,
+    /// Cloud only).
+    pub async fn get_comment(
+        &self,
+        issue_key: &str,
+        comment_id: &str,
+        version: JiraApiVersion,
+    ) -> Result<Value, Error> {
+        let url = format!(
+            "{}/issue/{issue_key}/comment/{comment_id}",
+            self.base_url_for(version)
+        );
         debug!("GET {url}");
         let resp = self.http.get(&url).send().await?;
         handle_response(resp).await

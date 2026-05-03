@@ -26,7 +26,8 @@ Read a page by ID.
 
 | Flag | Short | Default | Description |
 |---|---|---|---|
-| `--body-format` | | `storage` | Body format: `storage` or `view` (rendered HTML) |
+| `--body-format` | | `markdown` | Body format: `markdown` (default), `storage` (raw XHTML), `view` (rendered HTML), `adf` |
+| `--no-directives` | | | Strip MyST-style directives (`:::info`, `:status[…]`, etc.) from markdown output |
 | `--include-labels` | | | Include labels |
 | `--include-properties` | | | Include content properties |
 | `--include-operations` | | | Include permitted operations |
@@ -91,7 +92,7 @@ Create a new page.
 | `--title` | `-t` | **yes** | | Page title |
 | `--body` | `-b` | **yes** | | Body content (`@file`, `-`, or literal) |
 | `--parent` | | | | Parent page ID |
-| `--input-format` | | | `storage` | Input format: `storage` or `markdown` |
+| `--input-format` | | | `markdown` | Input format: `markdown` (default), `storage` (raw XHTML), `adf` (raw JSON) |
 | `--private` | | | | Create as private (personal) page |
 | `--subtype` | | | | Page subtype |
 | `--embedded` | | | | Create as embedded content |
@@ -106,7 +107,7 @@ Update an existing page. **All three flags are required.**
 | `--title` | `-t` | **yes** | | Page title |
 | `--body` | `-b` | **yes** | | Body content (`@file`, `-`, or literal) |
 | `--version` | | **yes** | | Version number (current + 1) |
-| `--input-format` | | | `storage` | Input format: `storage` or `markdown` |
+| `--input-format` | | | `markdown` | Input format: `markdown` (default), `storage` (raw XHTML), `adf` (raw JSON) |
 | `--version-message` | | | | Version comment |
 
 ### `atl c update-title <PAGE_ID>`
@@ -177,7 +178,8 @@ Export a page with attachments to a local directory.
 | Flag | Short | Default | Description |
 |---|---|---|---|
 | `--output-dir` | `-o` | `.` | Output directory |
-| `--body-format` | | `storage` | Body format: `storage` or `view` |
+| `--body-format` | | `markdown` | Body format: `markdown` (default), `storage`, `view`, `adf` |
+| `--no-directives` | | | Strip MyST-style directives from markdown output |
 
 ### `atl c copy-tree <SOURCE_PAGE_ID>`
 
@@ -416,9 +418,9 @@ The same `list/get/set/delete` pattern is available as a nested subcommand on:
 | Subcommand | Args | Key flags | Description |
 |---|---|---|---|
 | `list` | | `--space -s`, `--limit -l` (25) | List blog posts |
-| `read` | `<BLOG_ID>` | `--body-format` (storage), `--include-*` | Read a blog post |
-| `create` | | `--space -s`, `--title -t`, `--body -b`, `--input-format` | Create a blog post |
-| `update` | `<BLOG_ID>` | `--title -t`, `--body -b`, `--version`, `--input-format` | Update a blog post |
+| `read` | `<BLOG_ID>` | `--body-format` (markdown), `--no-directives`, `--include-*` | Read a blog post |
+| `create` | | `--space -s`, `--title -t`, `--body -b`, `--input-format` (markdown) | Create a blog post |
+| `update` | `<BLOG_ID>` | `--title -t`, `--body -b`, `--version`, `--input-format` (markdown) | Update a blog post |
 | `delete` | `<BLOG_ID>` | `--purge`, `--draft` | Delete a blog post |
 | `attachments` | `<BLOG_ID>` | `--limit -l` (25) | List attachments (v2) |
 | `labels` | `<BLOG_ID>` | | List labels (v2) |

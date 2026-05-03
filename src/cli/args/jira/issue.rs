@@ -1,7 +1,7 @@
 use camino::Utf8PathBuf;
 use clap::{Args, Subcommand};
 
-use super::JiraInputFormat;
+use super::{JiraBodyFormat, JiraInputFormat};
 
 #[derive(Debug, Args)]
 pub struct JiraSearchArgs {
@@ -95,6 +95,30 @@ pub struct JiraViewArgs {
     /// Open the issue in a browser instead of printing
     #[arg(long)]
     pub web: bool,
+
+    /// Output format for description and comment bodies
+    #[arg(long, default_value = "markdown", value_enum)]
+    pub body_format: JiraBodyFormat,
+
+    /// Strip MyST-style directives (`:::info`/`:::warning`/etc.) from
+    /// markdown output. No effect when `--body-format` is not `markdown`.
+    #[arg(long)]
+    pub no_directives: bool,
+}
+
+#[derive(Debug, Args)]
+pub struct JiraCommentsArgs {
+    /// Issue key (e.g. PROJ-123)
+    pub key: String,
+
+    /// Output format for comment bodies
+    #[arg(long, default_value = "markdown", value_enum)]
+    pub body_format: JiraBodyFormat,
+
+    /// Strip MyST-style directives (`:::info`/`:::warning`/etc.) from
+    /// markdown output. No effect when `--body-format` is not `markdown`.
+    #[arg(long)]
+    pub no_directives: bool,
 }
 
 #[derive(Debug, Args)]
@@ -154,7 +178,7 @@ pub struct JiraCreateArgs {
     pub custom_fields: Vec<String>,
 
     /// Input format for the body
-    #[arg(long, default_value = "wiki", value_enum)]
+    #[arg(long, default_value = "markdown", value_enum)]
     pub input_format: JiraInputFormat,
 }
 
@@ -196,7 +220,7 @@ pub struct JiraUpdateArgs {
     pub custom_fields: Vec<String>,
 
     /// Input format for the body
-    #[arg(long, default_value = "wiki", value_enum)]
+    #[arg(long, default_value = "markdown", value_enum)]
     pub input_format: JiraInputFormat,
 }
 
@@ -228,7 +252,7 @@ pub struct JiraCommentArgs {
     pub body: String,
 
     /// Input format for the body
-    #[arg(long, default_value = "wiki", value_enum)]
+    #[arg(long, default_value = "markdown", value_enum)]
     pub input_format: JiraInputFormat,
 }
 
@@ -303,6 +327,15 @@ pub struct JiraCommentGetArgs {
 
     /// Comment ID
     pub comment_id: String,
+
+    /// Output format for the comment body
+    #[arg(long, default_value = "markdown", value_enum)]
+    pub body_format: JiraBodyFormat,
+
+    /// Strip MyST-style directives (`:::info`/`:::warning`/etc.) from
+    /// markdown output. No effect when `--body-format` is not `markdown`.
+    #[arg(long)]
+    pub no_directives: bool,
 }
 
 #[derive(Debug, Args)]

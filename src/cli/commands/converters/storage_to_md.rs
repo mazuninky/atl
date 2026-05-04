@@ -514,14 +514,51 @@ fn parse(xhtml: &str) -> Result<Vec<XNode>, StorageToMdError> {
                 }
             }
             Ok(Event::Text(t)) => {
+                // quick-xml 0.38 removed `BytesText::unescape()` and now
+                // emits entity references (`&amp;`, `&#x30;`, ...) as their
+                // own `Event::GeneralRef` events rather than inlining them in
+                // text. So `Event::Text` contains no escape sequences here —
+                // we just need to decode bytes and normalize EOLs, which is
+                // exactly what `xml_content()` does.
                 let s = t
-                    .unescape()
+                    .xml_content()
                     .map_err(|e| StorageToMdError::Xml(e.to_string()))?
                     .into_owned();
                 if !s.is_empty()
                     && let Some(top) = stack.last_mut()
                 {
                     top.2.push(XNode::Text(s));
+                }
+            }
+            Ok(Event::GeneralRef(r)) => {
+                // Resolve character references (`&#48;`, `&#x30;`) and the
+                // five predefined XML entities (`amp`, `lt`, `gt`, `apos`,
+                // `quot`) into a synthetic text node. Anything else (an
+                // unknown named entity) is a hard error — the HTML named-
+                // entity pre-pass at the top of `parse` should have already
+                // converted entities like `&eacute;` into characters before
+                // we get here, so a leftover unknown entity is genuinely
+                // malformed input.
+                let resolved = if let Some(ch) = r
+                    .resolve_char_ref()
+                    .map_err(|e| StorageToMdError::Xml(e.to_string()))?
+                {
+                    ch.to_string()
+                } else {
+                    let name = r
+                        .decode()
+                        .map_err(|e| StorageToMdError::Xml(e.to_string()))?;
+                    match quick_xml::escape::resolve_xml_entity(&name) {
+                        Some(value) => value.to_string(),
+                        None => {
+                            return Err(StorageToMdError::Xml(format!(
+                                "unrecognized entity '{name}'"
+                            )));
+                        }
+                    }
+                };
+                if let Some(top) = stack.last_mut() {
+                    top.2.push(XNode::Text(resolved));
                 }
             }
             Ok(Event::CData(c)) => {

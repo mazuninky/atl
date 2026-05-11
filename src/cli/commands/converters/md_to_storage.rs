@@ -783,11 +783,23 @@ fn render_link(d: &InlineDirective) -> String {
     // An explicit `title=` attribute takes precedence over the bracketed
     // content as the `ri:content-title` source — the visible link text
     // (bracketed content) and the resolved page title can legitimately differ.
-    let explicit_title = d.params.get("title").map(String::as_str);
+    let explicit_title = d
+        .params
+        .get("title")
+        .map(String::as_str)
+        .filter(|s| !s.is_empty());
     let bracketed = d.content.as_deref().filter(|s| !s.is_empty());
     let title_for_page = explicit_title.or(bracketed);
-    let space_key = d.params.get("spaceKey").map(String::as_str);
-    let page_id = d.params.get("pageId").map(String::as_str);
+    let space_key = d
+        .params
+        .get("spaceKey")
+        .map(String::as_str)
+        .filter(|s| !s.is_empty());
+    let page_id = d
+        .params
+        .get("pageId")
+        .map(String::as_str)
+        .filter(|s| !s.is_empty());
 
     // Attribute order on `<ri:page …/>`: `ri:page-id`, `ri:space-key`,
     // `ri:content-title` — matches the order Confluence itself emits.
@@ -1800,32 +1812,60 @@ body
     }
 
     #[test]
-    fn link_with_explicit_empty_title_pins_current_behaviour() {
-        // Coverage gap B.6: pin the current behaviour for an explicit
-        // empty `title=""`. The fix used
-        // `d.params.get("title").map(String::as_str)`, which returns
-        // `Some("")` for an empty value — meaning the empty title
-        // overrides the bracketed content and we emit
-        // `ri:content-title=""`.
-        //
-        // KNOWN INCONSISTENCY: this contradicts the "fall back to
-        // bracketed content if title is absent" doc comment around
-        // `render_link` — `title=""` arguably should be treated the
-        // same as "title absent" (i.e. fall back to `label`). This
-        // test pins the current behaviour rather than the arguably
-        // correct one; a future cleanup should decide whether
-        // `Some("")` should be filtered out (`.filter(|s| !s.is_empty())`
-        // on the `explicit_title` binding) and update this test.
+    fn link_with_explicit_empty_title_falls_back_to_bracketed_content() {
+        // Coverage gap B.6: an explicit empty `title=""` must be
+        // treated the same as "title absent" — i.e. the bracketed
+        // content takes over as `ri:content-title`. Empty strings
+        // are filtered out of the attribute lookup so they don't
+        // suppress the natural fallback chain or emit an empty
+        // `ri:content-title=""` attribute.
         let out = convert(r#":link[label]{title=""}"#);
         assert!(
-            out.contains(r#"ri:content-title="""#),
-            "current behaviour: empty title= produces an empty ri:content-title attr: {out}"
+            out.contains(r#"<ri:page ri:content-title="label"/>"#),
+            "empty title= must fall back to bracketed `label`: {out}"
         );
-        // Whatever the title resolution does, the visible body must
-        // still come from the bracketed content.
+        assert!(
+            !out.contains(r#"ri:content-title="""#),
+            "empty `ri:content-title` attr must not be emitted: {out}"
+        );
+        // The visible body must still come from the bracketed content.
         assert!(
             out.contains(r#"<ac:plain-text-link-body><![CDATA[label]]></ac:plain-text-link-body>"#),
             "link body must always wrap bracketed `label`: {out}"
+        );
+    }
+
+    #[test]
+    fn link_with_explicit_empty_space_key_falls_back_to_bracketed_content() {
+        // Symmetric to the `title=""` fix: an explicit empty
+        // `spaceKey=""` must be treated as "spaceKey absent" so we
+        // don't emit `ri:space-key=""`. With no pageId and no real
+        // spaceKey, the bracketed content provides the title.
+        let out = convert(r#":link[label]{spaceKey=""}"#);
+        assert!(
+            out.contains(r#"<ri:page ri:content-title="label"/>"#),
+            "empty spaceKey= must not suppress bracketed-content fallback: {out}"
+        );
+        assert!(
+            !out.contains(r#"ri:space-key="""#),
+            "empty `ri:space-key` attr must not be emitted: {out}"
+        );
+    }
+
+    #[test]
+    fn link_with_explicit_empty_page_id_falls_back_to_bracketed_content() {
+        // Symmetric to the `title=""` fix: an explicit empty
+        // `pageId=""` must be treated as "pageId absent" so we
+        // don't emit `ri:page-id=""`. With no real pageId and no
+        // spaceKey, the bracketed content provides the title.
+        let out = convert(r#":link[label]{pageId=""}"#);
+        assert!(
+            out.contains(r#"<ri:page ri:content-title="label"/>"#),
+            "empty pageId= must not suppress bracketed-content fallback: {out}"
+        );
+        assert!(
+            !out.contains(r#"ri:page-id="""#),
+            "empty `ri:page-id` attr must not be emitted: {out}"
         );
     }
 

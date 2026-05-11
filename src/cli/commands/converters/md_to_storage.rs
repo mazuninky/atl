@@ -689,6 +689,9 @@ fn restore_inline_directives(html: &str, placeholders: &[InlineDirective]) -> St
 ///   we emit `ri:page-id` (DC/Server resolves this, Cloud strips it) and,
 ///   if the user bracketed display content, also `ri:content-title` (Cloud
 ///   resolves this) so the same storage works on both flavours.
+///   `spaceKey=` becomes `ri:space-key` for cross-space references.
+///   `title=` overrides the bracketed text as the `ri:content-title` source,
+///   so the visible link text and the resolved page title can differ.
 /// - `image` becomes `<ac:image><ri:url ri:value="…"/></ac:image>`.
 fn render_inline_storage(d: &InlineDirective) -> String {
     match d.name.as_str() {
@@ -775,25 +778,39 @@ fn render_link(d: &InlineDirective) -> String {
     // link, which is the existing behaviour and can't be fixed without a
     // title to emit.
     //
-    // TODO: support `spaceKey=` to emit `ri:space-key` for cross-space
-    // links — currently only same-space title resolution works.
-    let title_for_page = d.content.as_deref().filter(|s| !s.is_empty());
-    if let Some(page_id) = d.params.get("pageId") {
-        out.push_str(r#"<ri:page ri:page-id=""#);
-        out.push_str(&xml_escape(page_id));
-        out.push('"');
+    // `spaceKey=` (when present) becomes `ri:space-key` so cross-space links
+    // resolve against the named space instead of the current one.
+    // An explicit `title=` attribute takes precedence over the bracketed
+    // content as the `ri:content-title` source — the visible link text
+    // (bracketed content) and the resolved page title can legitimately differ.
+    let explicit_title = d.params.get("title").map(String::as_str);
+    let bracketed = d.content.as_deref().filter(|s| !s.is_empty());
+    let title_for_page = explicit_title.or(bracketed);
+    let space_key = d.params.get("spaceKey").map(String::as_str);
+    let page_id = d.params.get("pageId").map(String::as_str);
+
+    // Attribute order on `<ri:page …/>`: `ri:page-id`, `ri:space-key`,
+    // `ri:content-title` — matches the order Confluence itself emits.
+    if page_id.is_none() && space_key.is_none() && title_for_page.is_none() {
+        out.push_str("<ri:page/>");
+    } else {
+        out.push_str("<ri:page");
+        if let Some(pid) = page_id {
+            out.push_str(r#" ri:page-id=""#);
+            out.push_str(&xml_escape(pid));
+            out.push('"');
+        }
+        if let Some(sk) = space_key {
+            out.push_str(r#" ri:space-key=""#);
+            out.push_str(&xml_escape(sk));
+            out.push('"');
+        }
         if let Some(title) = title_for_page {
             out.push_str(r#" ri:content-title=""#);
             out.push_str(&xml_escape(title));
             out.push('"');
         }
         out.push_str("/>");
-    } else if let Some(title) = title_for_page {
-        out.push_str(r#"<ri:page ri:content-title=""#);
-        out.push_str(&xml_escape(title));
-        out.push_str(r#""/>"#);
-    } else {
-        out.push_str("<ri:page/>");
     }
     // Emit `<ac:plain-text-link-body>` so the user's bracketed display text
     // is preserved on the page. Without it, Confluence falls back to
@@ -1326,6 +1343,46 @@ mod tests {
         assert!(
             !out.contains("ac:plain-text-link-body"),
             "no content means no link body, got: {out}"
+        );
+    }
+
+    #[test]
+    fn link_with_space_key_emits_ri_space_key_for_cross_space_reference() {
+        // Bug 1: `spaceKey=` was silently dropped, breaking cross-space
+        // links unless the current space happened to contain a page with
+        // the same title.
+        let out = convert(r#":link[Some page]{title="Some page" spaceKey=OTHERSPACE}"#);
+        assert!(
+            out.contains(r#"ri:space-key="OTHERSPACE""#),
+            "spaceKey must be emitted as ri:space-key, got: {out}"
+        );
+        assert!(
+            out.contains(r#"ri:content-title="Some page""#),
+            "title must be emitted as ri:content-title, got: {out}"
+        );
+        assert!(
+            out.contains(
+                r#"<ac:plain-text-link-body><![CDATA[Some page]]></ac:plain-text-link-body>"#
+            ),
+            "bracketed content must wrap the link body, got: {out}"
+        );
+    }
+
+    #[test]
+    fn link_with_title_overrides_bracketed_content_as_content_title() {
+        // Bug 2: `title=` was ignored when it differed from the bracketed
+        // text, so the link pointed at a page with the visible label as
+        // its title rather than the actual target page.
+        let out = convert(r#":link[clickable text]{title="Real Target Page Title"}"#);
+        assert!(
+            out.contains(r#"ri:content-title="Real Target Page Title""#),
+            "title attr must override bracketed content as ri:content-title, got: {out}"
+        );
+        assert!(
+            out.contains(
+                r#"<ac:plain-text-link-body><![CDATA[clickable text]]></ac:plain-text-link-body>"#
+            ),
+            "bracketed content (not title) must wrap the link body, got: {out}"
         );
     }
 

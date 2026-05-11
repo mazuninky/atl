@@ -689,6 +689,9 @@ fn restore_inline_directives(html: &str, placeholders: &[InlineDirective]) -> St
 ///   we emit `ri:page-id` (DC/Server resolves this, Cloud strips it) and,
 ///   if the user bracketed display content, also `ri:content-title` (Cloud
 ///   resolves this) so the same storage works on both flavours.
+///   `spaceKey=` becomes `ri:space-key` for cross-space references.
+///   `title=` overrides the bracketed text as the `ri:content-title` source,
+///   so the visible link text and the resolved page title can differ.
 /// - `image` becomes `<ac:image><ri:url ri:value="…"/></ac:image>`.
 fn render_inline_storage(d: &InlineDirective) -> String {
     match d.name.as_str() {
@@ -775,25 +778,51 @@ fn render_link(d: &InlineDirective) -> String {
     // link, which is the existing behaviour and can't be fixed without a
     // title to emit.
     //
-    // TODO: support `spaceKey=` to emit `ri:space-key` for cross-space
-    // links — currently only same-space title resolution works.
-    let title_for_page = d.content.as_deref().filter(|s| !s.is_empty());
-    if let Some(page_id) = d.params.get("pageId") {
-        out.push_str(r#"<ri:page ri:page-id=""#);
-        out.push_str(&xml_escape(page_id));
-        out.push('"');
+    // `spaceKey=` (when present) becomes `ri:space-key` so cross-space links
+    // resolve against the named space instead of the current one.
+    // An explicit `title=` attribute takes precedence over the bracketed
+    // content as the `ri:content-title` source — the visible link text
+    // (bracketed content) and the resolved page title can legitimately differ.
+    let explicit_title = d
+        .params
+        .get("title")
+        .map(String::as_str)
+        .filter(|s| !s.is_empty());
+    let bracketed = d.content.as_deref().filter(|s| !s.is_empty());
+    let title_for_page = explicit_title.or(bracketed);
+    let space_key = d
+        .params
+        .get("spaceKey")
+        .map(String::as_str)
+        .filter(|s| !s.is_empty());
+    let page_id = d
+        .params
+        .get("pageId")
+        .map(String::as_str)
+        .filter(|s| !s.is_empty());
+
+    // Attribute order on `<ri:page …/>`: `ri:page-id`, `ri:space-key`,
+    // `ri:content-title` — matches the order Confluence itself emits.
+    if page_id.is_none() && space_key.is_none() && title_for_page.is_none() {
+        out.push_str("<ri:page/>");
+    } else {
+        out.push_str("<ri:page");
+        if let Some(pid) = page_id {
+            out.push_str(r#" ri:page-id=""#);
+            out.push_str(&xml_escape(pid));
+            out.push('"');
+        }
+        if let Some(sk) = space_key {
+            out.push_str(r#" ri:space-key=""#);
+            out.push_str(&xml_escape(sk));
+            out.push('"');
+        }
         if let Some(title) = title_for_page {
             out.push_str(r#" ri:content-title=""#);
             out.push_str(&xml_escape(title));
             out.push('"');
         }
         out.push_str("/>");
-    } else if let Some(title) = title_for_page {
-        out.push_str(r#"<ri:page ri:content-title=""#);
-        out.push_str(&xml_escape(title));
-        out.push_str(r#""/>"#);
-    } else {
-        out.push_str("<ri:page/>");
     }
     // Emit `<ac:plain-text-link-body>` so the user's bracketed display text
     // is preserved on the page. Without it, Confluence falls back to
@@ -1330,6 +1359,46 @@ mod tests {
     }
 
     #[test]
+    fn link_with_space_key_emits_ri_space_key_for_cross_space_reference() {
+        // Bug 1: `spaceKey=` was silently dropped, breaking cross-space
+        // links unless the current space happened to contain a page with
+        // the same title.
+        let out = convert(r#":link[Some page]{title="Some page" spaceKey=OTHERSPACE}"#);
+        assert!(
+            out.contains(r#"ri:space-key="OTHERSPACE""#),
+            "spaceKey must be emitted as ri:space-key, got: {out}"
+        );
+        assert!(
+            out.contains(r#"ri:content-title="Some page""#),
+            "title must be emitted as ri:content-title, got: {out}"
+        );
+        assert!(
+            out.contains(
+                r#"<ac:plain-text-link-body><![CDATA[Some page]]></ac:plain-text-link-body>"#
+            ),
+            "bracketed content must wrap the link body, got: {out}"
+        );
+    }
+
+    #[test]
+    fn link_with_title_overrides_bracketed_content_as_content_title() {
+        // Bug 2: `title=` was ignored when it differed from the bracketed
+        // text, so the link pointed at a page with the visible label as
+        // its title rather than the actual target page.
+        let out = convert(r#":link[clickable text]{title="Real Target Page Title"}"#);
+        assert!(
+            out.contains(r#"ri:content-title="Real Target Page Title""#),
+            "title attr must override bracketed content as ri:content-title, got: {out}"
+        );
+        assert!(
+            out.contains(
+                r#"<ac:plain-text-link-body><![CDATA[clickable text]]></ac:plain-text-link-body>"#
+            ),
+            "bracketed content (not title) must wrap the link body, got: {out}"
+        );
+    }
+
+    #[test]
     fn link_body_cdata_escapes_close_marker() {
         // The CDATA body must split a literal `]]>` so it doesn't terminate
         // the CDATA section early. The standard escape is `]]]]><![CDATA[>`.
@@ -1625,6 +1694,239 @@ body
                 r#"<ac:plain-text-link-body><![CDATA[Some Page]]></ac:plain-text-link-body>"#
             ),
             "expected plain-text link body: {out}"
+        );
+    }
+
+    // ---- spaceKey + pageId/title combinations -----------------------------
+
+    #[test]
+    fn link_with_space_key_and_page_id_emits_all_three_attrs_in_order() {
+        // Coverage gap A.1: spaceKey + pageId + bracketed content (no
+        // explicit title=). All three `<ri:page>` attributes must be
+        // present, AND the attribute order must match what Confluence
+        // itself emits: `ri:page-id` → `ri:space-key` → `ri:content-title`.
+        // A reordering would still be technically valid XML but would
+        // diff noisily against any tool that round-trips Confluence-
+        // authored storage XML.
+        let out = convert(":link[Page]{spaceKey=DOCS pageId=42}");
+        assert!(
+            out.contains(
+                r#"<ri:page ri:page-id="42" ri:space-key="DOCS" ri:content-title="Page"/>"#
+            ),
+            "expected page-id, space-key, content-title in that exact order: {out}"
+        );
+        assert!(
+            out.contains(r#"<ac:plain-text-link-body><![CDATA[Page]]></ac:plain-text-link-body>"#),
+            "bracketed content must wrap the link body: {out}"
+        );
+    }
+
+    #[test]
+    fn link_with_space_key_page_id_and_explicit_title_uses_title_for_content_title() {
+        // Coverage gap A.2: all three params present. Explicit `title=`
+        // wins over bracketed content for the `ri:content-title` slot,
+        // but the visible link body still wraps the bracketed text.
+        let out = convert(r#":link[Page]{spaceKey=DOCS pageId=42 title="Real Title"}"#);
+        assert!(
+            out.contains(r#"ri:page-id="42""#),
+            "ri:page-id must be present: {out}"
+        );
+        assert!(
+            out.contains(r#"ri:space-key="DOCS""#),
+            "ri:space-key must be present: {out}"
+        );
+        assert!(
+            out.contains(r#"ri:content-title="Real Title""#),
+            "explicit title must win over bracketed content for ri:content-title: {out}"
+        );
+        assert!(
+            out.contains(r#"<ac:plain-text-link-body><![CDATA[Page]]></ac:plain-text-link-body>"#),
+            "link body must wrap bracketed content (Page), not the title attr: {out}"
+        );
+    }
+
+    #[test]
+    fn link_with_space_key_and_page_id_empty_brackets_omits_content_title_and_body() {
+        // Coverage gap A.3: empty bracketed content with both spaceKey
+        // and pageId. The `<ri:page>` element must carry both attrs,
+        // but no `ri:content-title` (nothing to put there) and no
+        // `<ac:plain-text-link-body>` (nothing to wrap). This guards
+        // the existing empty-brackets behaviour against a regression
+        // where adding spaceKey support might accidentally inject an
+        // empty body.
+        let out = convert(":link[]{spaceKey=DOCS pageId=42}");
+        assert!(
+            out.contains(r#"<ri:page ri:page-id="42" ri:space-key="DOCS"/>"#),
+            "expected page-id + space-key only: {out}"
+        );
+        assert!(
+            !out.contains("ri:content-title"),
+            "empty brackets must not produce ri:content-title: {out}"
+        );
+        assert!(
+            !out.contains("ac:plain-text-link-body"),
+            "empty brackets must not produce a link body: {out}"
+        );
+    }
+
+    #[test]
+    fn link_with_only_space_key_keeps_ri_page_non_empty() {
+        // Coverage gap A.4: spaceKey alone (no pageId, no title, empty
+        // brackets) must still produce a non-empty `<ri:page>` element
+        // — `<ri:page ri:space-key="DOCS"/>`, NOT the bare `<ri:page/>`
+        // self-closer fallback. This proves spaceKey alone is enough
+        // to keep the page reference meaningful.
+        let out = convert(":link[]{spaceKey=DOCS}");
+        assert!(
+            out.contains(r#"<ri:page ri:space-key="DOCS"/>"#),
+            "spaceKey alone must keep <ri:page> non-empty: {out}"
+        );
+        assert!(
+            !out.contains("<ri:page/>"),
+            "must not fall through to the empty-page fallback: {out}"
+        );
+    }
+
+    // ---- title= precedence in more configurations -------------------------
+
+    #[test]
+    fn link_with_title_and_space_key_overrides_bracketed_content() {
+        // Coverage gap B.5: title= still wins over bracketed content
+        // for ri:content-title even when spaceKey is also present (a
+        // variant of the Bug 2 regression test, but with a third param
+        // in the mix to make sure the title resolution doesn't get
+        // perturbed by sibling attributes).
+        let out = convert(r#":link[label]{title="Different Title" spaceKey=DOCS}"#);
+        assert!(
+            out.contains(r#"ri:content-title="Different Title""#),
+            "explicit title must win over bracketed `label`: {out}"
+        );
+        assert!(
+            out.contains(r#"ri:space-key="DOCS""#),
+            "spaceKey must still be emitted alongside title: {out}"
+        );
+        assert!(
+            out.contains(r#"<ac:plain-text-link-body><![CDATA[label]]></ac:plain-text-link-body>"#),
+            "link body must wrap bracketed `label`, not the title attr: {out}"
+        );
+    }
+
+    #[test]
+    fn link_with_explicit_empty_title_falls_back_to_bracketed_content() {
+        // Coverage gap B.6: an explicit empty `title=""` must be
+        // treated the same as "title absent" — i.e. the bracketed
+        // content takes over as `ri:content-title`. Empty strings
+        // are filtered out of the attribute lookup so they don't
+        // suppress the natural fallback chain or emit an empty
+        // `ri:content-title=""` attribute.
+        let out = convert(r#":link[label]{title=""}"#);
+        assert!(
+            out.contains(r#"<ri:page ri:content-title="label"/>"#),
+            "empty title= must fall back to bracketed `label`: {out}"
+        );
+        assert!(
+            !out.contains(r#"ri:content-title="""#),
+            "empty `ri:content-title` attr must not be emitted: {out}"
+        );
+        // The visible body must still come from the bracketed content.
+        assert!(
+            out.contains(r#"<ac:plain-text-link-body><![CDATA[label]]></ac:plain-text-link-body>"#),
+            "link body must always wrap bracketed `label`: {out}"
+        );
+    }
+
+    #[test]
+    fn link_with_explicit_empty_space_key_falls_back_to_bracketed_content() {
+        // Symmetric to the `title=""` fix: an explicit empty
+        // `spaceKey=""` must be treated as "spaceKey absent" so we
+        // don't emit `ri:space-key=""`. With no pageId and no real
+        // spaceKey, the bracketed content provides the title.
+        let out = convert(r#":link[label]{spaceKey=""}"#);
+        assert!(
+            out.contains(r#"<ri:page ri:content-title="label"/>"#),
+            "empty spaceKey= must not suppress bracketed-content fallback: {out}"
+        );
+        assert!(
+            !out.contains(r#"ri:space-key="""#),
+            "empty `ri:space-key` attr must not be emitted: {out}"
+        );
+    }
+
+    #[test]
+    fn link_with_explicit_empty_page_id_falls_back_to_bracketed_content() {
+        // Symmetric to the `title=""` fix: an explicit empty
+        // `pageId=""` must be treated as "pageId absent" so we
+        // don't emit `ri:page-id=""`. With no real pageId and no
+        // spaceKey, the bracketed content provides the title.
+        let out = convert(r#":link[label]{pageId=""}"#);
+        assert!(
+            out.contains(r#"<ri:page ri:content-title="label"/>"#),
+            "empty pageId= must not suppress bracketed-content fallback: {out}"
+        );
+        assert!(
+            !out.contains(r#"ri:page-id="""#),
+            "empty `ri:page-id` attr must not be emitted: {out}"
+        );
+    }
+
+    // ---- XML escaping with the new attributes -----------------------------
+
+    #[test]
+    fn link_space_key_with_ampersand_is_xml_escaped() {
+        // Coverage gap C.7: `spaceKey` values flow through `xml_escape`
+        // in the new code. A space key like `A&B` must appear as
+        // `ri:space-key="A&amp;B"`, not as raw `&` (which would break
+        // XML well-formedness and could be an XSS vector against any
+        // downstream renderer that trusts the storage XML).
+        let out = convert(r#":link[t]{spaceKey="A&B"}"#);
+        assert!(
+            out.contains(r#"ri:space-key="A&amp;B""#),
+            "ampersand in spaceKey must be escaped to &amp;: {out}"
+        );
+        assert!(
+            !out.contains(r#"ri:space-key="A&B""#),
+            "raw `&` must not appear in attribute value: {out}"
+        );
+    }
+
+    #[test]
+    fn link_title_with_double_quote_is_xml_escaped() {
+        // Coverage gap C.8: the explicit-title path also flows through
+        // `xml_escape` — a `"` inside `title=` must become `&quot;`
+        // so the attribute value's enclosing quotes don't terminate
+        // early.
+        let out = convert(r#":link[t]{title="\"quoted\""}"#);
+        assert!(
+            out.contains(r#"ri:content-title="&quot;quoted&quot;""#),
+            "double quotes in title= must be escaped to &quot;: {out}"
+        );
+    }
+
+    // ---- url= branch is undisturbed ---------------------------------------
+
+    #[test]
+    fn link_with_url_wins_over_space_key_and_title() {
+        // Coverage gap D.9: the external-URL early-return must take
+        // priority over every Confluence page reference (spaceKey,
+        // pageId, title) — even when all of them are present. The
+        // fix did not touch this branch, but a future refactor that
+        // moved the URL check below the param resolution would
+        // silently regress: the user would get a broken `<ac:link>`
+        // pointing at a page that may not exist instead of the
+        // intended external anchor.
+        let out =
+            convert(r#":link[Docs]{url="https://example.com" spaceKey=IGNORED title="ignored"}"#);
+        assert!(
+            out.contains(r#"<a href="https://example.com">Docs</a>"#),
+            "url= must produce a plain anchor: {out}"
+        );
+        assert!(
+            !out.contains("<ri:page"),
+            "url= must NOT fall through to <ri:page>: {out}"
+        );
+        assert!(
+            !out.contains("<ac:link>"),
+            "url= must NOT fall through to <ac:link>: {out}"
         );
     }
 

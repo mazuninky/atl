@@ -1,0 +1,24 @@
+# typos configuration — https://github.com/crate-ci/typos
+#
+# Run locally with: typos
+# CI gate: .github/workflows/ci.yml (job: typos)
+
+[files]
+extend-exclude = [
+  "Cargo.lock",
+  "docs/reference/atl.md",
+  "tests/contract/specs/**",
+  "*.sha256",
+  "*.snap",
+  # HTML entity name table (`curren`, `ordm`, ...) + HTML test fixtures with
+  # deliberately abbreviated tokens (`caf&eacute;` → `caf`). High false-positive
+  # rate; the file's own tests cover entity correctness.
+  "src/cli/commands/converters/storage_to_md.rs",
+]
+
+[default.extend-words]
+# Both `unparseable` and `unparsable` are accepted spellings; we use the former.
+unparseable = "unparseable"
+# Fixture project keys / short test strings.
+WRK = "WRK"
+nd = "nd"

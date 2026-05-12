@@ -65,7 +65,7 @@ shlex = "1"
 
 # Markdown
 comrak = { version = "0.52", default-features = false }
-quick-xml = "0.39"
+quick-xml = "0.40"
 
 # Output
 comfy-table = "7"

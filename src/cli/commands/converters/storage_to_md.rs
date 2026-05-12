@@ -34,6 +34,7 @@
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 
+use quick_xml::XmlVersion;
 use quick_xml::events::{BytesStart, Event};
 use quick_xml::reader::Reader;
 use thiserror::Error;
@@ -519,9 +520,11 @@ fn parse(xhtml: &str) -> Result<Vec<XNode>, StorageToMdError> {
                 // own `Event::GeneralRef` events rather than inlining them in
                 // text. So `Event::Text` contains no escape sequences here —
                 // we just need to decode bytes and normalize EOLs, which is
-                // exactly what `xml_content()` does.
+                // exactly what `xml_content()` does. quick-xml 0.40 added an
+                // explicit `XmlVersion` parameter; Confluence storage is XML
+                // 1.0, which matches `Implicit1_0` (no `<?xml … ?>` decl).
                 let s = t
-                    .xml_content()
+                    .xml_content(XmlVersion::Implicit1_0)
                     .map_err(|e| StorageToMdError::Xml(e.to_string()))?
                     .into_owned();
                 if !s.is_empty()
@@ -610,8 +613,12 @@ fn element_meta(
         let key_bytes = attr.key.into_inner().to_vec();
         let key =
             String::from_utf8(key_bytes).map_err(|err| StorageToMdError::Xml(err.to_string()))?;
+        // quick-xml 0.40 deprecated `unescape_value()` in favor of
+        // `normalized_value()`, which takes an explicit `XmlVersion`.
+        // Confluence storage is XML 1.0 (no declaration), which maps to
+        // `Implicit1_0` — same default the old `unescape_value()` used.
         let value = attr
-            .unescape_value()
+            .normalized_value(XmlVersion::Implicit1_0)
             .map_err(|err| StorageToMdError::Xml(err.to_string()))?
             .into_owned();
         attrs.insert(key, value);

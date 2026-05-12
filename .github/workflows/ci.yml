@@ -9,6 +9,8 @@ on:
       - "Cargo.toml"
       - "Cargo.lock"
       - "clippy.toml"
+      - "deny.toml"
+      - ".typos.toml"
       - "scripts/**"
       - ".github/workflows/**"
       - "codecov.yml"
@@ -19,6 +21,8 @@ on:
       - "Cargo.toml"
       - "Cargo.lock"
       - "clippy.toml"
+      - "deny.toml"
+      - ".typos.toml"
       - "scripts/**"
       - ".github/workflows/**"
       - "codecov.yml"
@@ -36,6 +40,26 @@ env:
   RUST_BACKTRACE: short
 
 jobs:
+  typos:
+    name: typos
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Spell-check
+        uses: crate-ci/typos@ca8395668a014bffeb39e0463c660f958402e0ff # v1.46.1
+
+  deny:
+    name: cargo-deny (advisories + bans + licenses + sources)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - uses: EmbarkStudios/cargo-deny-action@0105f7c440bc8084c17cad47fe92e63049519458 # v2.0.18
+        with:
+          command: check
+          arguments: --all-features
+
   lint:
     name: lint (fmt + clippy + docs)
     runs-on: ubuntu-latest
@@ -281,7 +305,7 @@ jobs:
 
   ci-success:
     name: ci-success
-    needs: [lint, test, msrv, contract, build-release-smoke, coverage]
+    needs: [typos, deny, lint, test, msrv, contract, build-release-smoke, coverage]
     runs-on: ubuntu-latest
     if: always()
     steps:

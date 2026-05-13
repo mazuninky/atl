@@ -80,41 +80,98 @@ pub fn markdown_to_storage(md: &str) -> Result<String, MdToStorageError> {
 // Stage 1: code-fence-aware line walk
 // =====================================================================
 
-/// Walk `md` line by line, tracking CommonMark fenced code-block state, and
-/// produce the same kind of [`BlockEvent`] stream that
-/// [`crate::cli::commands::directives::lex_blocks`] produces — but with lines
-/// inside a code fence forced to [`BlockEvent::Line`] instead of being
-/// re-tokenised by the directive lexer.
-fn lex_with_code_fences(md: &str) -> Result<Vec<BlockEvent>, DirectiveError> {
+/// Local event type used by [`lex_with_code_fences`].
+///
+/// Wraps the shared [`BlockEvent`] (for directive parsing) and adds a
+/// `CodeBlock` variant for complete fenced code blocks. Capturing a code block
+/// as a single atomic event (rather than a sequence of `Line`s) lets the
+/// renderer emit `<ac:structured-macro ac:name="code">` directly, sidestepping
+/// comrak entirely — comrak would otherwise wrap the body in `<pre><code>` and
+/// we'd lose the round-trip with the Confluence-native `code` macro.
+#[derive(Debug)]
+enum LocalEvent {
+    /// Pass-through for the directive lexer's events.
+    Block(BlockEvent),
+    /// A complete fenced code block (from opening fence to matching close).
+    /// `lang` is the optional info-string language token; `body` is the raw
+    /// content between the fences, joined with `\n`.
+    CodeBlock { lang: Option<String>, body: String },
+}
+
+/// Walk `md` line by line, tracking CommonMark fenced code-block state.
+///
+/// Lines outside a code fence go through the directive lexer and become
+/// `LocalEvent::Block(BlockEvent::…)`. A complete fenced code block (from its
+/// opening fence to its matching close, exclusive of both fence lines) is
+/// captured as a single `LocalEvent::CodeBlock` so the renderer can emit it as
+/// a native Confluence `code` macro instead of letting it round-trip through
+/// comrak's `<pre><code>` output.
+fn lex_with_code_fences(md: &str) -> Result<Vec<LocalEvent>, DirectiveError> {
     let mut lex = BlockLexer::new();
     let mut events = Vec::new();
     let mut code_fence: Option<CodeFence> = None;
+    // When inside a fence, accumulate the language token and body lines so the
+    // close-fence can emit a single CodeBlock event.
+    let mut current_lang: Option<String> = None;
+    let mut current_body: Vec<String> = Vec::new();
 
     for line in md.split('\n') {
         match &code_fence {
             Some(open) => {
-                // Inside a fenced code block. The only thing that matters is
-                // whether THIS line is the matching close fence.
-                events.push(BlockEvent::Line(line.to_string()));
                 if is_matching_close_fence(line, open) {
+                    // Close fence — flush the captured body as a single
+                    // CodeBlock event and exit fence state.
+                    let body = current_body.join("\n");
+                    events.push(LocalEvent::CodeBlock {
+                        lang: current_lang.take(),
+                        body,
+                    });
+                    current_body.clear();
                     code_fence = None;
+                } else {
+                    current_body.push(line.to_string());
                 }
             }
             None => {
                 if let Some(open) = parse_fence_open(line) {
-                    // A new fenced code block is opening — emit the fence line
-                    // verbatim and mark code-fence state.
-                    events.push(BlockEvent::Line(line.to_string()));
+                    current_lang = extract_fence_language(line, open.fence_char);
+                    current_body.clear();
                     code_fence = Some(open);
                 } else {
-                    events.push(lex.lex_line(line));
+                    events.push(LocalEvent::Block(lex.lex_line(line)));
                 }
             }
         }
     }
 
+    // Unterminated code fence: flush whatever we have so content isn't lost.
+    // CommonMark's behaviour is to treat the rest of the document as code, so
+    // mirror that.
+    if code_fence.is_some() {
+        let body = current_body.join("\n");
+        events.push(LocalEvent::CodeBlock {
+            lang: current_lang.take(),
+            body,
+        });
+    }
+
     lex.finalize()?;
     Ok(events)
+}
+
+/// Extract the language token (first whitespace-delimited word of the info
+/// string) from a fence-open line, lowercased. Returns `None` when the info
+/// string is empty.
+fn extract_fence_language(line: &str, fence_char: char) -> Option<String> {
+    let trimmed = line.trim_start_matches(' ');
+    let after_fence = trimmed.trim_start_matches(fence_char);
+    let info = after_fence.trim();
+    if info.is_empty() {
+        return None;
+    }
+    info.split_whitespace()
+        .next()
+        .map(|t| t.to_ascii_lowercase())
 }
 
 /// State for a currently-open fenced code block.
@@ -209,6 +266,10 @@ enum Node {
         params: BTreeMap<String, String>,
         children: Vec<Node>,
     },
+    /// A fenced code block captured atomically by [`lex_with_code_fences`].
+    /// Emitted directly as a Confluence `<ac:structured-macro ac:name="code">`
+    /// without going through comrak.
+    CodeBlock { lang: Option<String>, body: String },
 }
 
 /// Frame on the build stack: a directive that is currently open and the
@@ -220,7 +281,7 @@ struct Frame {
     children: Vec<Node>,
 }
 
-fn build_tree(events: Vec<BlockEvent>) -> Vec<Node> {
+fn build_tree(events: Vec<LocalEvent>) -> Vec<Node> {
     let mut stack: Vec<Frame> = Vec::new();
     let mut root: Vec<Node> = Vec::new();
 
@@ -236,11 +297,11 @@ fn build_tree(events: Vec<BlockEvent>) -> Vec<Node> {
 
     for ev in events {
         match ev {
-            BlockEvent::Open {
+            LocalEvent::Block(BlockEvent::Open {
                 name,
                 params,
                 depth: _,
-            } => {
+            }) => {
                 let spec = lookup(&name);
                 stack.push(Frame {
                     name,
@@ -249,7 +310,7 @@ fn build_tree(events: Vec<BlockEvent>) -> Vec<Node> {
                     children: Vec::new(),
                 });
             }
-            BlockEvent::Close { .. } => {
+            LocalEvent::Block(BlockEvent::Close { .. }) => {
                 // Pop the topmost frame and attach as a Directive node to its
                 // parent (the new top of stack, or root if the stack is now
                 // empty).
@@ -270,11 +331,17 @@ fn build_tree(events: Vec<BlockEvent>) -> Vec<Node> {
                 // Close when the stack is non-empty; if for some reason one
                 // does slip through, it's silently dropped.
             }
-            BlockEvent::Line(line) => {
+            LocalEvent::Block(BlockEvent::Line(line)) => {
                 let target = stack
                     .last_mut()
                     .map_or(&mut root, |frame| &mut frame.children);
                 push_line(target, line);
+            }
+            LocalEvent::CodeBlock { lang, body } => {
+                let target = stack
+                    .last_mut()
+                    .map_or(&mut root, |frame| &mut frame.children);
+                target.push(Node::CodeBlock { lang, body });
             }
         }
     }
@@ -312,8 +379,33 @@ fn render_nodes(nodes: &[Node]) -> String {
                     }
                 }
             }
+            Node::CodeBlock { lang, body } => {
+                out.push_str(&render_code_macro(lang.as_deref(), body));
+            }
         }
     }
+    out
+}
+
+/// Render a fenced code block as a Confluence `<ac:structured-macro
+/// ac:name="code">`. The body goes inside `<ac:plain-text-body>` wrapped in
+/// CDATA so XHTML escaping is bypassed; the optional language becomes the
+/// `language` parameter. We deliberately do not round-trip `breakoutMode`,
+/// `theme`, line-number flags, etc. — the read side drops them, and the write
+/// side rebuilds just the structural minimum, which is enough for Confluence
+/// to render the block correctly.
+fn render_code_macro(lang: Option<&str>, body: &str) -> String {
+    let mut out = String::new();
+    out.push_str(r#"<ac:structured-macro ac:name="code">"#);
+    if let Some(l) = lang
+        && !l.is_empty()
+    {
+        push_parameter(&mut out, "language", l);
+    }
+    out.push_str("<ac:plain-text-body><![CDATA[");
+    out.push_str(&cdata_escape(body));
+    out.push_str("]]></ac:plain-text-body>");
+    out.push_str("</ac:structured-macro>");
     out
 }
 
@@ -421,14 +513,28 @@ fn render_unknown_block(name: &str, params: &BTreeMap<String, String>, body: &st
 /// for storage XML after comrak finishes.
 fn render_text(md: &str) -> String {
     let mut placeholders: Vec<InlineDirective> = Vec::new();
-    let with_placeholders = substitute_inline_directives(md, &mut placeholders);
+    let with_inline = substitute_inline_directives(md, &mut placeholders);
 
-    let html = markdown_to_html(&with_placeholders, &gfm_options());
+    // Pre-extract raw Confluence-storage tag blocks (`<ac:…>` / `<ri:…>`) so
+    // comrak doesn't mangle them. CommonMark restricts raw-HTML tag names to
+    // `[A-Za-z][A-Za-z0-9-]*`; the colon in `ac:structured-macro` fails that
+    // regex and comrak escapes the angle brackets, destroying the macro.
+    // Replacing each block with an HTML-comment placeholder shields it through
+    // the comrak pass and we restore the original bytes verbatim afterwards.
+    let mut raw_xhtml: Vec<String> = Vec::new();
+    let with_both = substitute_raw_xhtml(&with_inline, &mut raw_xhtml);
+
+    let html = markdown_to_html(&with_both, &gfm_options());
 
     let html = if placeholders.is_empty() {
         html
     } else {
         restore_inline_directives(&html, &placeholders)
+    };
+    let html = if raw_xhtml.is_empty() {
+        html
+    } else {
+        restore_raw_xhtml(&html, &raw_xhtml)
     };
 
     rewrite_stripped_html_tags(&html)
@@ -512,6 +618,297 @@ fn substitute_inline_directives(md: &str, out_placeholders: &mut Vec<InlineDirec
         }
     }
 
+    out
+}
+
+/// Walk `md` line by line and pull out blocks that begin with a literal
+/// Confluence-storage tag (`<ac:…>` or `<ri:…>`). Each captured block is
+/// pushed to `out_raw` and replaced with an `<!--ATL_RAW_{n}-->` placeholder
+/// so it survives comrak intact.
+///
+/// Why: the read-side converter ([`super::storage_to_md`]) emits unknown
+/// Confluence macros (jira-issue, gallery, panel, …) as their raw `<ac:…>`
+/// XHTML inline in markdown. Comrak then sees an opening tag with a `:` in
+/// the name; CommonMark §6.6 requires raw-HTML tag names to match
+/// `[A-Za-z][A-Za-z0-9-]*` (no colon), so comrak escapes the angle brackets
+/// and the macro structure is destroyed. Shielding these blocks behind an
+/// HTML-comment placeholder bypasses comrak entirely.
+///
+/// The function is conservative: anything it can't cleanly parse is left
+/// untouched, so the worst-case outcome is the previous (already-broken)
+/// behaviour rather than a partial extraction that corrupts surrounding text.
+fn substitute_raw_xhtml(md: &str, out_raw: &mut Vec<String>) -> String {
+    let lines: Vec<&str> = md.split('\n').collect();
+    let mut out = String::with_capacity(md.len());
+    let mut code_fence: Option<CodeFence> = None;
+    let mut i = 0;
+    let mut first = true;
+
+    while i < lines.len() {
+        let line = lines[i];
+        if !first {
+            out.push('\n');
+        }
+        first = false;
+
+        // Inside a fenced code block — pass everything through verbatim.
+        if let Some(open) = code_fence {
+            out.push_str(line);
+            if is_matching_close_fence(line, &open) {
+                code_fence = None;
+            }
+            i += 1;
+            continue;
+        }
+
+        // New opening fence on this line — pass through and enter fence state.
+        if let Some(open) = parse_fence_open(line) {
+            out.push_str(line);
+            code_fence = Some(open);
+            i += 1;
+            continue;
+        }
+
+        // Look for an opening `<ac:NAME …` / `<ri:NAME …` at the start of the
+        // line (allow up to 3 leading spaces, matching CommonMark indented
+        // tolerance for block-level HTML).
+        if let Some((consumed, raw)) = try_extract_raw_block(&lines, i) {
+            let idx = out_raw.len();
+            out_raw.push(raw);
+            let _ = write!(out, "<!--ATL_RAW_{idx}-->");
+            // Subsequent lines are already encoded inside `raw`; advance past
+            // them, but the trailing newlines between them were not emitted to
+            // `out` (we only emitted the placeholder), so update `first` state
+            // and skip lines.
+            i += consumed;
+            continue;
+        }
+
+        out.push_str(line);
+        i += 1;
+    }
+
+    out
+}
+
+/// Try to identify a single `<ac:NAME …>…</ac:NAME>` or `<ri:NAME …/>` block
+/// starting at `lines[start]`. On success, return `(lines_consumed,
+/// raw_xhtml_string)`. On failure, return `None`.
+///
+/// Recognised forms:
+/// - `<ac:NAME …/>` — self-closing on one line.
+/// - `<ri:NAME …/>` — resource identifier, always self-closing.
+/// - `<ac:NAME …>` — opening tag; consume lines until the matching
+///   `</ac:NAME>` close is found, tracking opens/closes of the SAME local
+///   name for depth.
+/// - `<ri:NAME …>` — same as above, treated as a block tag.
+///
+/// Returns `None` if the start line doesn't begin with such a tag, if the tag
+/// is malformed, or if no matching close is found before EOF.
+fn try_extract_raw_block(lines: &[&str], start: usize) -> Option<(usize, String)> {
+    let first_line = lines[start];
+    let trimmed = first_line.trim_start_matches(' ');
+    let indent = first_line.len() - trimmed.len();
+    if indent > 3 {
+        return None;
+    }
+    let bytes = trimmed.as_bytes();
+    if bytes.first()? != &b'<' {
+        return None;
+    }
+    // Read the tag name: must start with `ac:` or `ri:`, followed by a
+    // CommonMark-style name character run.
+    let rest = &trimmed[1..];
+    let (ns, after_ns) = if let Some(r) = rest.strip_prefix("ac:") {
+        ("ac", r)
+    } else if let Some(r) = rest.strip_prefix("ri:") {
+        ("ri", r)
+    } else {
+        return None;
+    };
+    let name_end = after_ns
+        .find(|c: char| !c.is_ascii_alphanumeric() && c != '-' && c != '_')
+        .unwrap_or(after_ns.len());
+    if name_end == 0 {
+        return None;
+    }
+    let local_name = &after_ns[..name_end];
+    let full_name = format!("{ns}:{local_name}");
+
+    // Parse the opening tag span (could span multiple lines if attributes
+    // wrap). Collect raw bytes from `first_line`'s `<` onward, walking lines
+    // until we see the closing `>` of the opening tag. Track whether it's
+    // self-closing (ends with `/>`).
+    //
+    // To keep behaviour conservative, only accept openers that close on the
+    // same line — multi-line opening tags are rare in Confluence storage and
+    // any false negative is harmless (the original line is left intact).
+    let tag_close = bytes.iter().position(|&b| b == b'>')?;
+    let open_tag = &trimmed[..=tag_close];
+    let self_closing = open_tag.ends_with("/>");
+    // Pre-fix: capture the slice of `first_line` starting at the `<` so we
+    // include the original characters (no leading-space trimming on output).
+    let tag_offset_in_line = indent;
+    let leading = &first_line[..tag_offset_in_line];
+    // Any text on the first line BEFORE the tag must be only whitespace —
+    // we already trimmed leading spaces and indent <= 3 — that's enforced.
+    // If leading is non-empty whitespace, that's fine; if it's non-whitespace,
+    // bail (we can't extract a partial line cleanly).
+    if !leading.chars().all(|c| c == ' ') {
+        return None;
+    }
+
+    // Self-closing: the entire block fits on the start line, but require
+    // there's no trailing non-whitespace AFTER the tag (otherwise the original
+    // line mixes raw XHTML with markdown and we shouldn't extract).
+    if self_closing {
+        let after_tag = &trimmed[tag_close + 1..];
+        if !after_tag.trim().is_empty() {
+            return None;
+        }
+        return Some((1, open_tag.to_string()));
+    }
+
+    // Non-self-closing: track depth of `<NAME` opens vs `</NAME>` closes
+    // across subsequent lines until depth returns to 0.
+    let after_open = &trimmed[tag_close + 1..];
+    let mut raw = String::new();
+    raw.push_str(open_tag);
+    let mut depth: i32 = 1;
+
+    // Helper: count occurrences of `<NAME ` (open) and `</NAME>` (close) in a
+    // string. Returns (opens, closes).
+    fn count_tags(haystack: &str, full_name: &str) -> (i32, i32) {
+        let open_self = format!("<{full_name}/>");
+        let close = format!("</{full_name}>");
+        // First, count strict self-closing occurrences of the same name: these
+        // are balanced (no contribution to depth). We don't subtract them
+        // because we only count open tags that aren't self-closing; the open
+        // match below uses `<NAME>` or `<NAME ` (with trailing space or `>`).
+        let open_with_space = format!("<{full_name} ");
+        let open_bare = format!("<{full_name}>");
+        let mut opens = 0i32;
+        let mut closes = 0i32;
+        // Scan once linearly, since these substrings may overlap (closes
+        // contain `</…>` which is distinct from `<…`).
+        let bytes = haystack.as_bytes();
+        let mut i = 0;
+        while i < bytes.len() {
+            if bytes[i] != b'<' {
+                i += 1;
+                continue;
+            }
+            // `</NAME>` — close.
+            if haystack[i..].starts_with(&close) {
+                closes += 1;
+                i += close.len();
+                continue;
+            }
+            // `<NAME/>` — self-closing of the SAME name: balanced, skip.
+            if haystack[i..].starts_with(&open_self) {
+                i += open_self.len();
+                continue;
+            }
+            // `<NAME ` or `<NAME>` — opening tag.
+            if haystack[i..].starts_with(&open_with_space) || haystack[i..].starts_with(&open_bare)
+            {
+                // Distinguish XHTML-style self-closing (`<NAME … />`) from a
+                // real opener: search for the first `>` and check whether the
+                // preceding byte is `/`. Self-closing tags of the same name
+                // are balanced and must not bump depth, otherwise we'd treat
+                // them as unterminated.
+                if let Some(rel) = haystack[i..].find('>') {
+                    let end = i + rel;
+                    if end > 0 && haystack.as_bytes()[end - 1] == b'/' {
+                        i = end + 1;
+                        continue;
+                    }
+                }
+                opens += 1;
+                i += 1;
+                continue;
+            }
+            i += 1;
+        }
+        (opens, closes)
+    }
+
+    // Apply tag counting to the rest of the start line (after the opener).
+    let (o, c) = count_tags(after_open, &full_name);
+    depth = depth.saturating_add(o).saturating_sub(c);
+    raw.push_str(after_open);
+
+    let mut consumed = 1usize;
+
+    while depth > 0 {
+        let idx = start + consumed;
+        if idx >= lines.len() {
+            // Unterminated — bail.
+            return None;
+        }
+        let line = lines[idx];
+        raw.push('\n');
+        let (o, c) = count_tags(line, &full_name);
+        depth = depth.saturating_add(o).saturating_sub(c);
+        raw.push_str(line);
+        consumed += 1;
+    }
+
+    // After balancing, ensure the line that closed the block has no
+    // additional non-whitespace content AFTER the final `</NAME>` — otherwise
+    // we'd be mixing raw XHTML with markdown on the same line and the
+    // extraction is unsafe.
+    let last_line_idx = start + consumed - 1;
+    let last_line = lines[last_line_idx];
+    let close_tag = format!("</{full_name}>");
+    if let Some(pos) = last_line.rfind(&close_tag) {
+        let after = &last_line[pos + close_tag.len()..];
+        if !after.trim().is_empty() {
+            return None;
+        }
+    }
+
+    Some((consumed, raw))
+}
+
+/// Replace `<!--ATL_RAW_{n}-->` placeholders with the original raw XHTML
+/// captured during [`substitute_raw_xhtml`]. Restored verbatim — no escaping.
+fn restore_raw_xhtml(html: &str, raw: &[String]) -> String {
+    const PREFIX: &str = "<!--ATL_RAW_";
+    const SUFFIX: &str = "-->";
+
+    let mut out = String::with_capacity(html.len());
+    let mut rest = html;
+
+    while let Some(pos) = rest.find(PREFIX) {
+        out.push_str(&rest[..pos]);
+        let after_prefix = &rest[pos + PREFIX.len()..];
+        let end = match after_prefix.find(SUFFIX) {
+            Some(e) => e,
+            None => {
+                out.push_str(&rest[pos..]);
+                rest = "";
+                break;
+            }
+        };
+        let digits = &after_prefix[..end];
+        let idx: usize = match digits.parse() {
+            Ok(n) => n,
+            Err(_) => {
+                out.push_str(&rest[pos..pos + PREFIX.len() + end + SUFFIX.len()]);
+                rest = &rest[pos + PREFIX.len() + end + SUFFIX.len()..];
+                continue;
+            }
+        };
+        match raw.get(idx) {
+            Some(s) => out.push_str(s),
+            None => {
+                out.push_str(&rest[pos..pos + PREFIX.len() + end + SUFFIX.len()]);
+            }
+        }
+        rest = &rest[pos + PREFIX.len() + end + SUFFIX.len()..];
+    }
+    out.push_str(rest);
     out
 }
 
@@ -987,10 +1384,206 @@ mod tests {
     }
 
     #[test]
-    fn code_block_passes_through() {
+    fn code_fence_emits_structured_macro() {
+        // Fenced code blocks now emit the native Confluence `code` macro instead
+        // of `<pre><code>`. The macro round-trips cleanly through
+        // `storage_to_md::storage_to_markdown` back into a fenced block.
         let out = convert("```\nplain\n```");
-        assert!(out.contains("<pre>"), "got: {out}");
-        assert!(out.contains("plain"), "got: {out}");
+        assert!(
+            out.contains(r#"<ac:structured-macro ac:name="code">"#),
+            "got: {out}"
+        );
+        assert!(
+            out.contains("<ac:plain-text-body><![CDATA[plain]]></ac:plain-text-body>"),
+            "got: {out}"
+        );
+        assert!(out.contains("</ac:structured-macro>"), "got: {out}");
+        assert!(
+            !out.contains("<pre>"),
+            "code macro must not render as <pre>, got: {out}"
+        );
+    }
+
+    #[test]
+    fn code_fence_with_language_emits_language_parameter() {
+        let out = convert("```python\nprint(\"hi\")\n```");
+        assert!(
+            out.contains(r#"<ac:parameter ac:name="language">python</ac:parameter>"#),
+            "expected language parameter, got: {out}"
+        );
+        assert!(
+            out.contains(r#"<![CDATA[print("hi")]]>"#),
+            "expected body inside CDATA, got: {out}"
+        );
+    }
+
+    #[test]
+    fn code_fence_without_language_omits_language_parameter() {
+        let out = convert("```\nplain\n```");
+        // `<ac:structured-macro ac:name="code">` must be followed immediately by
+        // `<ac:plain-text-body>` (no `<ac:parameter>` in between).
+        assert!(
+            out.contains(r#"<ac:structured-macro ac:name="code"><ac:plain-text-body>"#),
+            "expected no language parameter between macro and body, got: {out}"
+        );
+    }
+
+    #[test]
+    fn code_fence_with_cdata_terminator_in_body_splits_cdata() {
+        // `cdata_escape` rewrites `]]>` as `]]]]><![CDATA[>` so the CDATA section
+        // remains valid in the rendered macro.
+        let out = convert("```\nfoo ]]> bar\n```");
+        assert!(
+            out.contains("]]]]><![CDATA[>"),
+            "expected CDATA terminator to be split, got: {out}"
+        );
+    }
+
+    #[test]
+    fn code_fence_with_multiple_lines_preserves_newlines() {
+        let out = convert("```\nline1\nline2\nline3\n```");
+        assert!(
+            out.contains("<![CDATA[line1\nline2\nline3]]>"),
+            "expected newline-separated lines inside CDATA, got: {out}"
+        );
+    }
+
+    #[test]
+    fn code_fence_with_tilde_fence_also_emits_macro() {
+        let out = convert("~~~python\ncode\n~~~");
+        assert!(
+            out.contains(r#"<ac:structured-macro ac:name="code">"#),
+            "tilde fence must produce code macro, got: {out}"
+        );
+        assert!(
+            out.contains(r#"<ac:parameter ac:name="language">python</ac:parameter>"#),
+            "tilde fence must keep language parameter, got: {out}"
+        );
+        assert!(
+            out.contains("<![CDATA[code]]>"),
+            "tilde fence must keep body, got: {out}"
+        );
+    }
+
+    // ---- raw `<ac:…>` / `<ri:…>` survives comrak ---------------------------
+
+    #[test]
+    fn raw_ac_structured_macro_block_survives_comrak() {
+        // Without the pre-extraction pass, comrak would see the `:` in
+        // `<ac:structured-macro>` (rejected by CommonMark §6.6) and escape
+        // every `<` to `&lt;`, destroying the macro.
+        let md = concat!(
+            "Some prose.\n",
+            "\n",
+            "<ac:structured-macro ac:name=\"jira-issue\" ac:schema-version=\"1\">",
+            "<ac:parameter ac:name=\"key\">FOO-123</ac:parameter>",
+            "</ac:structured-macro>\n",
+            "\n",
+            "More prose.",
+        );
+        let out = convert(md);
+        assert!(
+            out.contains("<ac:structured-macro ac:name=\"jira-issue\""),
+            "raw macro tag must survive verbatim, got: {out}"
+        );
+        assert!(
+            out.contains("</ac:structured-macro>"),
+            "raw macro must keep its close tag, got: {out}"
+        );
+        assert!(
+            out.contains("FOO-123"),
+            "issue key must survive, got: {out}"
+        );
+        assert!(
+            !out.contains("&lt;ac:"),
+            "macro must NOT be escaped to &lt;, got: {out}"
+        );
+    }
+
+    #[test]
+    fn raw_ac_with_multiline_body_survives_comrak() {
+        // A multi-line macro with a `<ac:rich-text-body>` child must be captured
+        // as a single block and replayed verbatim.
+        let md = concat!(
+            "<ac:structured-macro ac:name=\"info\">\n",
+            "<ac:rich-text-body>\n",
+            "<p>Hello</p>\n",
+            "</ac:rich-text-body>\n",
+            "</ac:structured-macro>",
+        );
+        let out = convert(md);
+        assert!(
+            out.contains("<ac:rich-text-body>"),
+            "rich-text-body must survive verbatim, got: {out}"
+        );
+        assert!(
+            out.contains("<p>Hello</p>"),
+            "inner content must survive, got: {out}"
+        );
+        assert!(
+            !out.contains("&lt;ac:"),
+            "macro must not be escaped, got: {out}"
+        );
+    }
+
+    #[test]
+    fn raw_ri_self_closing_block_survives_comrak() {
+        let md = r#"<ri:user ri:userkey="abc"/>"#;
+        let out = convert(md);
+        assert!(
+            out.contains(r#"<ri:user ri:userkey="abc"/>"#),
+            "self-closing ri: tag must survive verbatim, got: {out}"
+        );
+        assert!(
+            !out.contains("&lt;ri:"),
+            "ri: tag must not be escaped, got: {out}"
+        );
+    }
+
+    #[test]
+    fn raw_ac_inside_fenced_code_block_is_not_extracted() {
+        // The extractor must respect fenced code regions — content inside a
+        // ```...``` block is documentation, not actual storage XHTML.
+        let md = "```\n<ac:structured-macro ac:name=\"x\"/>\n```";
+        let out = convert(md);
+        // The whole block is now the new code-macro shape with the raw text
+        // preserved inside CDATA.
+        assert!(
+            out.contains(r#"<ac:structured-macro ac:name="code">"#),
+            "outer block must be a code macro, got: {out}"
+        );
+        assert!(
+            out.contains("<![CDATA[<ac:structured-macro ac:name=\"x\"/>]]>"),
+            "inner tag must appear as literal text inside CDATA, got: {out}"
+        );
+    }
+
+    #[test]
+    fn raw_ac_followed_by_more_markdown_is_extracted_cleanly() {
+        // The extractor must not consume trailing markdown.
+        let md = "<ac:structured-macro ac:name=\"x\"/>\n\n# Heading after";
+        let out = convert(md);
+        assert!(
+            out.contains(r#"<ac:structured-macro ac:name="x"/>"#),
+            "raw self-closing tag must survive, got: {out}"
+        );
+        assert!(
+            out.contains("<h1>Heading after</h1>"),
+            "trailing markdown heading must still render, got: {out}"
+        );
+    }
+
+    #[test]
+    fn malformed_ac_tag_falls_back_to_comrak_escaping() {
+        // `try_extract_raw_block` returns `None` on malformed input, so the
+        // line falls back to comrak's previous (escaping) behaviour. The test
+        // documents the no-regression contract: we accept either the escaped
+        // or the literal form, but the conversion must NOT panic.
+        let out = convert("<ac:not-closed without close tag");
+        assert!(
+            out.contains("&lt;ac:") || out.contains("<ac:not-closed"),
+            "expected either escaped or literal form (no panic, no regression), got: {out}"
+        );
     }
 
     // ---- block directives -------------------------------------------------

@@ -41,8 +41,8 @@ fn code_macro_round_trip_from_bug_report() {
         "intermediate markdown must contain a backtick fence, got: {md:?}"
     );
     assert!(
-        md.contains("bash"),
-        "intermediate markdown must carry the bash language token, got: {md:?}"
+        md.contains("```bash\n"),
+        "intermediate markdown must carry the bash language token on the fence, got: {md:?}"
     );
     assert!(
         md.contains("#!/bin/bash"),

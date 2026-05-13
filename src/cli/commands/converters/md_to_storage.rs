@@ -812,6 +812,18 @@ fn try_extract_raw_block(lines: &[&str], start: usize) -> Option<(usize, String)
             // `<NAME ` or `<NAME>` — opening tag.
             if haystack[i..].starts_with(&open_with_space) || haystack[i..].starts_with(&open_bare)
             {
+                // Distinguish XHTML-style self-closing (`<NAME … />`) from a
+                // real opener: search for the first `>` and check whether the
+                // preceding byte is `/`. Self-closing tags of the same name
+                // are balanced and must not bump depth, otherwise we'd treat
+                // them as unterminated.
+                if let Some(rel) = haystack[i..].find('>') {
+                    let end = i + rel;
+                    if end > 0 && haystack.as_bytes()[end - 1] == b'/' {
+                        i = end + 1;
+                        continue;
+                    }
+                }
                 opens += 1;
                 i += 1;
                 continue;

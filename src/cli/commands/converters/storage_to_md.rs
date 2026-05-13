@@ -1213,7 +1213,20 @@ fn emit_structured_macro(
             }
             return;
         }
-        let language = params.get("language").cloned().unwrap_or_default();
+        // Sanitise the fence info string: take only the first whitespace-
+        // delimited token and strip surrounding backticks. Otherwise an
+        // exotic `language` parameter could embed a newline (closing the
+        // info string mid-way) or backticks (closing the fence early).
+        let language = params
+            .get("language")
+            .map(|s| {
+                s.split_ascii_whitespace()
+                    .next()
+                    .unwrap_or("")
+                    .trim_matches('`')
+                    .to_string()
+            })
+            .unwrap_or_default();
         let fence = pick_code_fence(body);
         ensure_blank_line(out);
         out.push_str(&fence);

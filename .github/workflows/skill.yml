@@ -29,14 +29,8 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # ghcr.io/mazuninky/dq:v2026.20.1 — pinned by digest. Bump both the
-  # comment and the digest together when upgrading dq.
-  #
-  # We use `docker run` (not job-level `container:`) because the dq
-  # image is alpine + musl without node20, which actions/checkout v6
-  # requires inside the container. Pulling the image once and reusing
-  # it across two steps is cheaper than rolling a custom action.
-  DQ_IMAGE: ghcr.io/mazuninky/dq@sha256:0908e6d8245d4a505594835ad3ef64a1c60f309308c108afe34d940fbaf1127f
+  # dq release pin. Bump in lockstep with .dq/rules/ when upgrading.
+  DQ_VERSION: v2026.20.1
 
 jobs:
   dq:
@@ -45,30 +39,30 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: dq --version
-        run: docker run --rm "$DQ_IMAGE" --version
+      # Cache the dq binary across runs — the install script is fast
+      # (single ~5 MB tarball), but skipping it on cache hit keeps the
+      # job under a second for the steady state.
+      - name: Cache dq binary
+        id: cache-dq
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ~/.local/bin/dq
+          key: dq-${{ runner.os }}-${{ runner.arch }}-${{ env.DQ_VERSION }}
 
-      # Verify the rule fixtures themselves still pass — catches drift in
-      # the rule logic before we apply it to the real skill files.
-      - name: dq test (rule fixtures)
+      - name: Install dq
+        if: steps.cache-dq.outputs.cache-hit != 'true'
         run: |
-          docker run --rm \
-            --user "$(id -u):$(id -g)" \
-            -v "$GITHUB_WORKSPACE:/work" \
-            "$DQ_IMAGE" \
-            test --no-color ./.dq/rules/
+          mkdir -p "$HOME/.local/bin"
+          curl -sSfL "https://raw.githubusercontent.com/mazuninky/dq/master/scripts/install.sh" \
+            | sh -s -- --version "$DQ_VERSION" --install-dir "$HOME/.local/bin"
 
-      # Validate the skill bundle itself. --strict promotes warn-level
-      # diagnostics to errors; we want a clean wall.
-      - name: dq lint (skill bundle)
+      - name: Add dq to PATH
+        run: echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      # `dq test` exercises rule fixtures, `dq lint --strict` exercises
+      # the real bundle. Chained so we pay one shell startup, not two.
+      - name: dq test + lint
         run: |
-          docker run --rm \
-            --user "$(id -u):$(id -g)" \
-            -v "$GITHUB_WORKSPACE:/work" \
-            "$DQ_IMAGE" \
-            lint \
-              --rules ./.dq/rules/ \
-              --no-color \
-              --strict \
-              skill/SKILL.md \
-              skill/evals/evals.json
+          dq test --no-color ./.dq/rules/ \
+            && dq lint --rules ./.dq/rules/ --no-color --strict \
+                 skill/SKILL.md skill/evals/evals.json

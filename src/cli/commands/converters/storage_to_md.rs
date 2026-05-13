@@ -1182,6 +1182,54 @@ fn emit_structured_macro(
         return;
     }
 
+    // ---- `code` macro (storage representation of a fenced code block) ----
+    //
+    // Confluence's UI emits `<ac:structured-macro ac:name="code">` for every
+    // code block — even basic ones — and tacks on `breakoutMode`, `language`,
+    // `theme`, line-number flags, etc. as `<ac:parameter>` children. The macro
+    // is not in the directive registry (no MyST equivalent), so without this
+    // branch it would fall through to the raw-XHTML passthrough below, and the
+    // `md_to_storage` writer would then re-escape the angle brackets through
+    // comrak (`<ac:…>` contains a colon, which CommonMark inline-HTML rules
+    // reject). Render it as a normal fenced code block instead.
+    //
+    // Lossy on purpose: `breakoutMode`/`theme`/`linenumbers`/etc. are dropped
+    // on the read side. The write side rebuilds the macro from just `language`
+    // + body, which is enough for Confluence to render the code block
+    // correctly. Users who need the extra parameters preserved should edit via
+    // the storage format directly.
+    if macro_name == "code"
+        && spec.is_none()
+        && let Some(body) = plain_body.as_ref()
+    {
+        if !ctx.opts.render_directives {
+            // `--no-directives` mode: emit the body verbatim with a blank
+            // line around it, matching the fallback behaviour for other
+            // body-bearing macros above.
+            if !body.is_empty() {
+                ensure_blank_line(out);
+                out.push_str(body);
+                out.push_str("\n\n");
+            }
+            return;
+        }
+        let language = params.get("language").cloned().unwrap_or_default();
+        let fence = pick_code_fence(body);
+        ensure_blank_line(out);
+        out.push_str(&fence);
+        out.push_str(&language);
+        out.push('\n');
+        out.push_str(body);
+        if !body.ends_with('\n') {
+            out.push('\n');
+        }
+        out.push_str(&fence);
+        out.push_str("\n\n");
+        return;
+    }
+    // `code` macro with no `<ac:plain-text-body>` (malformed) falls through
+    // to the raw-passthrough below so the user still sees what was there.
+
     let Some(spec) = spec else {
         // Unknown macro — pass through as raw HTML so the round-trip is
         // lossless (rare external macros like jira-issue, gallery, etc.).
@@ -1849,6 +1897,130 @@ mod tests {
         assert!(
             out.contains("`````rust\na ```` b\n`````\n"),
             "expected 5-tick fence with rust language, got: {out:?}"
+        );
+    }
+
+    // ---- `<ac:structured-macro ac:name="code">` → fenced code block --------
+
+    #[test]
+    fn code_macro_with_language_emits_fence() {
+        let out = convert(concat!(
+            r#"<ac:structured-macro ac:name="code">"#,
+            r#"<ac:parameter ac:name="language">python</ac:parameter>"#,
+            r#"<ac:plain-text-body><![CDATA[print("hi")]]></ac:plain-text-body>"#,
+            r#"</ac:structured-macro>"#,
+        ));
+        assert!(
+            out.contains("```python\nprint(\"hi\")\n"),
+            "expected fenced block opened with language token, got: {out:?}"
+        );
+        assert!(
+            out.contains("\n```"),
+            "expected closing fence, got: {out:?}"
+        );
+        assert!(
+            !out.contains("<ac:structured-macro"),
+            "raw macro tag must not survive in markdown output, got: {out:?}"
+        );
+    }
+
+    #[test]
+    fn code_macro_without_language_emits_fence() {
+        let out = convert(concat!(
+            r#"<ac:structured-macro ac:name="code">"#,
+            r#"<ac:plain-text-body><![CDATA[plain code]]></ac:plain-text-body>"#,
+            r#"</ac:structured-macro>"#,
+        ));
+        // Fence opens with no language token before the newline.
+        assert!(
+            out.contains("```\nplain code\n```"),
+            "expected language-less fence around the body, got: {out:?}"
+        );
+        assert!(
+            !out.contains("<ac:structured-macro"),
+            "raw macro tag must not survive, got: {out:?}"
+        );
+    }
+
+    #[test]
+    fn code_macro_drops_breakout_parameters() {
+        let out = convert(concat!(
+            r#"<ac:structured-macro ac:name="code">"#,
+            r#"<ac:parameter ac:name="breakoutMode">wide</ac:parameter>"#,
+            r#"<ac:parameter ac:name="breakoutWidth">760</ac:parameter>"#,
+            r#"<ac:parameter ac:name="language">bash</ac:parameter>"#,
+            r#"<ac:plain-text-body><![CDATA[echo hi]]></ac:plain-text-body>"#,
+            r#"</ac:structured-macro>"#,
+        ));
+        // Lossy by design: non-language parameters are dropped.
+        assert!(
+            !out.contains("breakoutMode"),
+            "breakoutMode must not appear, got: {out:?}"
+        );
+        assert!(
+            !out.contains("breakoutWidth"),
+            "breakoutWidth must not appear, got: {out:?}"
+        );
+        assert!(!out.contains("760"), "760 must not appear, got: {out:?}");
+        assert!(!out.contains("wide"), "wide must not appear, got: {out:?}");
+        // Language and body still present.
+        assert!(
+            out.contains("```bash\necho hi\n```"),
+            "expected fence with bash language and body, got: {out:?}"
+        );
+    }
+
+    #[test]
+    fn code_macro_with_triple_backticks_in_body_uses_longer_fence() {
+        // Mirrors `code_block_with_triple_backticks_uses_four_tick_fence` for the
+        // structured-macro path: the body contains ``` which would close a
+        // 3-tick fence prematurely.
+        let out = convert(concat!(
+            r#"<ac:structured-macro ac:name="code">"#,
+            r#"<ac:parameter ac:name="language">md</ac:parameter>"#,
+            r#"<ac:plain-text-body><![CDATA[a ``` b]]></ac:plain-text-body>"#,
+            r#"</ac:structured-macro>"#,
+        ));
+        assert!(
+            out.contains("````md\na ``` b\n````"),
+            "expected at-least-4-tick fence around triple-backtick body, got: {out:?}"
+        );
+    }
+
+    #[test]
+    fn code_macro_no_directives_mode_emits_body_only() {
+        let out = convert_no_directives(concat!(
+            r#"<ac:structured-macro ac:name="code">"#,
+            r#"<ac:parameter ac:name="language">python</ac:parameter>"#,
+            r#"<ac:plain-text-body><![CDATA[print("hi")]]></ac:plain-text-body>"#,
+            r#"</ac:structured-macro>"#,
+        ));
+        assert!(
+            out.contains("print(\"hi\")"),
+            "body text must appear, got: {out:?}"
+        );
+        assert!(
+            !out.contains("```"),
+            "no fence markers in --no-directives mode, got: {out:?}"
+        );
+        assert!(
+            !out.contains("<ac:"),
+            "no raw ac: tags in --no-directives mode, got: {out:?}"
+        );
+    }
+
+    #[test]
+    fn code_macro_without_plain_text_body_falls_back_to_raw_passthrough() {
+        // Malformed code macro (no `<ac:plain-text-body>`) — defensive fall-through
+        // to the raw-XHTML passthrough so the user still sees the original tag.
+        let out = convert(concat!(
+            r#"<ac:structured-macro ac:name="code">"#,
+            r#"<ac:parameter ac:name="language">python</ac:parameter>"#,
+            r#"</ac:structured-macro>"#,
+        ));
+        assert!(
+            out.contains("<ac:structured-macro"),
+            "expected raw passthrough when plain-text-body is missing, got: {out:?}"
         );
     }
 

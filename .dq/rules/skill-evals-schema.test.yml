@@ -1,0 +1,85 @@
+tests:
+  - name: well-formed evals.json passes
+    input: |
+      {
+        "skill_name": "atl",
+        "evals": [
+          {
+            "id": 1,
+            "prompt": "find open bugs in BACKEND",
+            "expected_output": "Uses atl j search ...",
+            "assertions": [
+              { "text": "uses -F toon", "type": "output" }
+            ]
+          }
+        ]
+      }
+    format: json
+    expected:
+      violations: []
+
+  - name: missing expected_output fires
+    input: |
+      {
+        "skill_name": "atl",
+        "evals": [
+          {
+            "id": 1,
+            "prompt": "x",
+            "assertions": [
+              { "text": "y", "type": "output" }
+            ]
+          }
+        ]
+      }
+    format: json
+    expected:
+      violations:
+        - rule: atl.skill-evals-schema
+          message_contains: "expected_output"
+
+  - name: empty assertions array fires
+    input: |
+      {
+        "skill_name": "atl",
+        "evals": [
+          {
+            "id": 1,
+            "prompt": "x",
+            "expected_output": "y",
+            "assertions": []
+          }
+        ]
+      }
+    format: json
+    expected:
+      violations:
+        - rule: atl.skill-evals-schema
+          message_contains: "less than 1 item"
+
+  - name: bogus assertion type fires
+    input: |
+      {
+        "skill_name": "atl",
+        "evals": [
+          {
+            "id": 1,
+            "prompt": "x",
+            "expected_output": "y",
+            "assertions": [
+              { "text": "z", "type": "wat" }
+            ]
+          }
+        ]
+      }
+    format: json
+    expected:
+      violations:
+        - rule: atl.skill-evals-schema
+
+  - name: unrelated json file does not fire
+    input: |
+      { "name": "package", "version": "1.0.0" }
+    format: json
+    expected:
+      violations: []

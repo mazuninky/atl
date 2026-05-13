@@ -1,0 +1,43 @@
+id: atl.skill-frontmatter
+description: |
+  SKILL.md must declare a YAML frontmatter block with `name` and
+  `description`. The Anthropic skill loader truncates descriptions
+  longer than 1024 characters, so we cap it here as well. The rule
+  fires only on markdown files that already have frontmatter, so
+  arbitrary `references/*.md` notes are not affected.
+severity: error
+match:
+  format: markdown
+  filter: '.frontmatter != null'
+check:
+  jq: |
+    . as $doc
+    | ($doc.frontmatter.value // {}) as $fm
+    | (
+        (
+          (["name", "description"] - ($fm | keys))
+          | map({ msg: ("missing required field `" + . + "`") })
+        )
+        +
+        (
+          # Only run the pattern check when `name` is actually present —
+          # missing-field is reported by the `keys` diff above.
+          if ($fm | has("name")) and (($fm.name // "") | type == "string" and test("^[a-z0-9][a-z0-9_-]*$") | not)
+          then [{ msg: "`name` must match ^[a-z0-9][a-z0-9_-]*$" }]
+          else []
+          end
+        )
+        +
+        (
+          # Folded scalars collapse runs of whitespace to a single space
+          # before being passed to the loader; mirror that here.
+          (($fm.description // "") | tostring | gsub("\\s+"; " ") | length) as $len
+          | if $len > 1024
+            then [{ msg: ("`description` is " + ($len | tostring) + " chars, exceeds 1024 (will be truncated)") }]
+            else []
+            end
+        )
+      )[]
+  message: "SKILL.md frontmatter: {{ .msg }}"
+loc:
+  line: 1

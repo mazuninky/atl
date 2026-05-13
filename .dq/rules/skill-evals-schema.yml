@@ -1,0 +1,14 @@
+id: atl.skill-evals-schema
+description: |
+  skill/evals/evals.json must conform to skill-evals.schema.json
+  (JSON Schema 2020-12). The match filter pins the rule to the
+  evals shape (`skill_name` + `evals`) so the rule is silently
+  skipped against any other JSON file in the workspace.
+severity: error
+match:
+  format: json
+  filter: 'has("skill_name") and has("evals")'
+check:
+  schema_file: ./skill-evals.schema.json
+references:
+  - https://json-schema.org/draft/2020-12

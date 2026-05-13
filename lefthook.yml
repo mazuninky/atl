@@ -7,3 +7,18 @@ pre-commit:
       run: cargo clippy -- -D warnings
     test:
       run: cargo test
+    # Skill bundle gate via dq. Soft-skips when dq is not installed
+    # locally so contributors who only touch Rust never see a missing
+    # binary. CI always has dq via the container image.
+    dq-skill:
+      glob:
+        - "skill/**"
+        - ".dq/**"
+      run: |
+        if command -v dq >/dev/null 2>&1; then
+          dq test --no-color ./.dq/rules/ \
+            && dq lint --rules ./.dq/rules/ --no-color --strict \
+                 skill/SKILL.md skill/evals/evals.json
+        else
+          echo "dq not on PATH — skipping skill lint (install via mazuninky/dq scripts/install.sh, or rely on CI)" >&2
+        fi

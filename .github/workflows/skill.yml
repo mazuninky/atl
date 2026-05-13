@@ -1,0 +1,71 @@
+name: skill
+
+# Validates the Claude skill bundle: SKILL.md frontmatter shape and the
+# evals.json JSON Schema, via the dq linter (mazuninky/dq). Cheap,
+# scoped to skill-only paths so it does not run on Rust-only PRs.
+#
+# Spell-check coverage for skill/**/*.md is provided by the typos job
+# in ci.yml (which runs against the entire repo) — no second pass here.
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "skill/**"
+      - ".dq/**"
+      - ".github/workflows/skill.yml"
+  pull_request:
+    paths:
+      - "skill/**"
+      - ".dq/**"
+      - ".github/workflows/skill.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: skill-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # dq release pin. Bump in lockstep with .dq/rules/ when upgrading.
+  DQ_VERSION: v2026.20.1
+
+jobs:
+  dq:
+    name: dq lint + test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      # Cache the dq binary across runs — the install script is fast
+      # (single ~5 MB tarball), but skipping it on cache hit keeps the
+      # job under a second for the steady state.
+      - name: Cache dq binary
+        id: cache-dq
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ~/.local/bin/dq
+          key: dq-${{ runner.os }}-${{ runner.arch }}-${{ env.DQ_VERSION }}
+
+      - name: Install dq
+        if: steps.cache-dq.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          # Pin installer URL to the same tag as the binary so a future
+          # rewrite of install.sh on master never breaks reproducibility
+          # of an older atl release.
+          curl -sSfL "https://raw.githubusercontent.com/mazuninky/dq/${DQ_VERSION}/scripts/install.sh" \
+            | sh -s -- --version "$DQ_VERSION" --install-dir "$HOME/.local/bin"
+
+      - name: Add dq to PATH
+        run: echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      # `dq test` exercises rule fixtures, `dq lint --strict` exercises
+      # the real bundle. Chained so we pay one shell startup, not two.
+      - name: dq test + lint
+        run: |
+          dq test --no-color ./.dq/rules/ \
+            && dq lint --rules ./.dq/rules/ --no-color --strict \
+                 skill/SKILL.md skill/evals/evals.json

@@ -1,0 +1,80 @@
+tests:
+  - name: complete frontmatter passes
+    input: |
+      ---
+      name: atl
+      description: >
+        Guide for using the `atl` CLI to manage Confluence and Jira from
+        the terminal.
+      ---
+
+      # Body
+
+      Body text.
+    format: markdown
+    expected:
+      violations: []
+
+  - name: missing description fires
+    input: |
+      ---
+      name: atl
+      ---
+
+      # Body
+    format: markdown
+    expected:
+      violations:
+        - rule: atl.skill-frontmatter
+          message_contains: "missing required field `description`"
+
+  - name: missing name fires
+    input: |
+      ---
+      description: A skill.
+      ---
+
+      # Body
+    format: markdown
+    expected:
+      violations:
+        - rule: atl.skill-frontmatter
+          message_contains: "missing required field `name`"
+
+  - name: invalid name pattern fires
+    input: |
+      ---
+      name: BadName!
+      description: A skill.
+      ---
+
+      # Body
+    format: markdown
+    expected:
+      violations:
+        - rule: atl.skill-frontmatter
+          message_contains: "`name` must match"
+
+  - name: oversized description fires
+    # 1500 chars > 1024 cap; quoted scalar avoids YAML folded-block parser quirks
+    input: |
+      ---
+      name: atl
+      description: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+      ---
+
+      # Body
+    format: markdown
+    expected:
+      violations:
+        - rule: atl.skill-frontmatter
+          message_contains: "exceeds 1024"
+
+  - name: no frontmatter does not fire
+    input: |
+      # Just a reference doc
+
+      No frontmatter here.
+    format: markdown
+    expected:
+      violations: []

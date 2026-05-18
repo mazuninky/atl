@@ -61,7 +61,7 @@ chrono = { version = "0.4", default-features = false, features = ["serde", "cloc
 glob = "0.3"
 
 # Shell-like word splitting (pager command, aliases in P5)
-shlex = "1"
+shlex = "2"
 
 # Markdown
 comrak = { version = "0.52", default-features = false }

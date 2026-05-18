@@ -198,6 +198,7 @@ All changes to `master` **must** go through a pull request — direct pushes are
 - **Never bypass hooks.** `--no-verify` / `-n` are blocked by `.claude/settings.json` for a reason.
 - **Don't widen `Error` casually.** Every new variant changes the exit-code surface. Prefer `.context()` on `anyhow::Error` unless you genuinely need a new exit code.
 - **Keep `main.rs` tiny.** Parsing, dispatch, runtime construction. Logic goes in `cli/commands/`.
+- **Pin GitHub Actions by commit SHA, not tag-object SHA.** Always use the commit SHA the tag points to (`type: "commit"`), with the human-readable version in a trailing `# v…` comment. Annotated tag-object SHAs (`type: "tag"`) resolve correctly but can be re-pointed by maintainers; commit SHAs are immutable. Dependabot will sometimes "bump" an action where the version comment stays the same but the SHA changes — that's it switching a tag-object SHA to the underlying commit SHA, and is the correct direction.
 
 ## Versioning & releases
 

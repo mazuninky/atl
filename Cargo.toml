@@ -44,7 +44,7 @@ webbrowser = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 toml = "1"
-toon-format = { version = "0.4", default-features = false }
+toon-format = { version = "0.5", default-features = false }
 
 # Auth
 base64 = "0.22"

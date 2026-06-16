@@ -546,34 +546,14 @@ async fn report_service_status(
     skip_verify: bool,
 ) -> Result<()> {
     let account = account_for_instance(instance);
-    let svc = service_name(profile_name, kind);
 
-    // Figure out where the token comes from (if anywhere).
-    let source: Option<&'static str>;
-    let token_for_check: Option<String>;
-    if std::env::var("ATL_API_TOKEN").is_ok() {
-        source = Some("env");
-        token_for_check = Some(std::env::var("ATL_API_TOKEN").unwrap_or_default());
-    } else if instance.api_token.is_some() {
-        source = Some("toml");
-        token_for_check = instance.api_token.clone();
-    } else {
-        match store.get(&svc, &account) {
-            Ok(Some(t)) => {
-                source = Some("keyring");
-                token_for_check = Some(t);
-            }
-            Ok(None) => {
-                source = None;
-                token_for_check = None;
-            }
-            Err(e) => {
-                debug!("keyring lookup failed while computing status: {e}");
-                source = None;
-                token_for_check = None;
-            }
-        }
-    }
+    // Figure out where the token comes from (if anywhere) via the canonical
+    // resolver so this stays in lock-step with `AtlassianInstance::resolved_token`.
+    let (source, token_for_check) =
+        match instance.resolved_token_with_source(profile_name, kind, store) {
+            Some((token, src)) => (Some(src.label()), Some(token)),
+            None => (None, None),
+        };
 
     let Some(source_label) = source else {
         writeln!(

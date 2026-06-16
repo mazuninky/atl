@@ -8,7 +8,7 @@ pub const CONFIG_FILE_NAME: &str = "atl.toml";
 pub const CONFIG_DIR_NAME: &str = "atl";
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct Config {
     pub default_profile: String,
     #[serde(default)]
@@ -26,7 +26,7 @@ pub enum TokenStorage {
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-#[serde(default)]
+#[serde(default, deny_unknown_fields)]
 pub struct Profile {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub confluence: Option<AtlassianInstance>,
@@ -41,6 +41,7 @@ pub struct Profile {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct AtlassianInstance {
     pub domain: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -93,6 +94,26 @@ impl Config {
     }
 }
 
+/// Where a resolved API token came from in the `env → TOML → keyring` chain.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TokenSource {
+    Env,
+    Toml,
+    Keyring,
+}
+
+impl TokenSource {
+    /// Stable lowercase label used in `atl auth status` output.
+    #[must_use]
+    pub fn label(self) -> &'static str {
+        match self {
+            TokenSource::Env => "env",
+            TokenSource::Toml => "toml",
+            TokenSource::Keyring => "keyring",
+        }
+    }
+}
+
 impl AtlassianInstance {
     /// Resolves the API token using the full `env → TOML → keyring` chain.
     ///
@@ -142,16 +163,32 @@ impl AtlassianInstance {
         kind: &str,
         store: &dyn crate::auth::SecretStore,
     ) -> Option<String> {
-        // 1. Env var always wins — keeps CI workflows stable.
+        self.resolved_token_with_source(profile, kind, store)
+            .map(|(token, _)| token)
+    }
+
+    /// Like [`Self::resolved_token`] but also reports which source the token
+    /// came from. The precedence and semantics are identical: env (non-empty)
+    /// wins, then the TOML `api_token`, then the keyring.
+    ///
+    /// Returns `None` when no token is available from any source.
+    pub fn resolved_token_with_source(
+        &self,
+        profile: &str,
+        kind: &str,
+        store: &dyn crate::auth::SecretStore,
+    ) -> Option<(String, TokenSource)> {
+        // 1. Env var always wins — keeps CI workflows stable. An empty or
+        //    whitespace-only value is treated as unset and falls through.
         if let Ok(env_token) = std::env::var("ATL_API_TOKEN")
             && !env_token.trim().is_empty()
         {
-            return Some(env_token);
+            return Some((env_token, TokenSource::Env));
         }
 
         // 2. Token from config file.
         if let Some(toml_token) = self.api_token.as_ref() {
-            return Some(toml_token.clone());
+            return Some((toml_token.clone(), TokenSource::Toml));
         }
 
         // 3. Keyring lookup. A missing keyring backend returns `Ok(None)`
@@ -160,7 +197,8 @@ impl AtlassianInstance {
         let account = self.email.as_deref().unwrap_or("default");
         let svc = crate::auth::service_name(profile, kind);
         match store.get(&svc, account) {
-            Ok(secret) => secret,
+            Ok(Some(secret)) => Some((secret, TokenSource::Keyring)),
+            Ok(None) => None,
             Err(err) => {
                 tracing::debug!("keyring lookup failed for {svc}: {err}");
                 None
@@ -293,6 +331,112 @@ mod tests {
         assert_eq!(
             inst.resolved_token("default", "jira", &store).as_deref(),
             Some("env-token")
+        );
+
+        unsafe { std::env::remove_var("ATL_API_TOKEN") };
+    }
+
+    #[test]
+    fn resolved_token_with_source_skips_empty_env() {
+        let _g = env_lock();
+        // SAFETY: serialized by env_lock().
+        unsafe { std::env::set_var("ATL_API_TOKEN", "") };
+
+        let store = crate::auth::InMemoryStore::new();
+        // No keyring entry and no TOML token, so an empty env must fall
+        // through to `None` rather than yielding TokenSource::Env.
+        let inst = make_instance(None, Some("alice@acme.com"));
+        assert_eq!(
+            inst.resolved_token_with_source("default", "jira", &store),
+            None
+        );
+
+        // A non-empty env value yields the env source.
+        unsafe { std::env::set_var("ATL_API_TOKEN", "env-token") };
+        assert_eq!(
+            inst.resolved_token_with_source("default", "jira", &store),
+            Some(("env-token".to_string(), TokenSource::Env))
+        );
+
+        unsafe { std::env::remove_var("ATL_API_TOKEN") };
+    }
+
+    #[test]
+    fn token_source_labels_are_stable() {
+        // `atl auth status` prints these exact strings; pin them so a
+        // rename of the enum variant can't silently change user-facing output.
+        assert_eq!(TokenSource::Env.label(), "env");
+        assert_eq!(TokenSource::Toml.label(), "toml");
+        assert_eq!(TokenSource::Keyring.label(), "keyring");
+    }
+
+    #[test]
+    fn resolved_token_with_source_reports_toml() {
+        let _g = env_lock();
+        unsafe { std::env::remove_var("ATL_API_TOKEN") };
+
+        // TOML token present, no env, no keyring entry ⇒ TokenSource::Toml.
+        let store = crate::auth::InMemoryStore::new();
+        let inst = make_instance(Some("toml-token"), Some("alice@acme.com"));
+
+        assert_eq!(
+            inst.resolved_token_with_source("default", "jira", &store),
+            Some(("toml-token".to_string(), TokenSource::Toml))
+        );
+    }
+
+    #[test]
+    fn resolved_token_with_source_reports_keyring() {
+        let _g = env_lock();
+        unsafe { std::env::remove_var("ATL_API_TOKEN") };
+
+        // No TOML token, no env, token stored under the email account in the
+        // profile/kind keyring service ⇒ TokenSource::Keyring.
+        let store = crate::auth::InMemoryStore::new();
+        store
+            .set(
+                &crate::auth::service_name("default", "jira"),
+                "alice@acme.com",
+                "kr-token",
+            )
+            .unwrap();
+        let inst = make_instance(None, Some("alice@acme.com"));
+
+        assert_eq!(
+            inst.resolved_token_with_source("default", "jira", &store),
+            Some(("kr-token".to_string(), TokenSource::Keyring))
+        );
+    }
+
+    #[test]
+    fn resolved_token_with_source_reports_none() {
+        let _g = env_lock();
+        unsafe { std::env::remove_var("ATL_API_TOKEN") };
+
+        // Nothing anywhere ⇒ None.
+        let store = crate::auth::InMemoryStore::new();
+        let inst = make_instance(None, Some("alice@acme.com"));
+
+        assert_eq!(
+            inst.resolved_token_with_source("default", "jira", &store),
+            None
+        );
+    }
+
+    #[test]
+    fn resolved_token_with_source_env_wins_over_toml() {
+        let _g = env_lock();
+        // SAFETY: serialized by env_lock().
+        unsafe { std::env::set_var("ATL_API_TOKEN", "env-token") };
+
+        // A present TOML token must lose to a non-empty env var, and the
+        // reported source must be Env.
+        let store = crate::auth::InMemoryStore::new();
+        let inst = make_instance(Some("toml-token"), Some("alice@acme.com"));
+
+        assert_eq!(
+            inst.resolved_token_with_source("default", "jira", &store),
+            Some(("env-token".to_string(), TokenSource::Env))
         );
 
         unsafe { std::env::remove_var("ATL_API_TOKEN") };

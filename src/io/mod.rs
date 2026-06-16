@@ -70,12 +70,16 @@ impl ColorChoice {
 enum StdoutBackend {
     System,
     Pager(Box<dyn Write + Send>),
+    // Only constructed by the cfg-gated `IoStreams::test`; in a plain release
+    // build it is never built (only matched on), so silence dead_code there.
+    #[cfg_attr(not(any(test, feature = "test-util")), allow(dead_code))]
     Buffer(Arc<Mutex<Vec<u8>>>),
 }
 
 /// The current stderr backend: either the real stderr or a captured buffer.
 enum StderrBackend {
     System,
+    #[cfg_attr(not(any(test, feature = "test-util")), allow(dead_code))]
     Buffer(Arc<Mutex<Vec<u8>>>),
 }
 
@@ -83,6 +87,7 @@ enum StderrBackend {
 /// or an in-memory cursor for tests.
 enum StdinBackend {
     System(BufReader<io::Stdin>),
+    #[cfg_attr(not(any(test, feature = "test-util")), allow(dead_code))]
     Buffer(Cursor<Vec<u8>>),
 }
 
@@ -130,6 +135,7 @@ impl IoStreams {
     /// All streams are treated as non-TTY, color is disabled, and the pager
     /// is suppressed. Captured output is accessible via
     /// [`Self::stdout_as_string`] / [`Self::stderr_as_string`].
+    #[cfg(any(test, feature = "test-util"))]
     #[must_use]
     pub fn test() -> Self {
         Self {
@@ -247,6 +253,7 @@ impl IoStreams {
 
     /// Captures the stdout buffer as a string. Only valid on instances built
     /// with [`IoStreams::test`]; panics otherwise.
+    #[cfg(any(test, feature = "test-util"))]
     #[must_use]
     pub fn stdout_as_string(&self) -> String {
         match &self.stdout {
@@ -260,6 +267,7 @@ impl IoStreams {
 
     /// Captures the stderr buffer as a string. Only valid on instances built
     /// with [`IoStreams::test`]; panics otherwise.
+    #[cfg(any(test, feature = "test-util"))]
     #[must_use]
     pub fn stderr_as_string(&self) -> String {
         match &self.stderr {

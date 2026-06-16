@@ -89,6 +89,12 @@ tempfile = "3"
 libc = "0.2"
 
 [dev-dependencies]
+# Self dev-dependency so integration tests under `tests/` build the lib with
+# the `test-util` feature under plain `cargo test`. This enables the cfg-gated
+# test-only seams (e.g. `IoStreams::test` / `stdout_as_string`) consumed by
+# `tests/auth_test.rs`. Dev-deps are excluded from the normal build graph, so
+# `cargo build`/`cargo build --release` stay clean.
+atl = { path = ".", features = ["test-util"] }
 assert_cmd = "2"
 predicates = "3"
 httpmock = "0.8"

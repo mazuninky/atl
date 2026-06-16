@@ -167,6 +167,7 @@ dependencies = [
  "apple-native-keyring-store",
  "assert_cmd",
  "async-trait",
+ "atl",
  "base64",
  "camino",
  "chrono",

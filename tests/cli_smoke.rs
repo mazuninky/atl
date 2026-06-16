@@ -181,6 +181,51 @@ fn jira_comment_help_advertises_input_format_flag() {
         .stdout(predicate::str::contains("--input-format"));
 }
 
+// ---------------------------------------------------------------------------
+// SIGPIPE / broken-pipe survival
+//
+// `main.rs::reset_sigpipe` restores `SIG_DFL` for SIGPIPE on Unix so that
+// piping `atl` output into a command like `head` (which closes the read end
+// early) exits cleanly instead of panicking with "Broken pipe". This test
+// guards that reset: it spawns the real binary with stdout piped, drops the
+// read end immediately, and asserts the process did NOT die via a Rust panic
+// (exit code 101) or a crash signal — only a clean exit or SIGPIPE (signal 13)
+// is acceptable. `atl --help` is used because it needs no config, auth, or
+// TTY and produces deterministic multi-line stdout.
+// ---------------------------------------------------------------------------
+
+#[cfg(unix)]
+#[test]
+fn survives_broken_pipe() {
+    use std::os::unix::process::ExitStatusExt;
+    use std::process::{Command as StdCommand, Stdio};
+
+    let bin = assert_cmd::cargo::cargo_bin("atl");
+    let mut child = StdCommand::new(&bin)
+        .env("ATL_NO_UPDATE_NOTIFIER", "1")
+        .env_remove("RUST_LOG")
+        .env_remove("NO_COLOR")
+        .args(["--config", null_config_path(), "--help"])
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+
+    // Close the read end of the pipe immediately so any write from the child
+    // hits a broken pipe.
+    drop(child.stdout.take());
+    let status = child.wait().unwrap();
+
+    // Acceptable outcomes:
+    //   1) code() == Some(0)   — process finished writing (or noticed the
+    //      broken pipe as an IO error) and exited cleanly.
+    //   2) signal() == Some(13) — SIGPIPE killed the process after SIG_DFL
+    //      was restored (the shell reports this as exit code 141 = 128 + 13).
+    // A Rust panic (code 101) or any crash signal (e.g. SIGABRT/SIGSEGV) is a
+    // failure — that is exactly the regression this test guards against.
+    let ok = status.code() == Some(0) || status.signal() == Some(13);
+    assert!(ok, "unexpected exit on broken pipe: {status:?}");
+}
+
 #[test]
 fn jira_create_rejects_invalid_input_format() {
     // Clap should reject an unknown enum value with exit code 2 (usage error).

@@ -32,6 +32,11 @@ allow = [
 [bans]
 multiple-versions = "warn"
 wildcards = "deny"
+# Permit the wildcard on the `atl` self dev-dependency (Cargo.toml [dev-dependencies]),
+# which enables the `test-util` feature for integration tests under tests/. Path
+# deps are local, not a supply-chain vector, so this stays scoped to paths only;
+# registry wildcards remain denied.
+allow-wildcard-paths = true
 highlight = "all"
 
 [sources]

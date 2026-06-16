@@ -1,3 +1,4 @@
+use anyhow::Context;
 use camino::{Utf8Path, Utf8PathBuf};
 use tracing::debug;
 
@@ -22,8 +23,10 @@ impl ConfigLoader {
         match path {
             Some(p) => {
                 debug!("Loading config from {p}");
-                let content = std::fs::read_to_string(p.as_std_path())?;
-                let config: Config = toml::from_str(&content)?;
+                let content = std::fs::read_to_string(p.as_std_path())
+                    .with_context(|| format!("reading config file {p}"))?;
+                let config: Config =
+                    toml::from_str(&content).with_context(|| format!("parsing config file {p}"))?;
 
                 Ok(Some(config))
             }
@@ -183,6 +186,48 @@ email = "test@test.com"
         assert!(config.profiles.contains_key("test"));
 
         std::fs::remove_file(&path).ok();
+    }
+
+    #[test]
+    fn load_rejects_unknown_config_key() {
+        use tempfile::NamedTempFile;
+
+        // `[profiles.test.jira]` carries a misspelled write-guard key
+        // (`read_onyl` instead of `read_only`). With `deny_unknown_fields`
+        // on `AtlassianInstance`, this must error loudly rather than be
+        // silently dropped (which would leave `read_only` defaulting to
+        // `false` and quietly disable the write guard).
+        let file = NamedTempFile::new().unwrap();
+        std::fs::write(
+            file.path(),
+            r#"
+default_profile = "test"
+
+[profiles.test]
+[profiles.test.jira]
+domain = "test.atlassian.net"
+email = "test@test.com"
+read_onyl = true
+"#,
+        )
+        .unwrap();
+
+        let utf8_path = Utf8PathBuf::try_from(file.path().to_path_buf()).unwrap();
+        let err = ConfigLoader::load(Some(utf8_path.as_path()))
+            .expect_err("unknown config key must be rejected, not silently dropped");
+
+        // The full context chain (`{:#}`) must name both the offending file
+        // and the unknown field so the user can find and fix the typo.
+        let msg = format!("{err:#}");
+        assert!(
+            msg.contains(utf8_path.as_str()),
+            "error should name the config file path, got: {msg}"
+        );
+        assert!(
+            msg.contains("read_onyl"),
+            "error should mention the unknown field, got: {msg}"
+        );
+        // `NamedTempFile` cleans up the file on drop.
     }
 
     #[test]

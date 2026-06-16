@@ -22,3 +22,10 @@ unparseable = "unparseable"
 # Fixture project keys / short test strings.
 WRK = "WRK"
 nd = "nd"
+
+[default.extend-identifiers]
+# Deliberate typo of `read_only` used by the `deny_unknown_fields` regression
+# test in src/config/loader.rs — it must stay misspelled to exercise the
+# unknown-key rejection path. Whitelisted as an identifier (not a word) so a
+# bare `onyl` elsewhere is still flagged.
+read_onyl = "read_onyl"

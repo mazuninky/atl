@@ -181,7 +181,9 @@ fn init_logging(cli: &Cli) {
         }
     };
 
-    let filter = EnvFilter::from_default_env().add_directive(level.into());
+    let filter = EnvFilter::builder()
+        .with_default_directive(level.into())
+        .from_env_lossy();
 
     // Use try_init so callers (e.g. integration tests that invoke `run`
     // multiple times in-process) don't panic on second initialization.

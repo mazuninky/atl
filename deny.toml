@@ -12,16 +12,18 @@ ignore = [
   # RUSTSEC-2026-0194 / RUSTSEC-2026-0195: DoS in quick-xml < 0.41.0 (quadratic
   # duplicate-attribute check; unbounded namespace-declaration allocation).
   # Our direct quick-xml dependency is pinned to 0.41 and is NOT in the affected
-  # range. The only remaining affected copy is quick-xml 0.38.4, pulled purely
-  # transitively by self_update, which uses quick-xml solely in its S3 backend
-  # (self_update/src/backends/s3.rs). atl only uses the GitHub backend
-  # (src/cli/commands/updater.rs -> self_update::backends::github), so the
-  # vulnerable XML-parsing path is never reached. No self_update release,
-  # including 1.0.0-rc.1, has moved off `quick-xml = "^0.38"` yet — revisit when
-  # one does. Both advisory ranges are `< 0.41.0`, so this ignore cannot mask a
+  # range. The only remaining affected copy is quick-xml 0.38.4, pinned purely
+  # transitively by self_update 0.44.0 (a non-optional dependency — none of the
+  # self_update features we enable in Cargo.toml gate it). No self_update
+  # release, including 1.0.0-rc.1, has moved off `quick-xml = "^0.38"`, so the
+  # pin cannot be raised yet — revisit when one does. Within self_update,
+  # quick-xml is used only by its S3 backend (self_update/src/backends/s3.rs);
+  # atl calls only self_update::backends::github (src/cli/commands/updater.rs)
+  # and never the S3 backend, so the vulnerable parser is unreachable at
+  # runtime. Both advisory ranges are `< 0.41.0`, so this ignore cannot mask a
   # regression in our own 0.41 dependency.
-  { id = "RUSTSEC-2026-0194", reason = "only affects quick-xml 0.38.4 via self_update's unused S3 backend" },
-  { id = "RUSTSEC-2026-0195", reason = "only affects quick-xml 0.38.4 via self_update's unused S3 backend" },
+  { id = "RUSTSEC-2026-0194", reason = "transitive-only: quick-xml 0.38.4 pinned by self_update 0.44.0 (^0.38); its sole user is self_update's S3 backend, which atl never invokes" },
+  { id = "RUSTSEC-2026-0195", reason = "transitive-only: quick-xml 0.38.4 pinned by self_update 0.44.0 (^0.38); its sole user is self_update's S3 backend, which atl never invokes" },
 ]
 
 [licenses]

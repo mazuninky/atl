@@ -79,7 +79,7 @@ jobs:
           components: rustfmt, clippy
 
       - name: Cache cargo registry and target
-        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2.9.1
+        uses: Swatinem/rust-cache@f0d9c3887740aee45f6153b24b3a6b815192ec16 # v2.9.1
         with:
           shared-key: debug-ubuntu
           save-if: ${{ github.ref == 'refs/heads/master' }}
@@ -113,7 +113,7 @@ jobs:
           toolchain: stable
 
       - name: Cache cargo registry and target
-        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2.9.1
+        uses: Swatinem/rust-cache@f0d9c3887740aee45f6153b24b3a6b815192ec16 # v2.9.1
         with:
           shared-key: ${{ runner.os == 'Linux' && 'debug-ubuntu' || format('test-{0}', matrix.os) }}
           save-if: ${{ github.ref == 'refs/heads/master' }}
@@ -139,7 +139,7 @@ jobs:
           toolchain: "1.95"
 
       - name: Cache cargo registry and target
-        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2.9.1
+        uses: Swatinem/rust-cache@f0d9c3887740aee45f6153b24b3a6b815192ec16 # v2.9.1
         with:
           shared-key: msrv
           save-if: ${{ github.ref == 'refs/heads/master' }}
@@ -182,7 +182,7 @@ jobs:
           python3 tests/contract/patch_specs.py
 
       - name: Cache cargo registry and target
-        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2.9.1
+        uses: Swatinem/rust-cache@f0d9c3887740aee45f6153b24b3a6b815192ec16 # v2.9.1
         with:
           shared-key: debug-ubuntu
           save-if: ${{ github.ref == 'refs/heads/master' }}
@@ -208,7 +208,7 @@ jobs:
           toolchain: stable
 
       - name: Cache cargo registry and target (release)
-        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2.9.1
+        uses: Swatinem/rust-cache@f0d9c3887740aee45f6153b24b3a6b815192ec16 # v2.9.1
         with:
           shared-key: release-${{ matrix.os }}
           save-if: ${{ github.ref == 'refs/heads/master' }}
@@ -259,7 +259,7 @@ jobs:
           python3 tests/contract/patch_specs.py
 
       - name: Cache cargo registry and target
-        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2.9.1
+        uses: Swatinem/rust-cache@f0d9c3887740aee45f6153b24b3a6b815192ec16 # v2.9.1
         with:
           shared-key: coverage
           save-if: ${{ github.ref == 'refs/heads/master' }}

@@ -52,7 +52,7 @@ keyring-core = "1"
 inquire = { version = "0.9", default-features = false, features = ["crossterm"] }
 
 # Config
-dirs = "6"
+dirs = "7"
 
 # Timestamps (update notifier)
 chrono = { version = "0.4", default-features = false, features = ["serde", "clock"] }

@@ -68,7 +68,7 @@ comrak = { version = "0.54", default-features = false }
 quick-xml = "0.41"
 
 # Output
-comfy-table = "7"
+comfy-table = "8"
 csv = "1"
 
 # jq / template post-processing (P3)

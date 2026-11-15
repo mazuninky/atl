@@ -191,9 +191,9 @@ pub fn run_check(
 
     let current = env!("CARGO_PKG_VERSION");
     let latest = releases
-        .first()
+        .latest()
         .ok_or_else(|| anyhow::anyhow!("no releases found for {REPO_OWNER}/{REPO_NAME}"))?;
-    let latest_version = latest.version.trim_start_matches('v').to_string();
+    let latest_version = latest.version().trim_start_matches('v').to_string();
 
     let value = build_check_value(current, &latest_version);
 
@@ -371,9 +371,9 @@ fn resolve_target_version(args: &SelfUpdateArgs) -> anyhow::Result<String> {
         .fetch()
         .map_err(|e| anyhow::anyhow!("failed to fetch releases: {e}"))?;
     let latest = releases
-        .first()
+        .latest()
         .ok_or_else(|| anyhow::anyhow!("no releases found for {REPO_OWNER}/{REPO_NAME}"))?;
-    Ok(latest.version.trim_start_matches('v').to_string())
+    Ok(latest.version().trim_start_matches('v').to_string())
 }
 
 /// Downloads the release archive into `dest` while computing its SHA-256.
@@ -381,7 +381,7 @@ fn resolve_target_version(args: &SelfUpdateArgs) -> anyhow::Result<String> {
 fn download_archive_to<W: Write>(url: &str, dest: W) -> anyhow::Result<String> {
     let mut writer = HashingWriter::new(dest);
     self_update::Download::from_url(url)
-        .show_progress(false)
+        .show_download_progress(false)
         .download_to(&mut writer)
         .map_err(|e| anyhow::anyhow!("failed to download {url}: {e}"))?;
     writer.flush().ok();
@@ -392,7 +392,7 @@ fn download_archive_to<W: Write>(url: &str, dest: W) -> anyhow::Result<String> {
 fn fetch_expected_digest(url: &str) -> anyhow::Result<String> {
     let mut buf: Vec<u8> = Vec::with_capacity(128);
     self_update::Download::from_url(url)
-        .show_progress(false)
+        .show_download_progress(false)
         .download_to(&mut buf)
         .map_err(|e| anyhow::anyhow!("failed to download {url}: {e}"))?;
     let text = std::str::from_utf8(&buf)

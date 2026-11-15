@@ -21,6 +21,7 @@ use anyhow::{Context, Result};
 use jaq_core::load::{Arena, File, Loader};
 use jaq_core::{Compiler, Ctx, Vars, data, unwrap_valr};
 use jaq_json::Val;
+use minijinja::value::Serde;
 use minijinja::{Environment, Value as MjValue};
 use serde_json::Value;
 
@@ -202,11 +203,11 @@ fn render_template(template: &str, value: &Value) -> Result<String> {
 /// (scalars, arrays) would otherwise have no accessible root reference in
 /// minijinja, so `this` is always present.
 fn build_template_context(value: &Value) -> MjValue {
-    let this = MjValue::from_serialize(value);
+    let this = MjValue::from(Serde(value));
     let this_ctx = minijinja::context! { this => this };
     match value {
         Value::Object(_) => {
-            let flattened = MjValue::from_serialize(value);
+            let flattened = MjValue::from(Serde(value));
             // In minijinja's `context!` macro, the *first* spread wins on
             // key collisions. Putting `this_ctx` first therefore guarantees
             // that `{{ this }}` always resolves to the whole input, even

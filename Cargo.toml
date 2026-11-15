@@ -44,10 +44,7 @@ webbrowser = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 toml = "1"
-# Held on 0.5 (TOON spec v3): 0.6+ implements TOON spec v4, which changes the
-# `-F toon` encoding (unquoted `PROJ-1`-style strings, nested field-group
-# tables, `[]` for empty arrays) and is rejected by strict v3 decoders.
-toon-format = { version = "0.5", default-features = false }
+toon-format = { version = "0.7", default-features = false }
 
 # Auth
 base64 = "0.23"

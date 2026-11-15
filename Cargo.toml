@@ -44,15 +44,18 @@ webbrowser = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 toml = "1"
+# Held on 0.5 (TOON spec v3): 0.6+ implements TOON spec v4, which changes the
+# `-F toon` encoding (unquoted `PROJ-1`-style strings, nested field-group
+# tables, `[]` for empty arrays) and is rejected by strict v3 decoders.
 toon-format = { version = "0.5", default-features = false }
 
 # Auth
-base64 = "0.22"
+base64 = "0.23"
 keyring-core = "1"
 inquire = { version = "0.9", default-features = false, features = ["crossterm"] }
 
 # Config
-dirs = "6"
+dirs = "7"
 
 # Timestamps (update notifier)
 chrono = { version = "0.4", default-features = false, features = ["serde", "clock"] }
@@ -64,21 +67,21 @@ glob = "0.3"
 shlex = "2"
 
 # Markdown
-comrak = { version = "0.54", default-features = false }
-quick-xml = "0.41"
+comrak = { version = "0.59", default-features = false }
+quick-xml = "0.42"
 
 # Output
-comfy-table = "7"
+comfy-table = "8"
 csv = "1"
 
 # jq / template post-processing (P3)
 jaq-core = "3"
 jaq-std = "3"
 jaq-json = { version = "2", features = ["serde"] }
-minijinja = { version = "2", default-features = false, features = ["builtins", "serde"] }
+minijinja = { version = "3", default-features = false, features = ["builtins", "serde"] }
 
 # Self-update
-self_update = { version = "0.44", default-features = false, features = ["reqwest", "rustls", "compression-flate2", "archive-tar", "archive-zip"] }
+self_update = { version = "1.3", default-features = false, features = ["reqwest", "rustls", "github", "compression-tar-gz", "compression-zip-deflate"] }
 self-replace = "1"
 sha2 = "0.11"
 tempfile = "3"
@@ -97,7 +100,7 @@ libc = "0.2"
 atl = { path = ".", features = ["test-util"] }
 assert_cmd = "2"
 predicates = "3"
-httpmock = "0.8"
+httpmock = "0.9"
 pretty_assertions = "1"
 
 [target.'cfg(target_os = "macos")'.dependencies]

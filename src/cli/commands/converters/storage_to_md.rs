@@ -519,14 +519,12 @@ fn parse(xhtml: &str) -> Result<Vec<XNode>, StorageToMdError> {
                 // emits entity references (`&amp;`, `&#x30;`, ...) as their
                 // own `Event::GeneralRef` events rather than inlining them in
                 // text. So `Event::Text` contains no escape sequences here —
-                // we just need to decode bytes and normalize EOLs, which is
-                // exactly what `xml_content()` does. quick-xml 0.40 added an
-                // explicit `XmlVersion` parameter; Confluence storage is XML
-                // 1.0, which matches `Implicit1_0` (no `<?xml … ?>` decl).
-                let s = t
-                    .xml_content(XmlVersion::Implicit1_0)
-                    .map_err(|e| StorageToMdError::Xml(e.to_string()))?
-                    .into_owned();
+                // we just need to normalize EOLs, which is exactly what
+                // `xml_content()` does. quick-xml 0.40 added an explicit
+                // `XmlVersion` parameter; Confluence storage is XML 1.0, which
+                // matches `Implicit1_0` (no `<?xml … ?>` decl). Since 0.42 the
+                // reader validates UTF-8 up front, so this is infallible.
+                let s = t.xml_content(XmlVersion::Implicit1_0).into_owned();
                 if !s.is_empty()
                     && let Some(top) = stack.last_mut()
                 {
@@ -548,10 +546,10 @@ fn parse(xhtml: &str) -> Result<Vec<XNode>, StorageToMdError> {
                 {
                     ch.to_string()
                 } else {
-                    let name = r
-                        .decode()
-                        .map_err(|e| StorageToMdError::Xml(e.to_string()))?;
-                    match quick_xml::escape::resolve_xml_entity(&name) {
+                    // quick-xml 0.42: `BytesRef` derefs to the raw entity
+                    // name as `&str` (the old `decode()` is gone).
+                    let name: &str = &r;
+                    match quick_xml::escape::resolve_xml_entity(name) {
                         Some(value) => value.to_string(),
                         None => {
                             return Err(StorageToMdError::Xml(format!(
@@ -565,19 +563,13 @@ fn parse(xhtml: &str) -> Result<Vec<XNode>, StorageToMdError> {
                 }
             }
             Ok(Event::CData(c)) => {
-                let bytes = c.into_inner();
-                let s = std::str::from_utf8(&bytes)
-                    .map_err(|e| StorageToMdError::Xml(e.to_string()))?
-                    .to_string();
+                let s = c.into_inner().into_owned();
                 if let Some(top) = stack.last_mut() {
                     top.2.push(XNode::Cdata(s));
                 }
             }
             Ok(Event::Comment(c)) => {
-                let bytes = c.into_inner();
-                let s = std::str::from_utf8(&bytes)
-                    .map_err(|e| StorageToMdError::Xml(e.to_string()))?
-                    .to_string();
+                let s = c.into_inner().into_owned();
                 if let Some(top) = stack.last_mut() {
                     top.2.push(XNode::Comment(s));
                 }
@@ -603,16 +595,14 @@ fn parse(xhtml: &str) -> Result<Vec<XNode>, StorageToMdError> {
 fn element_meta(
     e: &BytesStart<'_>,
 ) -> Result<(String, BTreeMap<String, String>), StorageToMdError> {
-    let name_bytes = e.name().into_inner().to_vec();
-    let name =
-        String::from_utf8(name_bytes).map_err(|err| StorageToMdError::Xml(err.to_string()))?;
+    // quick-xml 0.42 switched names to `&str` (UTF-8 is validated by the
+    // reader), so no fallible byte decoding is needed here.
+    let name = e.name().into_inner().to_owned();
 
     let mut attrs = BTreeMap::new();
     for attr in e.attributes() {
         let attr = attr.map_err(|err| StorageToMdError::Xml(err.to_string()))?;
-        let key_bytes = attr.key.into_inner().to_vec();
-        let key =
-            String::from_utf8(key_bytes).map_err(|err| StorageToMdError::Xml(err.to_string()))?;
+        let key = attr.key.into_inner().to_owned();
         // quick-xml 0.40 deprecated `unescape_value()` in favor of
         // `normalized_value()`, which takes an explicit `XmlVersion`.
         // Confluence storage is XML 1.0 (no declaration), which maps to

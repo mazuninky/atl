@@ -71,7 +71,7 @@ impl ConsoleReporter {
 
         let mut table = Table::new();
         table
-            .load_preset(UTF8_FULL_CONDENSED)
+            .load_style(UTF8_FULL_CONDENSED)
             .set_content_arrangement(ContentArrangement::Dynamic);
 
         table.set_header(&headers);

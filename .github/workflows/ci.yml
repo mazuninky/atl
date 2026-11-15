@@ -49,7 +49,7 @@ jobs:
           persist-credentials: false
 
       - name: Spell-check
-        uses: crate-ci/typos@8a48f81b6c64dcfea44b3633223084c4be58ac5f # v1.49.0
+        uses: crate-ci/typos@276087d9a4f06398b3e04825487805e2d7375888 # v1.52.2
 
   deny:
     name: cargo-deny (advisories + bans + licenses + sources)
@@ -73,13 +73,13 @@ jobs:
           persist-credentials: false
 
       - name: Install stable toolchain
-        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
           toolchain: stable
           components: rustfmt, clippy
 
       - name: Cache cargo registry and target
-        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2.9.1
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           shared-key: debug-ubuntu
           save-if: ${{ github.ref == 'refs/heads/master' }}
@@ -108,12 +108,12 @@ jobs:
           persist-credentials: false
 
       - name: Install stable toolchain
-        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
           toolchain: stable
 
       - name: Cache cargo registry and target
-        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2.9.1
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           shared-key: ${{ runner.os == 'Linux' && 'debug-ubuntu' || format('test-{0}', matrix.os) }}
           save-if: ${{ github.ref == 'refs/heads/master' }}
@@ -134,12 +134,12 @@ jobs:
           persist-credentials: false
 
       - name: Install MSRV toolchain
-        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
           toolchain: "1.95"
 
       - name: Cache cargo registry and target
-        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2.9.1
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           shared-key: msrv
           save-if: ${{ github.ref == 'refs/heads/master' }}
@@ -156,12 +156,12 @@ jobs:
           persist-credentials: false
 
       - name: Install stable toolchain
-        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
           toolchain: stable
 
       - name: Install Node.js (for Prism mock server)
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24"
 
@@ -182,7 +182,7 @@ jobs:
           python3 tests/contract/patch_specs.py
 
       - name: Cache cargo registry and target
-        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2.9.1
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           shared-key: debug-ubuntu
           save-if: ${{ github.ref == 'refs/heads/master' }}
@@ -203,12 +203,12 @@ jobs:
           persist-credentials: false
 
       - name: Install stable toolchain
-        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
           toolchain: stable
 
       - name: Cache cargo registry and target (release)
-        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2.9.1
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           shared-key: release-${{ matrix.os }}
           save-if: ${{ github.ref == 'refs/heads/master' }}
@@ -227,7 +227,7 @@ jobs:
           persist-credentials: false
 
       - name: Install stable toolchain
-        uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
         with:
           toolchain: stable
           components: llvm-tools-preview
@@ -238,7 +238,7 @@ jobs:
       # measured. Without this the project number understates coverage by
       # ~30 percentage points.
       - name: Install Node.js (for Prism mock server)
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "24"
 
@@ -259,13 +259,13 @@ jobs:
           python3 tests/contract/patch_specs.py
 
       - name: Cache cargo registry and target
-        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2.9.1
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           shared-key: coverage
           save-if: ${{ github.ref == 'refs/heads/master' }}
 
       - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@ba47c86ac325773530516bb756137ac718732518 # v2.86.5
+        uses: taiki-e/install-action@4a76afe23f9e08d2d9550fb56e556444e8611d21 # v2.90.4
         with:
           tool: cargo-llvm-cov
 
@@ -274,7 +274,7 @@ jobs:
 
       - name: Upload coverage to Codecov
         if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork }}
-        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           files: lcov.info
           fail_ci_if_error: true
@@ -282,7 +282,7 @@ jobs:
 
       - name: Upload coverage to Codecov (fork PR, best-effort)
         if: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork }}
-        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           files: lcov.info
           fail_ci_if_error: false

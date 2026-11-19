@@ -4,3 +4,7 @@ tests/contract/specs/
 .claude/agent-memory/
 .claude/settings.local.json
 .claude/worktrees/
+# Maintainer-local Claude Code agent layer — not part of the project
+.claude/rules/
+.claude/agents/
+.claude/conventions/

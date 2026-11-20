@@ -45,7 +45,7 @@ A Homebrew tap is published at [`mazuninky/homebrew-tap`](https://github.com/maz
 brew install mazuninky/tap/atl
 ```
 
-The formula tracks the latest release and is bumped automatically by the release workflow. When installed through Homebrew, `atl self update` is disabled by design — use `brew upgrade atl` instead.
+The formula is bumped to each new release shortly after it is published. When installed through Homebrew, `atl self update` is disabled by design — use `brew upgrade atl` instead.
 
 ### Quick install via the install script
 

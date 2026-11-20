@@ -523,6 +523,19 @@ mod tests {
         assert!(needs_refresh(&state, now));
     }
 
+    /// The clock went backwards since the last check: the elapsed time is
+    /// negative, so no refresh (same as chrono's signed `now - checked_at`).
+    #[test]
+    fn needs_refresh_checked_in_the_future_is_false() {
+        let now = Timestamp::now();
+        let state = State {
+            checked_at: now + SignedDuration::from_hours(48),
+            latest_version: "2026.18.1".into(),
+            html_url: "https://example.invalid/".into(),
+        };
+        assert!(!needs_refresh(&state, now));
+    }
+
     // -------------------------------------------------------------------
     // should_skip — covers ATL_NO_UPDATE_NOTIFIER and CI env paths.
     // These tests mutate process-wide env vars, so they hold env_lock().

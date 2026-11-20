@@ -21,7 +21,7 @@ use std::io::Write;
 use std::time::Duration;
 
 use camino::Utf8PathBuf;
-use chrono::{DateTime, Utc};
+use jiff::{SignedDuration, Timestamp};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, trace};
 
@@ -31,9 +31,14 @@ use super::updater::{REPO_NAME, REPO_OWNER, parse_version};
 
 /// On-disk state cached between invocations so we hit GitHub at most once
 /// per 24 hours.
+///
+/// `checked_at` is stored as an RFC 3339 string. Files written by earlier
+/// releases (`2026-11-19T10:15:30.123456789Z`, or with a `+00:00` offset)
+/// parse unchanged; an unparseable value makes the whole file unparseable,
+/// which [`read_state`] treats as "no cached state".
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct State {
-    checked_at: DateTime<Utc>,
+    checked_at: Timestamp,
     latest_version: String,
     html_url: String,
 }
@@ -66,7 +71,7 @@ pub fn maybe_print_notice(io: &mut IoStreams, skip_if_update_command: bool) {
         return;
     }
 
-    let now = Utc::now();
+    let now = Timestamp::now();
     let cached = read_state();
 
     let refresh = cached.as_ref().is_none_or(|s| needs_refresh(s, now));
@@ -195,8 +200,8 @@ fn write_state(state: &State) -> std::io::Result<()> {
 
 /// Returns `true` when the cached state is older than 24 hours and a fresh
 /// check should be performed.
-fn needs_refresh(state: &State, now: DateTime<Utc>) -> bool {
-    (now - state.checked_at) >= chrono::Duration::hours(24)
+fn needs_refresh(state: &State, now: Timestamp) -> bool {
+    now.duration_since(state.checked_at) >= SignedDuration::from_hours(24)
 }
 
 /// Fetches the latest release from the GitHub REST API with a tight 2 second
@@ -299,9 +304,9 @@ mod tests {
 
     #[test]
     fn needs_refresh_within_24h_is_false() {
-        let now = Utc::now();
+        let now = Timestamp::now();
         let state = State {
-            checked_at: now - chrono::Duration::hours(23),
+            checked_at: now - SignedDuration::from_hours(23),
             latest_version: "2026.18.1".into(),
             html_url: "https://example.invalid/".into(),
         };
@@ -310,9 +315,9 @@ mod tests {
 
     #[test]
     fn needs_refresh_after_24h_is_true() {
-        let now = Utc::now();
+        let now = Timestamp::now();
         let state = State {
-            checked_at: now - chrono::Duration::hours(25),
+            checked_at: now - SignedDuration::from_hours(25),
             latest_version: "2026.18.1".into(),
             html_url: "https://example.invalid/".into(),
         };
@@ -321,9 +326,9 @@ mod tests {
 
     #[test]
     fn needs_refresh_exactly_24h_is_true() {
-        let now = Utc::now();
+        let now = Timestamp::now();
         let state = State {
-            checked_at: now - chrono::Duration::hours(24),
+            checked_at: now - SignedDuration::from_hours(24),
             latest_version: "2026.18.1".into(),
             html_url: "https://example.invalid/".into(),
         };
@@ -346,9 +351,7 @@ mod tests {
     #[test]
     fn state_toml_roundtrip() {
         let original = State {
-            checked_at: DateTime::parse_from_rfc3339("2026-04-11T12:00:00Z")
-                .unwrap()
-                .with_timezone(&Utc),
+            checked_at: "2026-04-11T12:00:00Z".parse().unwrap(),
             latest_version: "2026.18.1".into(),
             html_url: "https://github.com/mazuninky/atl/releases/tag/v2026.18.1".into(),
         };
@@ -359,6 +362,70 @@ mod tests {
         assert_eq!(roundtripped.checked_at, original.checked_at);
         assert_eq!(roundtripped.latest_version, original.latest_version);
         assert_eq!(roundtripped.html_url, original.html_url);
+    }
+
+    // -------------------------------------------------------------------
+    // State file compatibility — files written by releases that used
+    // chrono's serde (RFC 3339 strings) must keep parsing.
+    // -------------------------------------------------------------------
+
+    /// 2026-11-19T10:15:30Z as Unix seconds.
+    const SAMPLE_SECOND: i64 = 1_795_083_330;
+
+    fn state_with_checked_at(checked_at: &str) -> String {
+        format!(
+            "checked_at = \"{checked_at}\"\n\
+             latest_version = \"2026.47.1\"\n\
+             html_url = \"https://github.com/mazuninky/atl/releases/tag/v2026.47.1\"\n"
+        )
+    }
+
+    #[test]
+    fn state_reads_chrono_written_utc_with_nanoseconds() {
+        let text = state_with_checked_at("2026-11-19T10:15:30.123456789Z");
+        let state: State = toml::from_str(&text).expect("chrono-written state must parse");
+        assert_eq!(state.checked_at.as_second(), SAMPLE_SECOND);
+        assert_eq!(state.checked_at.subsec_nanosecond(), 123_456_789);
+        assert_eq!(state.latest_version, "2026.47.1");
+    }
+
+    #[test]
+    fn state_reads_chrono_written_plus_zero_offset() {
+        let text = state_with_checked_at("2026-11-19T10:15:30+00:00");
+        let state: State = toml::from_str(&text).expect("+00:00 offset must parse");
+        assert_eq!(state.checked_at.as_second(), SAMPLE_SECOND);
+        assert_eq!(state.checked_at.subsec_nanosecond(), 0);
+    }
+
+    #[test]
+    fn state_reads_non_utc_offset_as_the_same_instant() {
+        let text = state_with_checked_at("2026-11-19T13:15:30+03:00");
+        let state: State = toml::from_str(&text).expect("non-UTC offset must parse");
+        assert_eq!(state.checked_at.as_second(), SAMPLE_SECOND);
+    }
+
+    #[test]
+    fn state_with_unparseable_checked_at_is_an_error() {
+        // read_state maps this error to `None`, i.e. "no cached state" →
+        // refresh — the same handling as any other corrupt state file.
+        let text = state_with_checked_at("not-a-timestamp");
+        assert!(toml::from_str::<State>(&text).is_err());
+    }
+
+    #[test]
+    fn state_writes_checked_at_as_rfc3339_string() {
+        // Older atl releases read this file with chrono; keep the on-disk
+        // shape a quoted RFC 3339 UTC string.
+        let state = State {
+            checked_at: Timestamp::from_second(SAMPLE_SECOND).unwrap(),
+            latest_version: "2026.47.1".into(),
+            html_url: "https://example.invalid/".into(),
+        };
+        let serialized = toml::to_string(&state).expect("serialize");
+        assert!(
+            serialized.contains("checked_at = \"2026-11-19T10:15:30Z\""),
+            "unexpected serialized state: {serialized}"
+        );
     }
 
     // -------------------------------------------------------------------
@@ -436,9 +503,9 @@ mod tests {
 
     #[test]
     fn needs_refresh_just_under_24h_is_false() {
-        let now = Utc::now();
+        let now = Timestamp::now();
         let state = State {
-            checked_at: now - chrono::Duration::minutes(60 * 24 - 1),
+            checked_at: now - SignedDuration::from_mins(60 * 24 - 1),
             latest_version: "2026.18.1".into(),
             html_url: "https://example.invalid/".into(),
         };
@@ -447,9 +514,9 @@ mod tests {
 
     #[test]
     fn needs_refresh_far_in_the_past_is_true() {
-        let now = Utc::now();
+        let now = Timestamp::now();
         let state = State {
-            checked_at: now - chrono::Duration::days(7),
+            checked_at: now - SignedDuration::from_hours(24 * 7),
             latest_version: "2026.18.1".into(),
             html_url: "https://example.invalid/".into(),
         };

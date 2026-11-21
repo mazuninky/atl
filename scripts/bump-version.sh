@@ -68,7 +68,9 @@ if [ "$DRY_RUN" -eq 0 ]; then
 fi
 
 YEAR=$(date -u +%G)
-WEEK=$(date -u +%V)
+# No leading zero: Cargo versions are SemVer, which forbids one (2027.01.1
+# would be refused; weeks 1-9 are 2027.1.x).
+WEEK=$((10#$(date -u +%V)))
 
 LATEST_TAG=$(git tag -l "v${YEAR}.${WEEK}.*" --sort=-v:refname | head -n 1 || true)
 if [ -z "$LATEST_TAG" ]; then

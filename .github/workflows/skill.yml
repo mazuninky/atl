@@ -30,7 +30,7 @@ concurrency:
 
 env:
   # dq release pin. Bump in lockstep with .dq/rules/ when upgrading.
-  DQ_VERSION: v2026.20.1
+  DQ_VERSION: v2026.47.3
 
 jobs:
   dq:

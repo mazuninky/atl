@@ -36,7 +36,7 @@ jobs:
           TAG="${GITHUB_REF_NAME}"
           VERSION="${TAG#v}"
 
-          if ! printf '%s' "$VERSION" | grep -Eq '^[0-9]{4}\.(0[1-9]|[1-4][0-9]|5[0-3])\.[1-9][0-9]*$'; then
+          if ! printf '%s' "$VERSION" | grep -Eq '^[0-9]{4}\.([1-9]|[1-4][0-9]|5[0-3])\.[1-9][0-9]*$'; then
             echo "::error::Tag '$TAG' does not match vYYYY.WW.BUILD format" >&2
             exit 1
           fi

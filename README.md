@@ -32,7 +32,7 @@ gh attestation verify atl-*-x86_64-unknown-linux-gnu.tar.gz --repo mazuninky/atl
 
 # Extract and install
 tar -xzf atl-*-x86_64-unknown-linux-gnu.tar.gz
-sudo install -m 0755 atl /usr/local/bin/atl
+sudo install -m 0755 atl-*-x86_64-unknown-linux-gnu/atl /usr/local/bin/atl
 ```
 
 Prebuilt artifacts are available for Linux (x86_64, arm64), macOS (arm64, x86_64), and Windows (x86_64). On Windows, download from the [releases page](https://github.com/mazuninky/atl/releases/latest) manually and verify with `gh attestation verify` the same way.
@@ -222,14 +222,24 @@ jobs:
     steps:
       - uses: mazuninky/setup-atl@v1
         with:
-          version: latest          # or pin: "2026.18.4"
+          version: latest          # or pin: "2026.47.2"
+      # A runner has no atl profile: write one without the token, which
+      # atl reads from ATL_API_TOKEN.
+      - run: |
+          cat > atl.toml <<'EOF'
+          default_profile = "ci"
+
+          [profiles.ci.jira]
+          domain = "https://your-site.atlassian.net"
+          email = "you@example.com"
+          EOF
       - run: atl jira search "assignee = currentUser() AND status = Open" -F json
         env:
+          ATL_CONFIG: atl.toml
           ATL_API_TOKEN: ${{ secrets.ATL_TOKEN }}
-          ATL_PROFILE: work
 ```
 
-Supports `ubuntu-*` (x86_64), `macos-*` (arm64), and `windows-*` (x86_64). See the action's [README](https://github.com/mazuninky/setup-atl#readme) for inputs and outputs.
+Supports `ubuntu-*` (x86_64, arm64), `macos-*` (arm64, x86_64), and `windows-*` (x86_64). See the action's [README](https://github.com/mazuninky/setup-atl#readme) for inputs and outputs.
 
 ### Container image
 
@@ -240,13 +250,23 @@ jobs:
   triage:
     runs-on: ubuntu-latest
     steps:
+      # The profile file, as in the setup-atl example above; the container
+      # sees the workspace as its working directory.
+      - run: |
+          cat > atl.toml <<'EOF'
+          default_profile = "ci"
+
+          [profiles.ci.jira]
+          domain = "https://your-site.atlassian.net"
+          email = "you@example.com"
+          EOF
       - name: List my open issues
         uses: docker://ghcr.io/mazuninky/atl@sha256:<digest>
         with:
           args: jira search "assignee = currentUser() AND status = Open" -F json
         env:
+          ATL_CONFIG: atl.toml
           ATL_API_TOKEN: ${{ secrets.ATL_TOKEN }}
-          ATL_PROFILE: work
 ```
 
 Get the digest from the [Docker workflow run summary](https://github.com/mazuninky/atl/actions/workflows/docker.yml) for the release you want to pin, or via `docker buildx imagetools inspect ghcr.io/mazuninky/atl:<version>`. Verify the attestation:

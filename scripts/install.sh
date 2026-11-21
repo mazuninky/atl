@@ -103,14 +103,16 @@ detect_platform() {
     case "$OS" in
         Linux)
             case "$ARCH" in
-                x86_64)  TARGET="x86_64-unknown-linux-gnu" ;;
-                *)       err "unsupported Linux architecture: $ARCH. Only x86_64 is supported." ;;
+                x86_64)        TARGET="x86_64-unknown-linux-gnu" ;;
+                aarch64|arm64) TARGET="aarch64-unknown-linux-gnu" ;;
+                *)             err "unsupported Linux architecture: $ARCH. Only x86_64 and aarch64 are supported." ;;
             esac
             ;;
         Darwin)
             case "$ARCH" in
                 arm64)   TARGET="aarch64-apple-darwin" ;;
-                *)       err "unsupported macOS architecture: $ARCH. Only arm64 (Apple Silicon) is supported." ;;
+                x86_64)  TARGET="x86_64-apple-darwin" ;;
+                *)       err "unsupported macOS architecture: $ARCH. Only arm64 and x86_64 are supported." ;;
             esac
             ;;
         MINGW*|MSYS*|CYGWIN*|Windows_NT)

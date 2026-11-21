@@ -62,10 +62,24 @@ jobs:
             target: x86_64-unknown-linux-gnu
             bin: atl
             archive: tar.gz
+          # Linux arm64 through the cross toolchain, as in dq.
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            bin: atl
+            archive: tar.gz
+            cross: true
           - os: macos-latest
             target: aarch64-apple-darwin
             bin: atl
             archive: tar.gz
+          # Intel macOS, built on the arm64 runner: Apple's toolchain targets
+          # x86_64 natively, so no cross toolchain. The binary may not run on
+          # the runner, so the docs come from a host build (host_docs).
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            bin: atl
+            archive: tar.gz
+            host_docs: true
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             bin: atl.exe
@@ -86,10 +100,31 @@ jobs:
         with:
           shared-key: release-${{ matrix.target }}
 
+      # Targets whose binary the runner cannot run (cross, host_docs) build a
+      # host binary first, only to run `atl generate-docs`: the output does not
+      # depend on the target. This MUST come before the cross toolchain is set
+      # up, because taiki-e/setup-cross-toolchain-action exports
+      # CARGO_BUILD_TARGET for the rest of the job, after which a plain
+      # `cargo build` cross-compiles and `target/release/atl` stays empty.
+      - name: Build host binary and generate docs (cross and host_docs targets)
+        if: matrix.cross || matrix.host_docs
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo build --release --locked
+          ./target/release/atl generate-docs --output-dir dist/_docs
+
+      - name: Set up cross toolchain
+        if: matrix.cross
+        uses: taiki-e/setup-cross-toolchain-action@12b7ad4acfa95a1476779d6c06699b96ec1691f8 # v1.42.0
+        with:
+          target: ${{ matrix.target }}
+
       - name: cargo build --release
         run: cargo build --release --locked --target ${{ matrix.target }}
 
-      - name: Generate man pages and completions
+      - name: Generate man pages and completions (native targets only)
+        if: ${{ !matrix.cross && !matrix.host_docs }}
         shell: bash
         run: |
           set -euo pipefail

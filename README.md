@@ -35,9 +35,9 @@ tar -xzf atl-*-x86_64-unknown-linux-gnu.tar.gz
 sudo install -m 0755 atl /usr/local/bin/atl
 ```
 
-Prebuilt artifacts are available for Linux (x86_64), macOS (arm64), and Windows (x86_64). On Windows, download from the [releases page](https://github.com/mazuninky/atl/releases/latest) manually and verify with `gh attestation verify` the same way.
+Prebuilt artifacts are available for Linux (x86_64, arm64), macOS (arm64, x86_64), and Windows (x86_64). On Windows, download from the [releases page](https://github.com/mazuninky/atl/releases/latest) manually and verify with `gh attestation verify` the same way.
 
-### Homebrew (macOS arm64, Linux x86_64)
+### Homebrew (macOS arm64 + x86_64, Linux x86_64 + arm64)
 
 A Homebrew tap is published at [`mazuninky/homebrew-tap`](https://github.com/mazuninky/homebrew-tap). The formula installs the binary, man pages, and shell completions for `bash`, `zsh`, and `fish`:
 

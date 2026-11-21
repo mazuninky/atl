@@ -76,7 +76,11 @@ fn asset_url(version: &str, target: &str) -> String {
 fn ensure_supported_target() -> anyhow::Result<&'static str> {
     let t = self_update::get_target();
     match t {
-        "aarch64-apple-darwin" | "x86_64-unknown-linux-gnu" | "x86_64-pc-windows-msvc" => Ok(t),
+        "aarch64-apple-darwin"
+        | "x86_64-apple-darwin"
+        | "x86_64-unknown-linux-gnu"
+        | "aarch64-unknown-linux-gnu"
+        | "x86_64-pc-windows-msvc" => Ok(t),
         other => anyhow::bail!(
             "no prebuilt atl binary for target '{other}'. \
              Build from source: `cargo install --git https://github.com/{REPO_OWNER}/{REPO_NAME}`"

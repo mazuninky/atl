@@ -269,7 +269,7 @@ jobs:
           ATL_API_TOKEN: ${{ secrets.ATL_TOKEN }}
 ```
 
-Get the digest from the [Docker workflow run summary](https://github.com/mazuninky/atl/actions/workflows/docker.yml) for the release you want to pin, or via `docker buildx imagetools inspect ghcr.io/mazuninky/atl:<version>`. Verify the attestation:
+Get the digest from the summary of the [Release workflow run](https://github.com/mazuninky/atl/actions/workflows/release.yml) for the release you want to pin (the image is built there, after the release), or via `docker buildx imagetools inspect ghcr.io/mazuninky/atl:<version>`. Verify the attestation:
 
 ```sh
 gh attestation verify oci://ghcr.io/mazuninky/atl:<version> --owner mazuninky

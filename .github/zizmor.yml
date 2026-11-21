@@ -1,0 +1,6 @@
+# zizmor (https://docs.zizmor.sh) runs in the `workflows` job of ci.yml.
+rules:
+  # It suggests `$/...` for actions and workflows of this repository; the
+  # workflows keep `./...`, which actionlint and older runners understand.
+  self-repository:
+    disable: true

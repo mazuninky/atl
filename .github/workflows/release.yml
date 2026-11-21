@@ -26,7 +26,7 @@ jobs:
           fetch-depth: 0
 
       - name: Install stable toolchain
-        uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master
         with:
           toolchain: stable
 
@@ -92,7 +92,7 @@ jobs:
           persist-credentials: false
 
       - name: Install stable toolchain
-        uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master
         with:
           toolchain: stable
           targets: ${{ matrix.target }}
@@ -106,11 +106,6 @@ jobs:
         env:
           TARGET: ${{ matrix.target }}
         run: rustup target add "$TARGET"
-
-      - name: Cache cargo registry and target (release)
-        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
-        with:
-          shared-key: release-${{ matrix.target }}
 
       # Targets whose binary the runner cannot run (cross, host_docs) build a
       # host binary first, only to run `atl generate-docs`: the output does not
@@ -145,12 +140,15 @@ jobs:
       - name: Package (tar.gz)
         if: matrix.archive == 'tar.gz'
         shell: bash
+        env:
+          VERSION: ${{ needs.verify-version.outputs.version }}
+          TARGET: ${{ matrix.target }}
+          BIN: ${{ matrix.bin }}
         run: |
           set -euo pipefail
-          VERSION="${{ needs.verify-version.outputs.version }}"
-          NAME="atl-${VERSION}-${{ matrix.target }}"
+          NAME="atl-${VERSION}-${TARGET}"
           mkdir -p "dist/${NAME}"
-          cp "target/${{ matrix.target }}/release/${{ matrix.bin }}" "dist/${NAME}/"
+          cp "target/${TARGET}/release/${BIN}" "dist/${NAME}/"
           cp LICENSE "dist/${NAME}/"
           mkdir -p "dist/${NAME}/man" "dist/${NAME}/completions"
           cp -R dist/_docs/man/. "dist/${NAME}/man/"
@@ -161,12 +159,15 @@ jobs:
       - name: Package (zip)
         if: matrix.archive == 'zip'
         shell: pwsh
+        env:
+          VERSION: ${{ needs.verify-version.outputs.version }}
+          TARGET: ${{ matrix.target }}
+          BIN: ${{ matrix.bin }}
         run: |
           $ErrorActionPreference = 'Stop'
-          $version = '${{ needs.verify-version.outputs.version }}'
-          $name = "atl-$version-${{ matrix.target }}"
+          $name = "atl-${env:VERSION}-${env:TARGET}"
           New-Item -ItemType Directory -Force -Path "dist/$name" | Out-Null
-          Copy-Item "target/${{ matrix.target }}/release/${{ matrix.bin }}" "dist/$name/"
+          Copy-Item "target/${env:TARGET}/release/${env:BIN}" "dist/$name/"
           Copy-Item "LICENSE" "dist/$name/"
           New-Item -ItemType Directory -Force -Path "dist/$name/man" | Out-Null
           New-Item -ItemType Directory -Force -Path "dist/$name/completions" | Out-Null

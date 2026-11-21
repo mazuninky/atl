@@ -12,7 +12,7 @@ on:
       - "deny.toml"
       - ".typos.toml"
       - "scripts/**"
-      - ".github/workflows/**"
+      - ".github/**"
       - "codecov.yml"
   # No paths filter here: the branch ruleset requires ci-success, and a
   # workflow skipped by `paths` leaves a required check waiting forever, so a
@@ -65,7 +65,7 @@ jobs:
           persist-credentials: false
 
       - name: Install stable toolchain
-        uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master
         with:
           toolchain: stable
           components: rustfmt, clippy
@@ -100,7 +100,7 @@ jobs:
           persist-credentials: false
 
       - name: Install stable toolchain
-        uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master
         with:
           toolchain: stable
 
@@ -126,7 +126,7 @@ jobs:
           persist-credentials: false
 
       - name: Install MSRV toolchain
-        uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master
         with:
           toolchain: "1.95"
 
@@ -148,7 +148,7 @@ jobs:
           persist-credentials: false
 
       - name: Install stable toolchain
-        uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master
         with:
           toolchain: stable
 
@@ -157,9 +157,10 @@ jobs:
         with:
           node-version: "24"
 
+      # A pinned npm package: Prism ships no checksummed binary to install instead.
       - name: Install Prism CLI
-        run: |
-          npm install -g @stoplight/prism-cli
+        run: | # zizmor: ignore[adhoc-packages]
+          npm install -g @stoplight/prism-cli@5.16.0
           prism --version
 
       - name: Cache OpenAPI specs (downloaded + patched)
@@ -195,7 +196,7 @@ jobs:
           persist-credentials: false
 
       - name: Install stable toolchain
-        uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master
         with:
           toolchain: stable
 
@@ -219,7 +220,7 @@ jobs:
           persist-credentials: false
 
       - name: Install stable toolchain
-        uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        uses: dtolnay/rust-toolchain@df2a88e9fe4098bad09cb42c3dec7187f15861fc # master
         with:
           toolchain: stable
           components: llvm-tools-preview
@@ -234,9 +235,10 @@ jobs:
         with:
           node-version: "24"
 
+      # A pinned npm package: Prism ships no checksummed binary to install instead.
       - name: Install Prism CLI
-        run: |
-          npm install -g @stoplight/prism-cli
+        run: | # zizmor: ignore[adhoc-packages]
+          npm install -g @stoplight/prism-cli@5.16.0
           prism --version
 
       - name: Cache OpenAPI specs (downloaded + patched)
@@ -257,9 +259,9 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/master' }}
 
       - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@4a76afe23f9e08d2d9550fb56e556444e8611d21 # v2.90.4
+        uses: taiki-e/install-action@25f51f6b1bf4e18876107cece836f4f77ac17c8c # v2.90.7
         with:
-          tool: cargo-llvm-cov
+          tool: cargo-llvm-cov@0.9.2
 
       - name: Generate coverage (lcov)
         run: cargo llvm-cov --all-targets --locked --lcov --output-path lcov.info -- --include-ignored
@@ -279,11 +281,42 @@ jobs:
           files: lcov.info
           fail_ci_if_error: false
 
+  # actionlint (syntax, expressions, shellcheck on `run:` scripts) and zizmor
+  # (security audits, configured in .github/zizmor.yml). zizmor runs offline:
+  # its online audits follow upstream branches and tags, which would turn a
+  # required check red without a change in this repository.
+  workflows:
+    name: workflows (actionlint + zizmor)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install zizmor
+        uses: taiki-e/install-action@25f51f6b1bf4e18876107cece836f4f77ac17c8c # v2.90.7
+        with:
+          tool: zizmor@1.32.0
+
+      # go install checks the module against the Go checksum database.
+      - name: Install actionlint
+        shell: bash
+        run: |
+          set -euo pipefail
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: actionlint
+        run: actionlint -color
+
+      - name: zizmor
+        run: zizmor --offline --min-severity low --format github .
+
   # The one required status check: the branch ruleset requires this job
   # instead of each job above, whose names change with the matrix.
   ci-success:
     name: ci-success
-    needs: [typos, deny, lint, test, msrv, contract, build-release-smoke, coverage]
+    needs: [typos, deny, lint, test, msrv, contract, build-release-smoke, coverage, workflows]
     runs-on: ubuntu-latest
     if: always()
     steps:

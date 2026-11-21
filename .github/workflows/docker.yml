@@ -1,13 +1,21 @@
 name: Docker
 
+# Builds and pushes the multi-arch image to GHCR for a release that is out.
+# release.yml calls this workflow after its `release` job, so a tag whose
+# release failed gets no image (v2026.47.1 got one before this).
+# workflow_dispatch rebuilds the image of an existing release tag.
+
 on:
-  push:
-    tags:
-      - 'v[0-9][0-9][0-9][0-9].[0-9][0-9].[0-9]*'
+  workflow_call:
+    inputs:
+      tag:
+        description: 'Release tag to build the image from'
+        required: true
+        type: string
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Existing release tag to build the image from (e.g. v2026.18.3)'
+        description: 'Existing release tag to build the image from (e.g. v2026.47.2)'
         required: true
         type: string
 
@@ -24,12 +32,14 @@ jobs:
     outputs:
       version: ${{ steps.extract.outputs.version }}
       tag: ${{ steps.extract.outputs.tag }}
+      # The tag's commit: github.sha is the branch head under workflow_dispatch.
+      revision: ${{ steps.extract.outputs.revision }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
           fetch-depth: 0
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ inputs.tag }}
 
       - name: Install stable toolchain
         uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
@@ -39,9 +49,10 @@ jobs:
       - name: Validate tag and Cargo.toml version
         id: extract
         shell: bash
+        env:
+          TAG: ${{ inputs.tag }}
         run: |
           set -euo pipefail
-          TAG="${{ inputs.tag || github.ref_name }}"
           VERSION="${TAG#v}"
 
           if ! printf '%s' "$VERSION" | grep -Eq '^[0-9]{4}\.([1-9]|[1-4][0-9]|5[0-3])\.[1-9][0-9]*$'; then
@@ -55,8 +66,11 @@ jobs:
             exit 1
           fi
 
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          {
+            echo "version=$VERSION"
+            echo "tag=$TAG"
+            echo "revision=$(git rev-parse HEAD)"
+          } >> "$GITHUB_OUTPUT"
 
   build:
     name: build (${{ matrix.platform-key }})
@@ -113,7 +127,7 @@ jobs:
             org.opencontainers.image.licenses=MIT
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.version=${{ needs.verify-version.outputs.version }}
-            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.revision=${{ needs.verify-version.outputs.revision }}
           cache-from: type=gha,scope=${{ matrix.platform-key }}
           cache-to: type=gha,mode=max,scope=${{ matrix.platform-key }}
           outputs: type=image,name=${{ steps.image.outputs.name }},push-by-digest=true,name-canonical=true,push=true

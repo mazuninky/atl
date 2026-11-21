@@ -3,7 +3,9 @@ name: Release
 on:
   push:
     tags:
-      - 'v[0-9][0-9][0-9][0-9].[0-9][0-9].[0-9]*'
+      # One- or two-digit ISO week (2027.1.1, 2026.47.3); verify-version checks
+      # the exact format.
+      - 'v[0-9][0-9][0-9][0-9].[0-9]*'
 
 permissions:
   contents: read
@@ -222,3 +224,17 @@ jobs:
           files: |
             dist/atl-*
           fail_on_unmatched_files: true
+
+  # The image is built only once the release is out, from the same tag. A
+  # release that fails before this point publishes no image.
+  docker:
+    name: docker
+    needs: [verify-version, release]
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    uses: ./.github/workflows/docker.yml
+    with:
+      tag: ${{ github.ref_name }}

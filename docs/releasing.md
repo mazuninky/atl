@@ -1,6 +1,6 @@
 # Releasing atl
 
-`atl` uses calendar-based versioning: **`YYYY.WW.BUILD`**, where `YYYY` is the UTC year, `WW` is the ISO week number (01–53), and `BUILD` is a monotonic counter within that week starting at 1. The source of truth is git tags of the form `vYYYY.WW.BUILD` (e.g. `v2026.15.1`).
+`atl` uses calendar-based versioning: **`YYYY.WW.BUILD`**, where `YYYY` is the ISO year, `WW` is the ISO week number without a leading zero (1–53; Cargo versions are SemVer, which forbids one, so the first week of 2027 is `2027.1.1`), and `BUILD` is a monotonic counter within that week starting at 1. The source of truth is git tags of the form `vYYYY.WW.BUILD` (e.g. `v2026.15.1`).
 
 Releases are fully automated: pushing a matching tag triggers the release workflow, which cross-compiles for Linux / macOS / Windows, uploads the archives plus SHA-256 sums to a new GitHub Release, and generates release notes from merged pull requests.
 

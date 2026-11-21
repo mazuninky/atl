@@ -5,6 +5,9 @@ edition = "2024"
 rust-version = "1.95"
 description = "Unified CLI for Atlassian Confluence and Jira"
 license = "MIT"
+# Not on crates.io: releases ship through GitHub Releases and Homebrew, and
+# the name `atl` there is not ours. Stops an accidental `cargo publish`.
+publish = false
 
 [features]
 # Test-only seams — exposes `pub` cfg-gated helpers (e.g.

@@ -1,4 +1,7 @@
 version: 2
+# No `labels:` here: Dependabot then labels its pull requests `dependencies`
+# plus `rust` or `github_actions`, and creates them if missing. Labels named
+# here would have to exist in the repository already.
 updates:
   - package-ecosystem: cargo
     directory: "/"
@@ -12,9 +15,6 @@ updates:
     # updates are not delayed.
     cooldown:
       default-days: 7
-    labels:
-      - dependencies
-      - rust
     commit-message:
       prefix: "chore"
       include: scope
@@ -38,9 +38,6 @@ updates:
     # updates are not delayed.
     cooldown:
       default-days: 7
-    labels:
-      - dependencies
-      - github-actions
     commit-message:
       prefix: "ci"
       include: scope

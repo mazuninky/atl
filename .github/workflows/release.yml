@@ -95,6 +95,16 @@ jobs:
           toolchain: stable
           targets: ${{ matrix.target }}
 
+      # rust-toolchain.toml pins the toolchain cargo runs here, and the step
+      # above adds the target to stable only. Without this, a target that is
+      # neither the host nor set up by the cross toolchain action
+      # (x86_64-apple-darwin) fails with "can't find crate for `core`".
+      - name: Add the target to the pinned toolchain
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+        run: rustup target add "$TARGET"
+
       - name: Cache cargo registry and target (release)
         uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:

@@ -56,7 +56,7 @@ Before starting:
    ```
    The workflow will:
    - Validate that the pushed tag matches `vYYYY.WW.BUILD` format **and** matches the `version` in `Cargo.toml`. A mismatch fails fast with a clear error.
-   - Cross-compile three targets in parallel: `x86_64-unknown-linux-gnu`, `aarch64-apple-darwin`, `x86_64-pc-windows-msvc`.
+   - Build five targets in parallel: `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu` (cross toolchain), `aarch64-apple-darwin`, `x86_64-apple-darwin` (on the arm64 macOS runner) and `x86_64-pc-windows-msvc`.
    - Produce `atl-<version>-<target>.{tar.gz,zip}` plus a sibling `*.sha256`.
    - Create a GitHub Release with `generate_release_notes: true` and attach every archive.
 
@@ -64,7 +64,7 @@ Before starting:
    ```sh
    gh release view vYYYY.WW.BUILD
    ```
-   Check that all three archives and their `.sha256` companions are attached, and that the generated notes list the PRs you expect.
+   Check that all five archives and their `.sha256` companions are attached, and that the generated notes list the PRs you expect.
 
 5. **Smoke-test self-update.** From an older installed binary:
    ```sh

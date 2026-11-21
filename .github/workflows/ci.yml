@@ -14,18 +14,10 @@ on:
       - "scripts/**"
       - ".github/workflows/**"
       - "codecov.yml"
+  # No paths filter here: the branch ruleset requires ci-success, and a
+  # workflow skipped by `paths` leaves a required check waiting forever, so a
+  # docs-only PR could not be merged.
   pull_request:
-    paths:
-      - "src/**"
-      - "tests/**"
-      - "Cargo.toml"
-      - "Cargo.lock"
-      - "clippy.toml"
-      - "deny.toml"
-      - ".typos.toml"
-      - "scripts/**"
-      - ".github/workflows/**"
-      - "codecov.yml"
   workflow_dispatch:
 
 permissions:
@@ -287,6 +279,8 @@ jobs:
           files: lcov.info
           fail_ci_if_error: false
 
+  # The one required status check: the branch ruleset requires this job
+  # instead of each job above, whose names change with the matrix.
   ci-success:
     name: ci-success
     needs: [typos, deny, lint, test, msrv, contract, build-release-smoke, coverage]

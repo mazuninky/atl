@@ -24,4 +24,9 @@ pub struct SelfUpdateArgs {
     /// Permit downgrading when --to points at an older version
     #[arg(long, requires = "to")]
     pub allow_downgrade: bool,
+
+    /// Leave the installed agent skill as it is (by default the new binary
+    /// updates it)
+    #[arg(long)]
+    pub no_skill: bool,
 }

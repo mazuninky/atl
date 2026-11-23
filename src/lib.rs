@@ -5,6 +5,7 @@ pub mod config;
 pub mod error;
 pub mod io;
 pub mod output;
+pub mod skill;
 
 #[cfg(test)]
 pub(crate) mod test_util;

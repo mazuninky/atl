@@ -47,6 +47,9 @@ impl AtlRunner {
         // shell that has `ATL_PROFILE` exported.
         let caller_overrides_profile = args.iter().any(|a| *a == "--profile" || *a == "-p");
         let mut cmd = Command::new(&bin);
+        // A home directory that is none: a release build updates the agent
+        // skill of the one it has.
+        cmd.env("HOME", std::env::temp_dir().join("atl-tests-no-home"));
         cmd.arg("--config").arg(&self.config_path);
         if !caller_overrides_profile {
             cmd.arg("--profile").arg("test");

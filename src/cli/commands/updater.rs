@@ -26,6 +26,7 @@ use tracing::{debug, info};
 use crate::cli::args::SelfUpdateArgs;
 use crate::io::IoStreams;
 use crate::output::{OutputFormat, Transforms, write_output};
+use crate::skill::{Edition, Environment, installed_note, installed_version, one_line};
 
 pub(super) const REPO_OWNER: &str = "mazuninky";
 pub(super) const REPO_NAME: &str = "atl";
@@ -176,9 +177,12 @@ fn emit(
 }
 
 /// Handles `atl self check` — queries GitHub for the latest release and
-/// reports whether an update is available. Always exits 0.
+/// reports whether an update is available, with a `skill` key about the
+/// skill installed in `env` when it was changed or is older than this atl
+/// ([`add_skill_note`]). Always exits 0.
 pub fn run_check(
     format: &OutputFormat,
+    env: &Environment,
     io: &mut IoStreams,
     transforms: &Transforms<'_>,
 ) -> anyhow::Result<()> {
@@ -199,9 +203,20 @@ pub fn run_check(
         .ok_or_else(|| anyhow::anyhow!("no releases found for {REPO_OWNER}/{REPO_NAME}"))?;
     let latest_version = latest.version().trim_start_matches('v').to_string();
 
-    let value = build_check_value(current, &latest_version);
+    let mut value = build_check_value(current, &latest_version);
+    add_skill_note(&mut value, env, &Edition::embedded());
 
     emit(format, io, transforms, value)
+}
+
+/// Add to the `atl self check` payload what there is to say of the skill
+/// installed in `env`, under `skill`, in one line. Nothing when there is
+/// nothing to say: the payload of a user without a skill, or with one that
+/// is up to date and unchanged, is what it always was.
+fn add_skill_note(value: &mut Value, env: &Environment, edition: &Edition) {
+    if let (Some(note), Some(object)) = (installed_note(env, edition), value.as_object_mut()) {
+        object.insert("skill".to_owned(), Value::String(one_line(&note)));
+    }
 }
 
 /// Pure builder for the `atl self check` payload — used by [`run_check`] and
@@ -440,14 +455,22 @@ fn locate_extracted_binary(dir: &std::path::Path) -> anyhow::Result<std::path::P
 /// verifies its SHA-256 against the published sidecar, and atomically
 /// replaces the current binary. Refuses to run from package-manager paths
 /// and refuses to downgrade unless `--allow-downgrade` is set.
+///
+/// Once the binary is replaced, the new one updates the skill installed in
+/// `env` ([`skill_step`]); whatever comes of that is no error of this
+/// command.
 pub fn run_update(
     args: &SelfUpdateArgs,
+    env: &Environment,
     format: &OutputFormat,
     io: &mut IoStreams,
     transforms: &Transforms<'_>,
 ) -> anyhow::Result<()> {
     let target = ensure_supported_target()?;
     preflight_exe_location()?;
+    // Before the binary is replaced: on Linux the path of a running binary
+    // that was replaced reads `… (deleted)` afterwards.
+    let exe = std::env::current_exe().ok();
 
     let current = env!("CARGO_PKG_VERSION");
 
@@ -545,6 +568,10 @@ pub fn run_update(
         }
     }
 
+    if let Some(exe) = &exe {
+        skill_step(args.no_skill, env, exe);
+    }
+
     let value = json!({
         "previous": current,
         "current": target_version,
@@ -552,6 +579,52 @@ pub fn run_update(
     });
 
     emit(format, io, transforms, value)
+}
+
+/// After the binary was replaced: have the binary at `exe` — the new one —
+/// update the skill atl installed in the home directory, if it did. Nothing
+/// of it with `--no-skill` (`no_skill`) or under `ATL_NO_SKILL_UPDATE`.
+///
+/// The new binary does it because the new skill is in it. An older one,
+/// installed with `--to`, may not know `atl skill`: like any other failure,
+/// that is a warning. As root in another user's home directory (`sudo atl
+/// self update`) nothing is done: the files would be root's. That user's
+/// first run of the new atl updates the skill.
+fn skill_step(no_skill: bool, env: &Environment, exe: &std::path::Path) {
+    if no_skill || env.opted_out() || env.is_root_in_foreign_home() {
+        return;
+    }
+    let Some((dir, _version)) = installed_version(env) else {
+        return;
+    };
+    if let Err(why) = update_skill_with(exe) {
+        tracing::warn!(
+            "the atl skill in {} was not updated: {}",
+            one_line(dir.as_str()),
+            one_line(&why)
+        );
+    }
+}
+
+/// Run `exe skill update`. What went wrong, if it did: the exit status and
+/// the first line the binary wrote to stderr.
+fn update_skill_with(exe: &std::path::Path) -> Result<(), String> {
+    let output = std::process::Command::new(exe)
+        .args(["skill", "update", "--quiet"])
+        .stdin(std::process::Stdio::null())
+        .output()
+        .map_err(|err| format!("{} did not run: {err}", exe.display()))?;
+    if output.status.success() {
+        return Ok(());
+    }
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let said = stderr.lines().find(|line| !line.trim().is_empty());
+    Err(format!(
+        "`atl skill update` failed ({}){}",
+        output.status,
+        said.map(|line| format!(": {}", line.trim()))
+            .unwrap_or_default()
+    ))
 }
 
 #[cfg(test)]
@@ -1173,5 +1246,130 @@ mod tests {
             msg.contains("atl-2026.18.3-test.tar.gz"),
             "must name asset, got: {msg}"
         );
+    }
+
+    // -------------------------------------------------------------------
+    // The skill: the `self check` note and the `self update` step.
+    // -------------------------------------------------------------------
+
+    /// A home directory in which atl installed the skill.
+    fn home_with_skill() -> (tempfile::TempDir, Environment, Utf8PathBuf) {
+        let home = tempfile::tempdir().expect("tempdir");
+        let env = Environment {
+            home: Some(home.path().into()),
+            ..Environment::default()
+        };
+        let target = env.global().expect("target");
+        crate::skill::install(&target, &Edition::embedded(), false).expect("install");
+        (home, env, target.dir)
+    }
+
+    /// The payload gains `skill` only when there is something to say, in
+    /// one line.
+    #[test]
+    fn the_check_says_that_the_skill_was_changed() {
+        let release = build_check_value("2026.1.0", "2026.2.0");
+        let with_note = |env: &Environment| {
+            let mut value = release.clone();
+            add_skill_note(&mut value, env, &Edition::embedded());
+            value
+        };
+        assert_eq!(with_note(&Environment::default()), release, "no home");
+        let (_home, env, dir) = home_with_skill();
+        assert_eq!(with_note(&env), release, "up to date and unchanged");
+        std::fs::write(dir.join("SKILL.md"), "mine").expect("write");
+        let mut expected = release.clone();
+        expected["skill"] = json!(format!(
+            "atl skill in {dir} was changed (SKILL.md): atl leaves it alone; \
+             `atl skill update --force` writes atl's files in their place"
+        ));
+        assert_eq!(with_note(&env), expected);
+        let keys: Vec<&String> = expected.as_object().expect("object").keys().collect();
+        assert_eq!(
+            keys,
+            [
+                "current",
+                "latest",
+                "update_available",
+                "release_url",
+                "skill"
+            ],
+            "added after the keys there were"
+        );
+    }
+
+    /// A script at `path` that records its arguments in `ran` next to it and
+    /// then runs `body`.
+    #[cfg(unix)]
+    fn script(path: &std::path::Path, body: &str) {
+        use std::os::unix::fs::PermissionsExt as _;
+        let ran = path.with_file_name("ran");
+        let text = format!("#!/bin/sh\necho \"$*\" >> '{}'\n{body}\n", ran.display());
+        std::fs::write(path, text).expect("write");
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).expect("chmod");
+    }
+
+    #[cfg(unix)]
+    fn ran(dir: &std::path::Path) -> String {
+        std::fs::read_to_string(dir.join("ran")).unwrap_or_default()
+    }
+
+    /// The new binary is run as `atl skill update --quiet`; what it says when
+    /// it fails — an older atl has no `skill` — is what the warning says.
+    #[test]
+    #[cfg(unix)]
+    fn the_new_binary_updates_the_skill() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let new = dir.path().join("new");
+        script(&new, r#"[ "$*" = "skill update --quiet" ]"#);
+        assert_eq!(update_skill_with(&new), Ok(()));
+        let old = dir.path().join("old");
+        script(
+            &old,
+            "echo \"error: unrecognized subcommand 'skill'\" >&2; exit 2",
+        );
+        assert_eq!(
+            update_skill_with(&old),
+            Err("`atl skill update` failed (exit status: 2): \
+                 error: unrecognized subcommand 'skill'"
+                .to_owned())
+        );
+        let gone = update_skill_with(&dir.path().join("gone")).expect_err("no such binary");
+        assert!(gone.contains("did not run"), "{gone}");
+    }
+
+    /// The new binary is run only for a skill atl installed in a home
+    /// directory that is the user's, and not when it is asked to leave it.
+    #[test]
+    #[cfg(unix)]
+    fn the_new_binary_is_run_only_for_a_skill_atl_installed() {
+        let bin = tempfile::tempdir().expect("tempdir");
+        let exe = bin.path().join("atl");
+        script(&exe, "exit 0");
+        let (_home, env, dir) = home_with_skill();
+        let step = |no_skill: bool, env: &Environment| {
+            let _ = std::fs::remove_file(bin.path().join("ran"));
+            skill_step(no_skill, env, &exe);
+            ran(bin.path())
+        };
+        assert_eq!(step(false, &env), "skill update --quiet\n");
+        assert_eq!(step(true, &env), "", "--no-skill");
+        for value in ["1", ""] {
+            let opted_out = Environment {
+                no_skill_update: Some(value.into()),
+                ..env.clone()
+            };
+            assert_eq!(step(false, &opted_out), "", "ATL_NO_SKILL_UPDATE={value}");
+        }
+        let zero = Environment {
+            no_skill_update: Some("0".into()),
+            ..env.clone()
+        };
+        assert_eq!(step(false, &zero), "skill update --quiet\n");
+        std::fs::write(dir.join(crate::skill::MANIFEST), "{}").expect("write");
+        assert_eq!(step(false, &env), "", "a manifest atl cannot use");
+        std::fs::remove_file(dir.join(crate::skill::MANIFEST)).expect("rm");
+        assert_eq!(step(false, &env), "", "none installed");
+        assert_eq!(step(false, &Environment::default()), "", "no home");
     }
 }

@@ -57,6 +57,8 @@ Pre-commit hooks live in `lefthook.yml` (fmt-check, clippy, test). The deny rule
 4. Dispatch via the `Command` enum match. Sync commands (`init`, `config`, `completions`, `self`, `alias`, `generate-docs`) call directly; async commands wrap their handler in `run_async()` which spins up a `tokio::runtime::Builder::new_multi_thread()` on demand. There is **no `#[tokio::main]`** — sync commands don't pay the runtime cost.
 5. After a successful dispatch, call `commands::updater_notifier::maybe_print_notice(io, is_self_cmd)` (best-effort; suppressed for `atl self` itself, in CI, or if `ATL_NO_UPDATE_NOTIFIER=1`).
 
+After `run()`, and after the error line if there is one, `main()` calls `skill::FirstRun::after(..).update_skill(..)`: in release builds only, never for `atl skill` / `atl self`, it brings an installed, unedited skill to this version. It prints nothing and does not change the exit code. See [`docs/skill.md`](docs/skill.md).
+
 ### `IoStreams` everywhere — never `println!`
 
 `src/io/{mod,pager}.rs` defines `IoStreams`, the only legitimate way for command code to write output. It owns:
@@ -89,6 +91,7 @@ Command handlers do **not** print directly. They build a `serde_json::Value` and
 | `Error::Config` | 3 | Bad config / missing profile |
 | `Error::Auth` | 4 | 401 / 403 from upstream |
 | `Error::NotFound` | 2 | 404 from upstream |
+| `Error::InvalidInput` | 5 | Rejected input; an `atl skill` refusal (a file atl did not write is in the way) |
 | Everything else | 1 | Generic runtime error |
 
 `Error::Template` (P3) and `Error::HttpMiddleware` (P7) both map to exit 1. Master's `Error::InvalidInput` / `Error::InvalidResponse` are typed variants for clap-rejected input and parse failures.
@@ -101,7 +104,7 @@ Command handlers do **not** print directly. They build a `serde_json::Value` and
 - `mod.rs` — top-level `Cli` struct, `Command` enum, **all global flags** (`-v`, `-q`, `-F`, `-p`, `--config`, `--no-color`, `--no-pager`, `--jq`, `--template`, `--retries`, `--retry-all-methods`)
 - `confluence/{mod,page,space,attachment,blog,comment,content,property,label,admin}.rs` — each subdomain in its own file
 - `jira/{mod,issue,board,sprint,project,user,filter,field,workflow,admin}.rs` — same pattern
-- `api.rs`, `auth.rs`, `browse.rs`, `alias.rs`, `updater.rs` — single-file commands
+- `api.rs`, `auth.rs`, `browse.rs`, `alias.rs`, `skill.rs`, `updater.rs` — single-file commands
 
 Adding a new flag to an existing subcommand: edit the right file under `cli/args/<service>/<subdomain>.rs`. Do **not** add globals on subcommands — they go on `Cli`.
 
@@ -115,7 +118,8 @@ Adding a new flag to an existing subcommand: edit the right file under `cli/args
 - `alias.rs` — `atl alias set/list/delete` + `expand_aliases` (the pre-clap rewriter).
 - `browse.rs` — service auto-detect + open in browser.
 - `docs.rs` — hidden `atl generate-docs` for man pages / completions / markdown reference.
-- `updater.rs` — `atl self check/update`.
+- `skill.rs` — `atl skill install/update/status/remove`; the logic is in `src/skill/` ([`docs/skill.md`](docs/skill.md)).
+- `updater.rs` — `atl self check/update`; `self update` also updates an installed skill.
 - `updater_notifier.rs` — soft "new release" notice printed after success.
 - `mod.rs` — `read_body_arg` helper that handles literal / `@file` / `-` (stdin) for `--body` flags.
 

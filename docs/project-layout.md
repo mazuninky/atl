@@ -17,6 +17,7 @@ If you just want to build and test, see [`.github/CONTRIBUTING.md`](../.github/C
 ├── README.md                   # user-facing entry point
 ├── LICENSE                     # MIT
 ├── lefthook.yml                # optional pre-commit hooks (fmt/clippy/test)
+├── skill/                      # the agent skill; SKILL.md and references/ are embedded in the binary
 ├── clippy.toml                 # project clippy config
 ├── scripts/
 │   └── bump-version.sh         # calendar version bump + tag (YYYY.WW.BUILD)
@@ -31,11 +32,13 @@ If you just want to build and test, see [`.github/CONTRIBUTING.md`](../.github/C
 │   ├── releasing.md            # operator checklist for cutting a release
 │   ├── command-line-syntax.md  # CLI notation conventions
 │   ├── project-layout.md       # this file
+│   ├── skill.md                # `atl skill` and the automatic update
 ├── src/
 │   ├── main.rs                 # 3 jobs: parse args, init logging, dispatch
 │   ├── lib.rs                  # library root, module re-exports
 │   ├── error.rs                # domain Error enum, exit codes, Result alias
 │   ├── io/                     # stdout/stderr streams + optional pager
+│   ├── skill/                  # the embedded agent skill: install, survey, atomic write, first-run update
 │   ├── cli/
 │   │   ├── args/               # clap derive structs (split by service)
 │   │   │   ├── mod.rs          # top-level Cli, Command enum, global flags
@@ -48,6 +51,7 @@ If you just want to build and test, see [`.github/CONTRIBUTING.md`](../.github/C
 │   │   │   │   ├── mod.rs      # JiraSubcommand enum
 │   │   │   │   ├── issue.rs, board.rs, sprint.rs, project.rs, ...
 │   │   │   │   └── admin.rs
+│   │   │   ├── skill.rs        # `atl skill install/update/status/remove` args
 │   │   │   └── updater.rs      # `atl self check/update` args
 │   │   └── commands/           # command handlers (split by service)
 │   │       ├── mod.rs          # read_body_arg helper (@file / - / literal)
@@ -63,6 +67,7 @@ If you just want to build and test, see [`.github/CONTRIBUTING.md`](../.github/C
 │   │       ├── config.rs       # profile management (list/show/delete/...)
 │   │       ├── init.rs         # interactive `atl init` wizard
 │   │       ├── markdown.rs     # Markdown → Confluence storage format (comrak)
+│   │       ├── skill.rs        # `atl skill` handler (one object through write_output)
 │   │       └── updater.rs      # self-update via GitHub Releases
 │   ├── client/
 │   │   ├── mod.rs              # shared HTTP client builder, auth, response handling

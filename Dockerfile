@@ -26,6 +26,8 @@ WORKDIR /src
 
 COPY Cargo.toml Cargo.lock rust-toolchain.toml LICENSE ./
 COPY src ./src
+# The binary embeds the agent skill.
+COPY skill ./skill
 
 RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,target=/usr/local/cargo/git,sharing=locked \

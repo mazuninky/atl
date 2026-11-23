@@ -14,6 +14,9 @@ fn dummy_config(name: &str) -> PathBuf {
 fn run_atl(args: &[&str], config: &Path) -> (i32, String, String) {
     let bin = cargo_bin("atl");
     let out = Command::new(&bin)
+        // A home directory that is none: a release build updates the agent
+        // skill of the one it has.
+        .env("HOME", std::env::temp_dir().join("atl-tests-no-home"))
         .arg("--config")
         .arg(config)
         .args(args)

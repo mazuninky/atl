@@ -279,13 +279,16 @@ Authentication uses the standard `ATL_API_TOKEN` env var. Profile selection (`AT
 
 ## Claude Code skill
 
-An `atl` skill for [Claude Code](https://claude.ai/code) is available, giving Claude deep knowledge of all `atl` commands, flags, output formats, and common workflows.
-
-Install from [skills.sh](https://skills.sh):
+atl carries a skill for coding agents such as [Claude Code](https://claude.ai/code): all `atl` commands, flags, output formats and common workflows, so an agent can use `atl` without re-deriving its surface. The text is [`skill/SKILL.md`](skill/SKILL.md) and its references, embedded in the binary.
 
 ```sh
-npx skills add mazuninky/atl
+atl skill install            # ~/.agents/skills/atl, linked from ~/.claude/skills
+atl skill install --project  # .agents/skills/atl of the current directory
+atl skill status
+atl skill remove
 ```
+
+An installed skill follows atl: the first run of a newer version updates it, however atl was updated, unless you edited it. `atl self update` updates it too (`--no-skill` leaves it). `ATL_NO_SKILL_UPDATE=1` turns the automatic update off. It needs no network. A skill you edited, or one atl did not install (for example with `npx skills`), is never overwritten without `--force`.
 
 The skill covers Confluence and Jira commands, `atl api` passthrough, output pipelines (`-F json`, `--jq`, `--template`), CI/scripting patterns, aliases, authentication, and common pitfalls.
 

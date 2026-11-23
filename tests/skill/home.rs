@@ -95,6 +95,8 @@ impl Home {
     pub fn atl(&self) -> Command {
         let mut cmd = Command::cargo_bin("atl").expect("atl binary built");
         cmd.env_clear();
+        // A coverage build writes its profile where this says, not into the home.
+        cmd.envs(std::env::vars_os().filter(|(key, _)| key == "LLVM_PROFILE_FILE"));
         cmd.env("HOME", &self.root);
         cmd.current_dir(&self.root);
         cmd.arg("--no-color");

@@ -16,6 +16,7 @@ const BUSY: &str = "another atl is writing the skill";
 fn spawn(home: &Home, args: &[&str]) -> Child {
     std::process::Command::new(assert_cmd::cargo::cargo_bin("atl"))
         .env_clear()
+        .envs(std::env::vars_os().filter(|(key, _)| key == "LLVM_PROFILE_FILE"))
         .env("HOME", &home.root)
         .current_dir(&home.root)
         .args(["--no-color", "-F", "json", "skill"])

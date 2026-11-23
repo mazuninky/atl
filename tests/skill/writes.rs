@@ -476,7 +476,10 @@ fn modes_are_those_of_new_files_and_stay() {
     let atl = assert_cmd::cargo::cargo_bin("atl");
     let run = |umask: &str, command: &str| {
         let mut sh = Command::new("/bin/sh");
-        sh.env_clear().env("HOME", &home.root).env("ATL", &atl);
+        sh.env_clear()
+            .envs(std::env::vars_os().filter(|(key, _)| key == "LLVM_PROFILE_FILE"))
+            .env("HOME", &home.root)
+            .env("ATL", &atl);
         let script = format!("umask {umask} && exec \"$ATL\" skill {command}");
         sh.args(["-c", &script]).assert().success();
     };

@@ -774,7 +774,10 @@ fn every_refusal_exits_5() {
             |home| {
                 let mut sh = Command::new("/bin/sh");
                 let atl = assert_cmd::cargo::cargo_bin("atl");
-                sh.env_clear().env("HOME", &home.root).env("ATL", atl);
+                sh.env_clear()
+                    .envs(std::env::vars_os().filter(|(key, _)| key == "LLVM_PROFILE_FILE"))
+                    .env("HOME", &home.root)
+                    .env("ATL", atl);
                 sh.current_dir(&home.root).args([
                     "-c",
                     "mkdir gone && cd gone && rmdir ../gone && \

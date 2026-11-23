@@ -349,6 +349,7 @@ mod release {
         let out = fs::File::create(home.root.join("out.txt")).expect("create");
         let mut atl = std::process::Command::new(assert_cmd::cargo::cargo_bin("atl"));
         atl.env_clear()
+            .envs(std::env::vars_os().filter(|(key, _)| key == "LLVM_PROFILE_FILE"))
             .env("HOME", &home.root)
             .current_dir(&home.root)
             .args(["completions", "bash"])
@@ -374,6 +375,7 @@ mod release {
             .map(|_| {
                 std::process::Command::new(assert_cmd::cargo::cargo_bin("atl"))
                     .env_clear()
+                    .envs(std::env::vars_os().filter(|(key, _)| key == "LLVM_PROFILE_FILE"))
                     .env("HOME", &home.root)
                     .current_dir(&home.root)
                     .args(["--config", "atl.toml", "-F", "json", "alias", "list"])
@@ -437,6 +439,7 @@ mod release {
             let home = home();
             let mut sh = Command::new("/bin/sh");
             sh.env_clear()
+                .envs(std::env::vars_os().filter(|(key, _)| key == "LLVM_PROFILE_FILE"))
                 .env("HOME", &home.root)
                 .env("PATH", "/usr/bin:/bin")
                 .env("ATL", &atl)

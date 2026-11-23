@@ -106,7 +106,10 @@ fn a_current_directory_that_is_gone_is_refused() {
     let atl = assert_cmd::cargo::cargo_bin("atl");
     let run = |args: &str| {
         let mut sh = Command::new("/bin/sh");
-        sh.env_clear().env("HOME", &home.root).env("ATL", &atl);
+        sh.env_clear()
+            .envs(std::env::vars_os().filter(|(key, _)| key == "LLVM_PROFILE_FILE"))
+            .env("HOME", &home.root)
+            .env("ATL", &atl);
         sh.current_dir(&home.root).arg("-c").arg(format!(
             "mkdir gone && cd gone && rmdir ../gone && exec \"$ATL\" --no-color skill {args}"
         ));

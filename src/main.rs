@@ -214,7 +214,10 @@ fn init_logging(cli: &Cli) {
 
     // Use try_init so callers (e.g. integration tests that invoke `run`
     // multiple times in-process) don't panic on second initialization.
+    // Logs go to stderr: stdout carries the command's output only, so
+    // `-v` and `RUST_LOG` never end up in piped JSON, CSV or TOML.
     let _ = tracing_subscriber::fmt()
+        .with_writer(std::io::stderr)
         .with_env_filter(filter)
         .with_target(false)
         .with_ansi(!cli.no_color)

@@ -70,7 +70,7 @@ After `run()`, and after the error line if there is one, `main()` calls `skill::
 
 Every command handler takes `io: &mut IoStreams` as a parameter. The pager is engaged automatically by `confluence::run`/`jira::run` for long-output commands (`read`, `view`, `search`) **only when** format is `Console` AND stdout is a TTY AND `--no-pager` is not set. Outside the engagement window, `io.stdout()` is a normal stdout handle.
 
-`println!`/`eprintln!` belong only in `main.rs` panic paths, `tracing::*!` macros, and the `init` wizard. Everything else uses `io.stdout()` / `io.stderr()`.
+`println!`/`eprintln!` belong only in `main.rs` panic paths, `tracing::*!` macros, and the `init` wizard. Everything else uses `io.stdout()` / `io.stderr()`. `tracing` writes to stderr (`init_logging`), so `-v` and `RUST_LOG` never reach stdout.
 
 ### Output: build a `Value`, hand it to `write_output`
 

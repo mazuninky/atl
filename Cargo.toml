@@ -58,7 +58,7 @@ inquire = { version = "0.9", default-features = false, features = ["crossterm"] 
 dirs = "7"
 
 # Timestamps (update notifier)
-jiff = { version = "0.2", default-features = false, features = ["std", "serde"] }
+jiff = { version = "1.0", default-features = false, features = ["std", "serde"] }
 
 # Filtering
 glob = "0.3"

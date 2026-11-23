@@ -147,6 +147,49 @@ fn no_color_flag_suppresses_ansi() {
 }
 
 // ---------------------------------------------------------------------------
+// Logs go to stderr
+//
+// `tracing` output must never reach stdout: it would be prepended to the
+// command's payload and break `-F json | jq` and friends. `alias list` is
+// offline, reads only the config file, and logs `Loading config from ...` at
+// DEBUG, so `-vv` is enough to make the log line appear.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn verbose_logs_go_to_stderr_not_stdout() {
+    let dir = tempfile::tempdir().unwrap();
+    let config = dir.path().join("config.toml");
+    std::fs::write(&config, "[aliases]\nmyq = \"jira search\"\n").unwrap();
+    let home = tempfile::tempdir().unwrap();
+
+    let assert = atl()
+        .env("HOME", home.path())
+        .env("CI", "1")
+        .args([
+            "--config",
+            config.to_str().unwrap(),
+            "--no-color",
+            "-vv",
+            "-F",
+            "json",
+            "alias",
+            "list",
+        ])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("Loading config from"));
+
+    let stdout = String::from_utf8(assert.get_output().stdout.clone()).unwrap();
+    let parsed: serde_json::Value = serde_json::from_str(&stdout)
+        .unwrap_or_else(|e| panic!("stdout is not pure JSON ({e}): {stdout:?}"));
+    assert_eq!(parsed[0]["name"], "myq");
+    assert!(
+        !stdout.contains("DEBUG"),
+        "log level leaked into stdout: {stdout:?}"
+    );
+}
+
+// ---------------------------------------------------------------------------
 // Jira `--input-format` flag presence
 //
 // Locks in that the markdown-conversion flag is wired on every command that

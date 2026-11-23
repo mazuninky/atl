@@ -108,6 +108,9 @@ apple-native-keyring-store = { version = "1", default-features = false, features
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows-native-keyring-store = "1"
+# The file index, by which the skill tells a file from the one that took its
+# place (`src/skill/atomic.rs`). The version tempfile already pulls in.
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Storage_FileSystem"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 linux-keyutils-keyring-store = "1"

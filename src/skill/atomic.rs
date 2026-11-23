@@ -55,6 +55,11 @@ struct Entry {
     /// The device and the inode.
     #[cfg(unix)]
     id: (u64, u64),
+    /// The volume serial number and the file index, which only an open
+    /// handle tells: times alone do not tell a file from the one that took
+    /// its place within a tick of the clock (about 16 ms), at the same size.
+    #[cfg(windows)]
+    id: (u32, u64),
     /// The time of creation, where there is one: the inode of a file that
     /// was deleted may be given to the next one.
     created: Option<SystemTime>,
@@ -64,6 +69,7 @@ struct Entry {
 }
 
 impl Entry {
+    #[cfg(not(windows))]
     fn of(found: &Metadata) -> Self {
         Self {
             #[cfg(unix)]
@@ -75,6 +81,87 @@ impl Entry {
             size: found.len(),
             modified: found.modified().ok(),
         }
+    }
+
+    /// Of `file`, which is open; `found` is its metadata.
+    #[cfg(not(windows))]
+    fn of_open(_file: &File, found: &Metadata) -> io::Result<Self> {
+        Ok(Self::of(found))
+    }
+
+    /// Of `file`, which is open; `found` is its metadata.
+    #[cfg(windows)]
+    fn of_open(file: &File, found: &Metadata) -> io::Result<Self> {
+        Ok(Self {
+            id: windows::file_id(file)?,
+            created: found.created().ok(),
+            size: found.len(),
+            modified: found.modified().ok(),
+        })
+    }
+
+    /// Of the regular file at `path`, which `found` was read of without
+    /// following a link.
+    #[cfg(not(windows))]
+    fn at(_path: &Utf8Path, found: &Metadata) -> io::Result<There> {
+        Ok(There::File(Self::of(found)))
+    }
+
+    /// Of the regular file at `path`, which `found` was read of without
+    /// following a link: opened for its identity, the reparse point itself if
+    /// it has become one, and blocking no one.
+    #[cfg(windows)]
+    fn at(path: &Utf8Path, _found: &Metadata) -> io::Result<There> {
+        let file = match windows::open_attributes(path) {
+            Ok(file) => file,
+            Err(err) if err.kind() == io::ErrorKind::NotFound => return Ok(There::Nothing),
+            Err(err) => return Err(err),
+        };
+        let found = file.metadata()?;
+        if !found.is_file() {
+            return Ok(There::Other);
+        }
+        Ok(There::File(Self::of_open(&file, &found)?))
+    }
+}
+
+/// What only a handle tells of a file on Windows.
+#[cfg(windows)]
+mod windows {
+    use std::fs::File;
+    use std::io;
+    use std::os::windows::fs::OpenOptionsExt as _;
+    use std::os::windows::io::AsRawHandle as _;
+
+    use camino::Utf8Path;
+    use windows_sys::Win32::Storage::FileSystem::{
+        BY_HANDLE_FILE_INFORMATION, FILE_FLAG_BACKUP_SEMANTICS, FILE_FLAG_OPEN_REPARSE_POINT,
+        FILE_READ_ATTRIBUTES, FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE,
+        GetFileInformationByHandle,
+    };
+
+    /// The volume serial number and the 64-bit file index of `file`.
+    pub(super) fn file_id(file: &File) -> io::Result<(u32, u64)> {
+        let mut info = BY_HANDLE_FILE_INFORMATION::default();
+        // SAFETY: the handle is open for the length of the call, and `info`
+        // is room for the answer.
+        let done = unsafe { GetFileInformationByHandle(file.as_raw_handle(), &mut info) };
+        if done == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        let index = (u64::from(info.nFileIndexHigh) << 32) | u64::from(info.nFileIndexLow);
+        Ok((info.dwVolumeSerialNumber, index))
+    }
+
+    /// Open `path` for its attributes alone: not through a reparse point,
+    /// and shared for reading, writing and deleting, so that it is in no
+    /// one's way while it is open.
+    pub(super) fn open_attributes(path: &Utf8Path) -> io::Result<File> {
+        File::options()
+            .access_mode(FILE_READ_ATTRIBUTES)
+            .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE)
+            .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT | FILE_FLAG_BACKUP_SEMANTICS)
+            .open(path)
     }
 }
 
@@ -89,7 +176,7 @@ enum There {
 
 fn look(path: &Utf8Path) -> io::Result<There> {
     match fs::symlink_metadata(path) {
-        Ok(found) if found.is_file() => Ok(There::File(Entry::of(&found))),
+        Ok(found) if found.is_file() => Entry::at(path, &found),
         Ok(_) => Ok(There::Other),
         Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(There::Nothing),
         Err(err) => Err(err),
@@ -114,7 +201,7 @@ pub(super) fn read_no_link(path: &Utf8Path) -> Result<(Vec<u8>, Original), FileE
                 "it is no regular file",
             ));
         }
-        let entry = Entry::of(&found);
+        let entry = Entry::of_open(&file, &found)?;
         let mut bytes = Vec::new();
         file.read_to_end(&mut bytes)?;
         Ok((bytes, Original { entry }))
@@ -260,7 +347,7 @@ impl Original {
             Err(err) => return Err(err),
         };
         let found = file.metadata()?;
-        if Entry::of(&found) != self.entry {
+        if Entry::of_open(&file, &found)? != self.entry {
             return Err(changed());
         }
         Ok(Existing { file, found })
@@ -361,7 +448,10 @@ fn put_new(temp: NamedTempFile, path: &Utf8Path) -> io::Result<()> {
     };
     // No such rename here, and no hard links either: an empty file, which is
     // only made where nothing is, takes the name first.
-    let claim = Entry::of(&File::create_new(path)?.metadata()?);
+    let claimed = File::create_new(path)?;
+    let claim = Entry::of_open(&claimed, &claimed.metadata()?)?;
+    // Closed before the rename: Windows refuses to replace an open file.
+    drop(claimed);
     temp.persist(path).map(|_| ()).map_err(|failed| {
         if look(path).is_ok_and(|there| there == There::File(claim)) {
             let _ = fs::remove_file(path);

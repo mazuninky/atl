@@ -122,7 +122,7 @@ dependencies = [
 
 [[package]]
 name = "atl"
-version = "2026.47.2"
+version = "2026.48.1"
 dependencies = [
  "anyhow",
  "apple-native-keyring-store",

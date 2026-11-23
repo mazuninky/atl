@@ -28,6 +28,9 @@ fn nonexistent_config_path() -> String {
 /// Build an isolated `atl` command that won't touch real config or network.
 fn atl() -> Command {
     let mut cmd = Command::cargo_bin("atl").unwrap();
+    // A home directory that is none: a release build updates the agent skill
+    // of the one it has.
+    cmd.env("HOME", std::env::temp_dir().join("atl-tests-no-home"));
     cmd.env("ATL_NO_UPDATE_NOTIFIER", "1");
     // Prevent tracing subscriber init from interfering across parallel tests.
     cmd.env_remove("RUST_LOG");
@@ -245,6 +248,7 @@ fn survives_broken_pipe() {
 
     let bin = assert_cmd::cargo::cargo_bin("atl");
     let mut child = StdCommand::new(&bin)
+        .env("HOME", std::env::temp_dir().join("atl-tests-no-home"))
         .env("ATL_NO_UPDATE_NOTIFIER", "1")
         .env_remove("RUST_LOG")
         .env_remove("NO_COLOR")

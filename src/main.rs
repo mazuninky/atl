@@ -9,12 +9,24 @@ use atl::client::RetryConfig;
 use atl::error::exit_code_for_error;
 use atl::io::IoStreams;
 use atl::output::Transforms;
+use atl::skill::{Edition, Environment, FirstRun};
 
 fn main() {
     reset_sigpipe();
-    if let Err(e) = run() {
+    let cli = parse();
+    let result = run(&cli);
+    let code = result.as_ref().err().map(|e| {
         eprintln!("Error: {e:#}");
-        std::process::exit(exit_code_for_error(&e));
+        exit_code_for_error(e)
+    });
+    // Last of all, once the output is out, the pager gone and the error
+    // said: bring an installed agent skill to this version, if a release
+    // build. It prints nothing and leaves the exit code as it is. A process
+    // that ends before — clap's own exit, SIGPIPE, a panic — does without:
+    // the next run does it.
+    FirstRun::after(&cli.command, !cfg!(debug_assertions)).update_skill(&Edition::embedded());
+    if let Some(code) = code {
+        std::process::exit(code);
     }
 }
 
@@ -33,20 +45,22 @@ fn reset_sigpipe() {
 #[cfg(not(unix))]
 fn reset_sigpipe() {}
 
-fn run() -> Result<()> {
+fn parse() -> Cli {
     // Expand user-defined aliases (if any) before clap parses argv. This
     // must happen before `Cli::parse_from` so the resulting argv looks like
     // a normal invocation to clap. Best-effort: if config loading fails we
     // fall through with the original argv.
     let raw_args: Vec<String> = std::env::args().collect();
     let args = commands::alias::expand_aliases(raw_args);
-    let cli = Cli::parse_from(args);
+    Cli::parse_from(args)
+}
 
-    init_logging(&cli);
+fn run(cli: &Cli) -> Result<()> {
+    init_logging(cli);
 
-    let mut io = IoStreams::system(&cli)?;
+    let mut io = IoStreams::system(cli)?;
 
-    let result = dispatch(&cli, &mut io);
+    let result = dispatch(cli, &mut io);
 
     // Drop's safety net would also call this, but doing it explicitly here
     // means errors flushing the pager surface as a normal Result rather than
@@ -102,12 +116,25 @@ fn dispatch(cli: &Cli, io: &mut IoStreams) -> Result<()> {
             clap_complete::generate(args.shell, &mut cmd, "atl", &mut stdout);
             Ok(())
         }
-        Command::Self_(cmd) => match &cmd.command {
-            SelfSubcommand::Check => commands::updater::run_check(&cli.format, io, &transforms),
-            SelfSubcommand::Update(args) => {
-                commands::updater::run_update(args, &cli.format, io, &transforms)
+        Command::Self_(cmd) => {
+            let env = Environment::from_process();
+            match &cmd.command {
+                SelfSubcommand::Check => {
+                    commands::updater::run_check(&cli.format, &env, io, &transforms)
+                }
+                SelfSubcommand::Update(args) => {
+                    commands::updater::run_update(args, &env, &cli.format, io, &transforms)
+                }
             }
-        },
+        }
+        Command::Skill(cmd) => commands::skill::run(
+            cmd,
+            &Environment::from_process().with_current_dir(),
+            &Edition::embedded(),
+            &cli.format,
+            io,
+            &transforms,
+        ),
         Command::Confluence(cmd) => run_async(commands::confluence::run(
             &cmd.command,
             cli.config.as_deref(),

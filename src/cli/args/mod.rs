@@ -4,6 +4,7 @@ mod auth;
 mod browse;
 mod confluence;
 mod jira;
+mod skill;
 mod updater;
 
 pub use alias::*;
@@ -12,6 +13,7 @@ pub use auth::*;
 pub use browse::*;
 pub use confluence::*;
 pub use jira::*;
+pub use skill::*;
 pub use updater::*;
 
 use camino::Utf8PathBuf;
@@ -111,6 +113,9 @@ pub enum Command {
     /// Manage the atl binary itself (check/update)
     #[command(name = "self")]
     Self_(SelfCommand),
+
+    /// Install, update, inspect or remove the agent skill of this atl
+    Skill(SkillCommand),
 
     /// Make an authenticated REST request against Confluence or Jira
     Api(Box<ApiArgs>),

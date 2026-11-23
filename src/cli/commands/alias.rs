@@ -35,6 +35,7 @@ pub(crate) const BUILTINS: &[&str] = &[
     "init",
     "completions",
     "self",
+    "skill",
     "alias",
     "api",
     "auth",

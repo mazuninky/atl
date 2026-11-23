@@ -10,6 +10,7 @@ pub mod directives;
 pub mod docs;
 pub mod init;
 pub mod jira;
+pub mod skill;
 pub mod updater;
 pub mod updater_notifier;
 

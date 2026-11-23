@@ -1,0 +1,3 @@
+# The skill is embedded in the binary and its files are hashed: keep them
+# byte for byte the same on every checkout.
+skill/** text eol=lf

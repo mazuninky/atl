@@ -22,6 +22,18 @@ const LOCK_PAUSE: Duration = Duration::from_millis(50);
 /// through, so this is far more than there ever are.
 pub(super) const ATTEMPTS: usize = 1000;
 
+/// Whether the skill directory is locked while a command works on it. Not on
+/// Windows: `LockFileEx` on a directory handle is not a lock atl can rely
+/// on, and an open handle keeps `remove` from removing the directory. There
+/// every command goes on unlocked (a debug line says so): each file is
+/// still replaced atomically and bound to what was read, but two atl at
+/// once may leave a mixture that the next run repairs, and leftovers of a
+/// write that was cut short are not cleaned up.
+pub(super) const LOCKS_DIRECTORIES: bool = cfg!(unix);
+
+/// Why there is no lock where [`LOCKS_DIRECTORIES`] is false.
+const NO_LOCKS: &str = "atl does not lock directories on this platform";
+
 /// What is at the path of a skill directory.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Place {
@@ -226,6 +238,11 @@ fn lock_once(
         Err(err) if err.kind() == ErrorKind::NotFound => return Ok(None),
         Err(err) => return Err(err),
     };
+    if !LOCKS_DIRECTORIES {
+        // The handle goes here: on Windows an open directory cannot be
+        // removed until it is closed, and `remove` removes what it locked.
+        return Err(io::Error::new(ErrorKind::Unsupported, NO_LOCKS));
+    }
     take(&file)?;
     Ok(is_at(&file, dir).then_some(file))
 }
@@ -407,5 +424,41 @@ mod tests {
         assert_eq!(at("dangling"), Place::Link);
         assert_eq!(at("dangling/atl"), Place::Other(root.join("dangling")));
         assert_eq!(place(&root).expect("place"), Place::Directory);
+    }
+}
+
+/// What a lock is on every platform: a held file on unix, none on Windows.
+#[cfg(test)]
+mod lock_tests {
+    use super::*;
+
+    #[test]
+    fn a_directory_is_locked_where_atl_locks_directories() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let dir = Utf8PathBuf::from_path_buf(tmp.path().join("atl")).expect("UTF-8");
+        let deadline = Instant::now() + Duration::from_secs(60);
+        let held = make_and_lock(&dir, deadline).expect("made");
+        assert_eq!(held.is_some(), cfg!(unix));
+        let found = match try_lock(&dir).expect("try_lock") {
+            None => "busy",
+            Some(Locked::Directory(None)) => "unlocked",
+            Some(Locked::Directory(Some(_))) => "locked",
+            Some(Locked::Absent) => "absent",
+        };
+        let expected = if LOCKS_DIRECTORIES {
+            "busy"
+        } else {
+            "unlocked"
+        };
+        assert_eq!(found, expected, "while another holds it");
+        drop(held);
+        // Nothing is held open on the directory: it can be removed.
+        let again = lock(&dir, deadline).expect("lock");
+        let Locked::Directory(lock) = again else {
+            panic!("it is there");
+        };
+        assert_eq!(lock.is_some(), LOCKS_DIRECTORIES);
+        drop(lock);
+        std::fs::remove_dir(&dir).expect("rmdir");
     }
 }

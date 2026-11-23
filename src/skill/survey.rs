@@ -532,6 +532,24 @@ pub(super) fn files_under(dir: &Utf8Path) -> Result<Vec<String>, FileError> {
     Ok(files)
 }
 
+/// The files under `dir` whose names are those of a write that has not been
+/// renamed yet ([`is_write_in_progress`]), as relative paths, sorted. Links
+/// are not followed; what they are, is for the one who deletes them to look.
+///
+/// # Errors
+///
+/// As [`files_under`].
+pub(super) fn writes_in_progress(dir: &Utf8Path) -> Result<Vec<String>, FileError> {
+    let mut found: Vec<String> = walk(dir)?
+        .into_iter()
+        .filter(|entry| !entry.is_dir)
+        .map(|entry| entry.path)
+        .filter(|path| is_write_in_progress(path.rsplit('/').next().unwrap_or_default()))
+        .collect();
+    found.sort();
+    Ok(found)
+}
+
 /// What is left in `dir`, whatever it is: every file, and every directory
 /// with nothing in it that can be seen. Sorted.
 pub(super) fn left_under(dir: &Utf8Path) -> Vec<String> {

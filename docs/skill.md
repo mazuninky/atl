@@ -8,7 +8,7 @@ repository.
 | Command | What it does |
 |---|---|
 | `atl skill install [--project] [--force]` | Write the skill and the Claude Code link. |
-| `atl skill update [--project] [--force]` | Bring an installed skill to this version. With none installed: says so, exit 0. |
+| `atl skill update [--project] [--force]` | Bring an installed skill to this version. With nothing there: says so, exit 0; a directory atl did not install is refused. |
 | `atl skill status [--project]` | Where it is, which version, what was changed. |
 | `atl skill remove [--project] [--force]` | Remove what atl wrote. |
 
@@ -42,8 +42,8 @@ Refused with exit 5, naming what is in the way:
   goes on.
 - **A skill directory that is itself a symbolic link** (a checkout someone works
   on), something that is no directory in place of `.agents` or
-  `.agents/skills`, a skill directory of another user, or root in someone
-  else's home: never, `--force` or not.
+  `.agents/skills`, a global skill directory of another user, or root in
+  someone else's home: never, `--force` or not.
 - **Something in place of the Claude Code link**: another link is replaced with
   `--force`, a file or directory never.
 - **A manifest of a newer atl, or one that cannot be read** or is damaged (over
@@ -53,6 +53,7 @@ Refused with exit 5, naming what is in the way:
 Other files in the directory are yours: they are ignored, and `remove` leaves
 the directory if there are any, naming up to three. Commands that write lock
 the skill directory and wait at most 10 seconds for another atl, then exit 1.
+Where a directory cannot be locked (Windows), they go on without the lock.
 
 ## Automatic update
 

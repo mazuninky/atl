@@ -51,14 +51,74 @@ fn a_debug_build_updates_no_skill_by_itself() {
     assert_eq!((code, stderr.as_str()), (0, ""));
     assert_eq!(tree(&home.skill()), before);
     assert_eq!(home.status(&[])["state"], json!("older"));
+    // The home directory is joined to `.agents/skills/atl` by the platform's
+    // separator: `\` on Windows.
+    let sep = std::path::MAIN_SEPARATOR;
     assert_eq!(
         home.ok(&["update"]),
         format!(
-            "path: ~/.agents/skills/atl\naction: updated\nversion: {VERSION}\n\
+            "path: ~{sep}.agents/skills/atl\naction: updated\nversion: {VERSION}\n\
              previous: 2020.1.0\nkept: []\nlink: \nlink_action: \n"
         )
     );
     assert_eq!(home.version(), VERSION);
+}
+
+/// The whole life of a skill through the binary, on every platform: most
+/// tests of the skill are unix-only, and this is what CI on Windows runs of
+/// it — every file replaced in place (the manifest twice per write), every
+/// file removed, the directory removed after.
+#[test]
+fn a_skill_is_installed_updated_and_removed_on_every_platform() {
+    let home = Home::new();
+    let is_skill_dir = |said: &serde_json::Value| {
+        let path = said["path"].as_str().expect("path");
+        assert!(path.ends_with(".agents/skills/atl"), "{said:#}");
+    };
+    let said = home.json(&["install"]);
+    is_skill_dir(&said);
+    assert_eq!(
+        (&said["action"], &said["version"], &said["link"]),
+        (&json!("installed"), &json!(VERSION), &json!(""))
+    );
+    let status = home.status(&[]);
+    is_skill_dir(&status);
+    assert_eq!(
+        (
+            &status["state"],
+            &status["installed"],
+            &status["link_state"]
+        ),
+        (&json!("up_to_date"), &json!(true), &json!("not_wanted"))
+    );
+
+    // As an older atl left it.
+    fs::remove_dir_all(home.skill()).expect("rm");
+    home.install_edition(&OLD);
+    let status = home.status(&[]);
+    assert_eq!(
+        (&status["state"], &status["version"]),
+        (&json!("older"), &json!(OLD.version))
+    );
+    let said = home.json(&["update"]);
+    assert_eq!(
+        (&said["action"], &said["previous"], &said["version"]),
+        (&json!("updated"), &json!(OLD.version), &json!(VERSION))
+    );
+    assert_eq!(home.version(), VERSION);
+    assert!(!home.skill().join("references/gone.md").exists());
+    for file in FILES {
+        assert!(home.skill().join(file).is_file(), "{file}");
+    }
+    assert_eq!(home.json(&["update"])["action"], json!("up_to_date"));
+
+    let said = home.json(&["remove"]);
+    assert_eq!(
+        (&said["action"], &said["version"], &said["dir_kept"]),
+        (&json!("removed"), &json!(VERSION), &json!(false))
+    );
+    assert!(!home.skill().exists());
+    assert_eq!(home.status(&[])["state"], json!("not_installed"));
 }
 
 /// The automatic update, as a release build does it.
@@ -270,14 +330,12 @@ mod release {
         };
         let (code, stdout, stderr) = list("info");
         assert_eq!((code, stderr.as_str()), (0, ""));
-        // atl logs to stdout (`init_logging`), so the line is there.
+        // The log goes to stderr; what the command printed is as it was.
         let (code, again, stderr) = list("debug");
-        let said = format!("{again}{stderr}");
-        assert_eq!(code, 0);
-        assert!(again.contains(stdout.as_str()), "{again}");
+        assert_eq!((code, again.as_str()), (0, stdout.as_str()));
         assert!(
-            said.contains("DEBUG") && said.contains("the atl skill was not updated: "),
-            "{said}"
+            stderr.contains("DEBUG") && stderr.contains("the atl skill was not updated: "),
+            "{stderr}"
         );
         assert_eq!(tree(&home.skill()), before);
         home.atl().args(["completions", "bash"]).assert().success();
@@ -416,11 +474,8 @@ mod release {
         if fs::metadata(&at).expect("stat").gid() == group {
             return; // kept: the user is in that group
         }
-        // atl logs to stdout (`init_logging`), so the line is there.
-        assert!(
-            format!("{stdout}{stderr}").contains("WARN"),
-            "{stdout}{stderr}"
-        );
+        assert!(stderr.contains("WARN"), "{stderr}");
+        assert!(!stdout.contains("WARN"), "{stdout}");
         let (home, _, _) = home_of_wheel();
         let list = ["--config", "atl.toml", "-F", "json", "alias", "list"];
         let other = Home::with_alias();

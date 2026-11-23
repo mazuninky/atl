@@ -143,8 +143,11 @@ pub(super) fn rewrite(
         if existing.holds(content)? {
             return Ok(false);
         }
+        // Closed before the rename: Windows refuses to replace a file that
+        // is open. What binds the rename is the check right before it.
+        let found = existing.close();
         check_deletable(path, "replaced")?;
-        let temp = stage(path, content, Some(&existing.found))?;
+        let temp = stage(path, content, Some(&found))?;
         original.check(path)?;
         temp.persist(path).map_err(|err| err.error)?;
         Ok(true)
@@ -198,6 +201,9 @@ pub(super) fn check_remove(path: &Utf8Path) -> Result<(), FileError> {
 pub(super) fn remove(path: &Utf8Path, original: &Original) -> Result<(), FileError> {
     original
         .find(path)
+        // Closed before it is removed: on Windows an open file is only marked
+        // for deletion, and its directory is not empty until it is closed.
+        .map(Existing::close)
         .and_then(|_| fs::remove_file(path))
         .map_err(write_error(path))
 }
@@ -268,6 +274,13 @@ struct Existing {
 }
 
 impl Existing {
+    /// Close the file; what was found of it stays.
+    fn close(self) -> Metadata {
+        let Self { file, found } = self;
+        drop(file);
+        found
+    }
+
     /// Whether the file holds exactly `content`.
     fn holds(&self, content: &[u8]) -> io::Result<bool> {
         if usize::try_from(self.found.len()) != Ok(content.len()) {

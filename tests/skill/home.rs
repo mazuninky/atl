@@ -61,7 +61,13 @@ pub struct Home {
 impl Home {
     pub fn new() -> Self {
         let tmp = tempfile::tempdir().expect("tempdir");
-        let root = tmp.path().canonicalize().expect("canonical tempdir");
+        // Not on Windows: there the canonical path is a `\\?\` one, in which
+        // `/` separates nothing, and `.agents/skills/atl` names no directory.
+        let root = if cfg!(windows) {
+            tmp.path().to_path_buf()
+        } else {
+            tmp.path().canonicalize().expect("canonical tempdir")
+        };
         Self { _tmp: tmp, root }
     }
 

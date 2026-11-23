@@ -291,13 +291,12 @@ fn symlink(_target: &Utf8Path, _place: &Utf8Path) -> std::io::Result<()> {
     ))
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
     use pretty_assertions::assert_eq;
 
     #[test]
-    #[cfg(unix)]
     fn a_relative_path_goes_up_to_what_both_share() {
         for (from, to, expected) in [
             (
@@ -315,7 +314,6 @@ mod tests {
 
     /// The link atl makes, what it says of others, and what it removes.
     #[test]
-    #[cfg(unix)]
     fn the_link_is_made_where_nothing_is_and_removed_when_it_is_atls() {
         use std::os::unix::fs::symlink as ln;
         let tmp = tempfile::tempdir().expect("tempdir");

@@ -372,14 +372,16 @@ fn what_keeps_the_directory_from_being_empty_is_named() {
         kept(
             removed(VERSION),
             &[],
-            &[".DS_Store", ".tmpAb12Cd", "references/.tmpZz9zZz"]
+            // What a write cut short left is deleted under the lock.
+            &[".DS_Store"]
         )
     );
+    assert!(!home.skill().join("references").exists());
     home.ok(&["install"]);
     fs::create_dir(home.skill().join("empty")).expect("mkdir");
     assert_eq!(
         home.json(&["remove"])["other"],
-        json!([".DS_Store", ".tmpAb12Cd", "empty", "references/.tmpZz9zZz"])
+        json!([".DS_Store", "empty"])
     );
 }
 

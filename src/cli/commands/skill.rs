@@ -274,13 +274,19 @@ mod tests {
         let (_tmp, home, env) = home();
         let dir = home.join(".agents/skills/atl");
         std::fs::create_dir_all(&dir).expect("mkdir");
-        std::fs::write(dir.join("notes\n.md"), "mine").expect("write");
+        // A line break in a name, where a file system takes one.
+        let (name, shown) = if cfg!(unix) {
+            ("notes\n.md", "notes\\x0a.md")
+        } else {
+            ("notes.md", "notes.md")
+        };
+        std::fs::write(dir.join(name), "mine").expect("write");
         let err = atl(&["install"], &env).expect_err("refused");
         assert_eq!(exit_code_for_error(&err), exit_code::INPUT_ERROR);
         assert_eq!(
             err.to_string(),
             format!(
-                "invalid input: {dir} was not installed by atl (notes\\x0a.md): --force writes \
+                "invalid input: {dir} was not installed by atl ({shown}): --force writes \
                  atl's files into it and keeps the rest"
             )
         );
@@ -290,7 +296,7 @@ mod tests {
         let project = atl(&["status", "--project"], &env).expect("project");
         assert_eq!(
             project["path"],
-            json!(home.join("project/.agents/skills/atl").as_str())
+            json!(home.join("project").join(".agents/skills/atl").as_str())
         );
     }
 

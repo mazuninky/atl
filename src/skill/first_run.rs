@@ -14,8 +14,8 @@ use camino::Utf8Path;
 use super::content::Edition;
 use super::error::{FileError, SkillError};
 use super::manifest::{MANIFEST, Manifest};
-use super::ops::{Freshness, write_files};
-use super::place::{Place, other_owner, place, try_lock};
+use super::ops::{Freshness, prune_writes_in_progress, write_files};
+use super::place::{Locked, Place, other_owner, place, try_lock};
 use super::survey::{FileState, Installed, files, read_manifest};
 use super::{Environment, SKILL_DIR};
 use crate::cli::Command;
@@ -141,9 +141,12 @@ impl FirstRun {
         if let Decision::Skip(why) = decide(&dir, user, edition)? {
             return Ok(Outcome::Skipped(why));
         }
-        let Some(_lock) = try_lock(&dir)? else {
+        let Some(held) = try_lock(&dir)? else {
             return Ok(Outcome::Skipped(Skipped::Busy));
         };
+        if matches!(held, Locked::Directory(Some(_))) {
+            prune_writes_in_progress(&dir);
+        }
         update_locked(&dir, user, edition)
     }
 }
@@ -926,6 +929,12 @@ mod tests {
         fs::write(target.dir.join(".tmpAb12Cd"), "half").expect("write");
         assert_eq!(update(&run, &V3), Outcome::Updated);
         assert_eq!(status(&target, &V3).expect("status").state, State::UpToDate);
+        let left = target.dir.join(".tmpAb12Cd").exists();
+        assert_eq!(
+            left,
+            !cfg!(unix),
+            "deleted under the lock, where there is one"
+        );
         // A file V1 has not: gone, with the manifest of V3 still there.
         fs::remove_file(target.dir.join("new.md")).expect("rm");
         let older = Edition {

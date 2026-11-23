@@ -34,6 +34,7 @@ Usage: atl [OPTIONS] <COMMAND>
 - `config` — Manage configuration profiles
 - `completions` — Generate shell completion scripts
 - `self` — Manage the atl binary itself (check/update)
+- `skill` — Install, update, inspect or remove the agent skill of this atl
 - `api` — Make an authenticated REST request against Confluence or Jira
 - `browse` — Open a Confluence page or Jira issue in the default browser
 - `alias` — Manage user-defined command aliases
@@ -13404,6 +13405,141 @@ Usage: atl self update [OPTIONS]
 
 - `--to` — Install a specific version instead of latest (e.g. 2026.16.2)
 - `--allow-downgrade` — Permit downgrading when --to points at an older version
+- `--no-skill` — Leave the installed agent skill as it is (by default the new binary updates it)
+- `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
+- `--quiet, -q` — Suppress all output except errors
+- `--config` — Path to configuration file
+- `--profile, -p` — Profile name to use
+- `--format, -F` — Output format
+- `--no-color` — Disable colored output
+- `--no-pager` — Do not pipe long output through a pager
+- `--jq` — Query output with a jq expression
+- `--template` — Format output with a minijinja template
+- `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
+
+### atl skill
+
+Install, update, inspect or remove the agent skill of this atl
+
+**Usage**
+
+```text
+Usage: atl skill [OPTIONS] <COMMAND>
+```
+
+**Options**
+
+- `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
+- `--quiet, -q` — Suppress all output except errors
+- `--config` — Path to configuration file
+- `--profile, -p` — Profile name to use
+- `--format, -F` — Output format
+- `--no-color` — Disable colored output
+- `--no-pager` — Do not pipe long output through a pager
+- `--jq` — Query output with a jq expression
+- `--template` — Format output with a minijinja template
+- `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
+
+**Subcommands**
+
+- `install` — Write the skill, and the link to it for Claude Code
+- `update` — Bring an installed skill to the version of this atl
+- `status` — Say where the skill is, of which version, and whether it was changed
+- `remove` — Remove the files atl installed, and the link to them
+
+#### atl skill install
+
+Write the skill, and the link to it for Claude Code
+
+**Usage**
+
+```text
+Usage: atl skill install [OPTIONS]
+```
+
+**Options**
+
+- `--project` — Work on the skill of the current directory (`.agents/skills/atl`) instead of the home directory's
+- `--force` — Go ahead where files were changed since atl wrote them, where others are in their place, or where atl did not install the directory: atl's own files are replaced (or removed), every other file stays
+- `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
+- `--quiet, -q` — Suppress all output except errors
+- `--config` — Path to configuration file
+- `--profile, -p` — Profile name to use
+- `--format, -F` — Output format
+- `--no-color` — Disable colored output
+- `--no-pager` — Do not pipe long output through a pager
+- `--jq` — Query output with a jq expression
+- `--template` — Format output with a minijinja template
+- `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
+
+#### atl skill update
+
+Bring an installed skill to the version of this atl
+
+**Usage**
+
+```text
+Usage: atl skill update [OPTIONS]
+```
+
+**Options**
+
+- `--project` — Work on the skill of the current directory (`.agents/skills/atl`) instead of the home directory's
+- `--force` — Go ahead where files were changed since atl wrote them, where others are in their place, or where atl did not install the directory: atl's own files are replaced (or removed), every other file stays
+- `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
+- `--quiet, -q` — Suppress all output except errors
+- `--config` — Path to configuration file
+- `--profile, -p` — Profile name to use
+- `--format, -F` — Output format
+- `--no-color` — Disable colored output
+- `--no-pager` — Do not pipe long output through a pager
+- `--jq` — Query output with a jq expression
+- `--template` — Format output with a minijinja template
+- `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
+
+#### atl skill status
+
+Say where the skill is, of which version, and whether it was changed
+
+**Usage**
+
+```text
+Usage: atl skill status [OPTIONS]
+```
+
+**Options**
+
+- `--project` — Look at the skill of the current directory (`.agents/skills/atl`) instead of the home directory's
+- `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
+- `--quiet, -q` — Suppress all output except errors
+- `--config` — Path to configuration file
+- `--profile, -p` — Profile name to use
+- `--format, -F` — Output format
+- `--no-color` — Disable colored output
+- `--no-pager` — Do not pipe long output through a pager
+- `--jq` — Query output with a jq expression
+- `--template` — Format output with a minijinja template
+- `--retries` — Maximum HTTP retries on transient errors (0 = off)
+- `--retry-all-methods` — Retry all HTTP methods, not just GET/HEAD/OPTIONS. May cause duplicate writes on transient failures (a POST that creates a resource may run twice)
+
+#### atl skill remove
+
+Remove the files atl installed, and the link to them
+
+**Usage**
+
+```text
+Usage: atl skill remove [OPTIONS]
+```
+
+**Options**
+
+- `--project` — Work on the skill of the current directory (`.agents/skills/atl`) instead of the home directory's
+- `--force` — Go ahead where files were changed since atl wrote them, where others are in their place, or where atl did not install the directory: atl's own files are replaced (or removed), every other file stays
 - `--verbose, -v` — Increase logging verbosity (-v, -vv, -vvv)
 - `--quiet, -q` — Suppress all output except errors
 - `--config` — Path to configuration file

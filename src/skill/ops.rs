@@ -24,7 +24,7 @@ use std::time::Instant;
 use camino::{Utf8Path, Utf8PathBuf};
 
 use super::content::Edition;
-use super::disk::{Done, Seen, delete, remove_if_empty, respell, write};
+use super::disk::{Done, Seen, delete, delete_left_over, remove_if_empty, respell, write};
 use super::error::{FileError, Refusal, SkillError, listed};
 use super::link::{LinkState, Made};
 use super::manifest::is_newer;
@@ -35,6 +35,7 @@ use super::place::{
 };
 use super::survey::{
     FileState, Installed, Survey, Verdict, files_under, left_under, read_manifest, survey,
+    writes_in_progress,
 };
 use super::{Environment, Target};
 
@@ -201,7 +202,10 @@ pub fn install(target: &Target, edition: &Edition, force: bool) -> Result<WriteR
     if let Some(link) = &target.link {
         link.ensure_free(force)?;
     }
-    let _lock = make_and_lock(&target.dir, Instant::now() + LOCK_WAIT)?;
+    let held = make_and_lock(&target.dir, Instant::now() + LOCK_WAIT)?;
+    if held.is_some() {
+        prune_writes_in_progress(&target.dir);
+    }
     let mut report = write_skill(target, edition, force)?;
     if let Some(link) = &target.link {
         report.link = Some((link.place.clone(), link.make(force)?));
@@ -221,9 +225,12 @@ pub fn update(
     force: bool,
 ) -> Result<Option<WriteReport>, SkillError> {
     ensure_owner(target)?;
-    let Locked::Directory(_lock) = lock(&target.dir, Instant::now() + LOCK_WAIT)? else {
+    let Locked::Directory(held) = lock(&target.dir, Instant::now() + LOCK_WAIT)? else {
         return Ok(None);
     };
+    if held.is_some() {
+        prune_writes_in_progress(&target.dir);
+    }
     let found = survey(&target.dir, edition)?;
     if found.installed == Installed::No && found.unlisted.is_empty() {
         return Ok(None);
@@ -251,7 +258,10 @@ pub fn remove(target: &Target, edition: &Edition, force: bool) -> Result<RemoveR
     let deadline = Instant::now() + LOCK_WAIT;
     for _ in 0..ATTEMPTS {
         match lock(&target.dir, deadline)? {
-            Locked::Directory(_lock) => {
+            Locked::Directory(held) => {
+                if held.is_some() {
+                    prune_writes_in_progress(&target.dir);
+                }
                 remove_locked(target, edition, force, &mut report)?;
                 break;
             }
@@ -648,6 +658,28 @@ fn changed_since(
     .into()
 }
 
+/// Delete what writes of atl's that were cut short (a kill, a crash) left in
+/// `dir`: regular files named as a temporary file of [`super::atomic`] is,
+/// never through a link. Only by one that holds the lock on `dir`, so no
+/// other atl is writing there: whatever bears that name is a leftover then.
+/// Best effort: what cannot be deleted stays, and is said in a debug line.
+pub(super) fn prune_writes_in_progress(dir: &Utf8Path) {
+    let left = match writes_in_progress(dir) {
+        Ok(left) => left,
+        Err(err) => {
+            tracing::debug!("leftovers in {dir} were not looked for: {err}");
+            return;
+        }
+    };
+    for path in left {
+        match delete_left_over(dir, &path) {
+            Ok(true) => tracing::debug!("deleted {path}, what a write cut short left in {dir}"),
+            Ok(false) => {}
+            Err(err) => tracing::debug!("{err}"),
+        }
+    }
+}
+
 /// Remove the link of `target`, when it is the one atl writes.
 fn remove_link(target: &Target) -> Result<Option<Utf8PathBuf>, FileError> {
     match &target.link {
@@ -895,6 +927,52 @@ mod tests {
         // Of a first install: no manifest yet.
         fs::remove_file(target.dir.join(MANIFEST)).expect("rm");
         assert!(install(&target, &V2, false).expect("install").changed);
+    }
+
+    /// What a write that was killed leaves is deleted by the next command
+    /// that holds the lock: only regular files of that name, not through a
+    /// link, not a directory.
+    #[test]
+    fn what_a_killed_write_left_is_deleted_under_the_lock() {
+        let (_tmp, target) = target();
+        let leftovers = [".tmpAb12Cd", "references/.tmpXy34Zw"];
+        let theirs = target.root.join("theirs");
+        fs::write(&theirs, "theirs").expect("write");
+        let plant = || {
+            for path in leftovers {
+                fs::write(target.dir.join(path), "half").expect("write");
+            }
+        };
+        install(&target, &V1, false).expect("install");
+        plant();
+        update(&target, &V1, false).expect("update");
+        assert_eq!(
+            names(&target),
+            [MANIFEST, A1.path, "references", OLD_REF.path]
+        );
+        plant();
+        install(&target, &V1, false).expect("install");
+        assert!(!target.dir.join(leftovers[0]).exists());
+        // What bears the name and is no regular file stays.
+        std::os::unix::fs::symlink(&theirs, target.dir.join(".tmpLnk123")).expect("symlink");
+        fs::create_dir(target.dir.join(".tmpDir123")).expect("mkdir");
+        update(&target, &V1, false).expect("update");
+        assert!(target.dir.join(".tmpLnk123").is_symlink());
+        assert!(target.dir.join(".tmpDir123").is_dir());
+        assert_eq!(fs::read_to_string(&theirs).expect("read"), "theirs");
+        fs::remove_file(target.dir.join(".tmpLnk123")).expect("rm");
+        fs::remove_dir(target.dir.join(".tmpDir123")).expect("rmdir");
+        // `remove` takes the directory with it, leftovers and all.
+        plant();
+        let report = remove(&target, &V1, false).expect("remove");
+        assert!(!report.dir_kept, "{report:?}");
+        assert!(!target.dir.exists());
+        // Of an install cut short before any file was renamed into place.
+        fs::create_dir_all(target.dir.join("references")).expect("mkdir");
+        plant();
+        let report = remove(&target, &V1, false).expect("remove");
+        assert_eq!(report.version, None);
+        assert!(!target.dir.join(leftovers[1]).exists());
     }
 
     #[test]

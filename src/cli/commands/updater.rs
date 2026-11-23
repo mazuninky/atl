@@ -26,7 +26,7 @@ use tracing::{debug, info};
 use crate::cli::args::SelfUpdateArgs;
 use crate::io::IoStreams;
 use crate::output::{OutputFormat, Transforms, write_output};
-use crate::skill::{Edition, Environment, installed_note, installed_version, one_line};
+use crate::skill::{Edition, Environment, Freshness, installed_note, installed_version, one_line};
 
 pub(super) const REPO_OWNER: &str = "mazuninky";
 pub(super) const REPO_NAME: &str = "atl";
@@ -568,15 +568,18 @@ pub fn run_update(
         }
     }
 
-    if let Some(exe) = &exe {
-        skill_step(args.no_skill, env, exe);
-    }
+    let skill = exe
+        .as_ref()
+        .and_then(|exe| skill_step(args.no_skill, env, exe, &target_version));
 
-    let value = json!({
+    let mut value = json!({
         "previous": current,
         "current": target_version,
         "release_url": release_url(&target_version),
     });
+    if let (Some(note), Some(object)) = (skill, value.as_object_mut()) {
+        object.insert("skill".to_owned(), Value::String(note));
+    }
 
     emit(format, io, transforms, value)
 }
@@ -590,13 +593,26 @@ pub fn run_update(
 /// that is a warning. As root in another user's home directory (`sudo atl
 /// self update`) nothing is done: the files would be root's. That user's
 /// first run of the new atl updates the skill.
-fn skill_step(no_skill: bool, env: &Environment, exe: &std::path::Path) {
+///
+/// A skill a newer atl than `target` (the version installed now) wrote is
+/// left as it is too: `atl skill update` would take it back to the older
+/// one, and two atl updated in turn would flip it each time. What is said
+/// of that, in one line, is returned for the output of `self update`.
+fn skill_step(
+    no_skill: bool,
+    env: &Environment,
+    exe: &std::path::Path,
+    target: &str,
+) -> Option<String> {
     if no_skill || env.opted_out() || env.is_root_in_foreign_home() {
-        return;
+        return None;
     }
-    let Some((dir, _version)) = installed_version(env) else {
-        return;
-    };
+    let (dir, installed) = installed_version(env)?;
+    if Freshness::of(&installed, target) == Freshness::Newer {
+        return Some(one_line(&format!(
+            "atl skill in {dir} is of v{installed}, newer than v{target}: atl leaves it as it is"
+        )));
+    }
     if let Err(why) = update_skill_with(exe) {
         tracing::warn!(
             "the atl skill in {} was not updated: {}",
@@ -604,6 +620,7 @@ fn skill_step(no_skill: bool, env: &Environment, exe: &std::path::Path) {
             one_line(&why)
         );
     }
+    None
 }
 
 /// Run `exe skill update`. What went wrong, if it did: the exit status and
@@ -1349,7 +1366,8 @@ mod tests {
         let (_home, env, dir) = home_with_skill();
         let step = |no_skill: bool, env: &Environment| {
             let _ = std::fs::remove_file(bin.path().join("ran"));
-            skill_step(no_skill, env, &exe);
+            let said = skill_step(no_skill, env, &exe, env!("CARGO_PKG_VERSION"));
+            assert_eq!(said, None);
             ran(bin.path())
         };
         assert_eq!(step(false, &env), "skill update --quiet\n");
@@ -1371,5 +1389,38 @@ mod tests {
         std::fs::remove_file(dir.join(crate::skill::MANIFEST)).expect("rm");
         assert_eq!(step(false, &env), "", "none installed");
         assert_eq!(step(false, &Environment::default()), "", "no home");
+    }
+
+    /// `self update --to <older>` leaves a skill a newer atl wrote as it is,
+    /// and says so; one of the version it installs, or older, is updated.
+    #[test]
+    #[cfg(unix)]
+    fn a_skill_newer_than_the_installed_binary_is_left_alone() {
+        let bin = tempfile::tempdir().expect("tempdir");
+        let exe = bin.path().join("atl");
+        script(&exe, "exit 0");
+        let (_home, env, dir) = home_with_skill();
+        let current = env!("CARGO_PKG_VERSION");
+        let step = |target: &str| {
+            let _ = std::fs::remove_file(bin.path().join("ran"));
+            let said = skill_step(false, &env, &exe, target);
+            (said, ran(bin.path()))
+        };
+        assert_eq!(
+            step("2020.1.0"),
+            (
+                Some(format!(
+                    "atl skill in {dir} is of v{current}, newer than v2020.1.0: atl leaves it as it is"
+                )),
+                String::new()
+            )
+        );
+        for target in [current, "9999.1.0"] {
+            assert_eq!(
+                step(target),
+                (None, "skill update --quiet\n".to_owned()),
+                "{target}"
+            );
+        }
     }
 }

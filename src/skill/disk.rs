@@ -211,6 +211,33 @@ pub(super) fn delete(dir: &Utf8Path, path: &str, seen: Option<&Seen>) -> Result<
     Ok(done)
 }
 
+/// Delete the regular file at `path` in `dir`, what a write of atl's that was
+/// cut short left there, and the directories above it, up to `dir`, that
+/// this leaves empty. Whether it was deleted: a link, a directory, a file
+/// larger than any of atl's, or one that changes meanwhile stays.
+///
+/// # Errors
+///
+/// [`FileError`] when it cannot be read or deleted.
+pub(super) fn delete_left_over(dir: &Utf8Path, path: &str) -> Result<bool, FileError> {
+    let Found::File(_, original) = find(dir, path)? else {
+        return Ok(false);
+    };
+    match unlink(dir, path, Some(&original)) {
+        Ok(()) => {}
+        Err(err) if atomic::is_changed(&err) => return Ok(false),
+        Err(err) => return Err(err),
+    }
+    let mut parent = Utf8Path::new(path).parent();
+    while let Some(relative) = parent.filter(|p| !p.as_str().is_empty()) {
+        if !remove_empty(dir, relative.as_str())? {
+            break;
+        }
+        parent = relative.parent();
+    }
+    Ok(true)
+}
+
 /// Make a change to what is at `path` in `dir`, unless it `is_done` already:
 /// only to what was `seen`, if that is given. When another overtakes `act`,
 /// what is there by then is looked at once more.
@@ -311,12 +338,32 @@ pub(super) fn respell(dir: &Utf8Path, path: &str, ours: &[&str]) -> Result<bool,
             && name.eq_ignore_ascii_case(wanted)
             && (is_file || holds_only(&from, dir, ours)?)
         {
-            fs::rename(&from, &to).map_err(|err| write_error(&to, err))?;
+            rename_case(&from, &to).map_err(|err| write_error(&to, err))?;
         }
         parent = to;
     }
     // Some file systems take that for a rename of a file to itself.
     Ok(spelling(dir, path)? != there)
+}
+
+/// Rename `from` to `to`, which differs from it in case only.
+#[cfg(not(windows))]
+fn rename_case(from: &Utf8Path, to: &Utf8Path) -> std::io::Result<()> {
+    fs::rename(from, to)
+}
+
+/// Rename `from` to `to`, which differs from it in case only, by a name of
+/// its own in between: a rename between two spellings of one name may be
+/// taken for one to itself, and do nothing. Back to `from` when the second
+/// step fails.
+#[cfg(windows)]
+fn rename_case(from: &Utf8Path, to: &Utf8Path) -> std::io::Result<()> {
+    let mut between = from.as_str().to_owned();
+    between.push_str(".atl-respell");
+    fs::rename(from, &between)?;
+    fs::rename(&between, to).inspect_err(|_| {
+        let _ = fs::rename(&between, from);
+    })
 }
 
 /// Whether every file under `parent` is one of `ours`, paths in `dir`.
